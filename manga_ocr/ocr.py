@@ -173,15 +173,15 @@ class AzureComputerVision:
         else:
             logger.info(f'Parsing Azure credentials')
             azure_credentials_file = os.path.join(os.path.expanduser('~'),'.config','azure_computer_vision.ini')
-        try:
-            azure_credentials = configparser.ConfigParser()
-            azure_credentials.read(azure_credentials_file)
-            self.client = ComputerVisionClient(azure_credentials['config']['endpoint'], CognitiveServicesCredentials(azure_credentials['config']['api_key']))
-            self.available = True
-            logger.info('Azure Computer Vision ready')
-        except:
-            logger.warning('Error parsing Azure credentials, Azure Computer Vision will not work!')
-            self.available = False
+            try:
+                azure_credentials = configparser.ConfigParser()
+                azure_credentials.read(azure_credentials_file)
+                self.client = ComputerVisionClient(azure_credentials['config']['endpoint'], CognitiveServicesCredentials(azure_credentials['config']['api_key']))
+                self.available = True
+                logger.info('Azure Computer Vision ready')
+            except:
+                logger.warning('Error parsing Azure credentials, Azure Computer Vision will not work!')
+                self.available = False
 
     def __call__(self, img_or_path):
         if not self.available:
