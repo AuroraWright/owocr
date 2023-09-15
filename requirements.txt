@@ -8,3 +8,7 @@ pyperclip
 torch>=1.0
 transformers>=4.25.0
 unidic_lite
+google-cloud-vision
+azure-cognitiveservices-vision-computervision
+pyobjc
+pynput
