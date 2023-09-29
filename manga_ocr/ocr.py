@@ -151,11 +151,11 @@ class AppleVision:
 
             success = handler.performRequests_error_([req], None)
             res = ''
-            if success:
+            if success[0]:
                 for result in req.results():
                     res += result.text() + ' '
+                req.dealloc()
 
-            req.dealloc()
             handler.dealloc()
             x = post_process(res)
             return x
