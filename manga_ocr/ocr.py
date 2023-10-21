@@ -143,6 +143,7 @@ class AppleVision:
             req = Vision.VNRecognizeTextRequest.alloc().init()
 
             req.setRecognitionLevel_(0)
+            req.setUsesLanguageCorrection_(True)
             req.setRecognitionLanguages_(['ja','en'])
 
             handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(
