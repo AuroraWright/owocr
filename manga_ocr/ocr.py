@@ -10,6 +10,7 @@ import platform
 
 import jaconv
 import torch
+import numpy as np
 from PIL import Image
 from loguru import logger
 from transformers import ViTImageProcessor, AutoTokenizer, VisionEncoderDecoderModel
@@ -33,9 +34,19 @@ try:
 except ImportError:
     pass
 
+try:
+    import easyocr
+except ImportError:
+    pass
+
+try:
+    from paddleocr import PaddleOCR as POCR
+except ImportError:
+    pass
+
 class MangaOcr:
     def __init__(self, pretrained_model_name_or_path='kha-white/manga-ocr-base', force_cpu=False):
-        logger.info(f'Loading OCR model from {pretrained_model_name_or_path}')
+        logger.info(f'Loading Manga OCR model from {pretrained_model_name_or_path}')
         self.processor = ViTImageProcessor.from_pretrained(pretrained_model_name_or_path)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
         self.model = VisionEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path)
@@ -221,6 +232,76 @@ class AzureComputerVision:
         img.save(image_io, format=img.format)
         image_io.seek(0)
         return image_io
+
+class EasyOCR:
+    def __init__(self):
+        if 'easyocr' not in sys.modules:
+            logger.warning('easyocr not available, EasyOCR will not work!')
+            self.available = False
+        else:
+            logger.info('Loading EasyOCR model')
+            self.model = easyocr.Reader(['ja','en'])
+            self.available = True
+            logger.info('EasyOCR ready')
+
+    def __call__(self, img_or_path):
+        if not self.available:
+            return "Engine not available!"
+
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        res = ''
+        read_result = self.model.readtext(self._preprocess(img), detail=0)
+        for text in read_result:
+            res += text + ' '
+
+        x = post_process(res)
+        return x
+
+    def _preprocess(self, img):
+        image_bytes = io.BytesIO()
+        img.save(image_bytes, format=img.format)
+        return image_bytes.getvalue()
+
+class PaddleOCR:
+    def __init__(self):
+        if 'paddleocr' not in sys.modules:
+            logger.warning('easyocr not available, PaddleOCR will not work!')
+            self.available = False
+        else:
+            logger.info('Loading PaddleOCR model')
+            self.model = POCR(use_angle_cls=True, show_log=False, lang='japan')
+            self.available = True
+            logger.info('PaddleOCR ready')
+
+    def __call__(self, img_or_path):
+        if not self.available:
+            return "Engine not available!"
+
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        res = ''
+        read_results = self.model.ocr(self._preprocess(img), cls=True)
+        for read_result in read_results:
+            if read_result:
+                for text in read_result:
+                    res += text[1][0] + ' '
+
+        x = post_process(res)
+        return x
+
+    def _preprocess(self, img):
+        return np.array(img.convert('RGB'))
 
 
 def post_process(text):

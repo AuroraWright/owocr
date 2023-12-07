@@ -12,3 +12,5 @@ google-cloud-vision
 azure-cognitiveservices-vision-computervision
 pyobjc
 pynput
+easyocr
+paddleocr
