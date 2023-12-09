@@ -53,6 +53,7 @@ def run(read_from='clipboard',
         force_cpu=False,
         delay_secs=0.5,
         engine='mangaocr',
+        start_paused=False,
         verbose=False
         ):
     """
@@ -65,6 +66,7 @@ def run(read_from='clipboard',
     :param force_cpu: If True, OCR will use CPU even if GPU is available.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "easyocr", "paddleocr".
+    :param start_paused: Pause at startup.
     :param verbose: If True, unhides all warnings.
     """
 
@@ -109,12 +111,15 @@ def run(read_from='clipboard',
 
     if read_from == 'clipboard':
         from PIL import ImageGrab
-        logger.info('Reading from clipboard')
 
-        paused = False
         global just_unpaused
+        global tmp_paused
+        paused = start_paused
         just_unpaused = True
+        tmp_paused = False
         img = None
+
+        logger.opt(ansi=True).info(f"Reading from clipboard using <cyan>{get_engine_name(engine)}</cyan>{' (paused)' if paused else ''}")
 
         def on_key_press(key):
             global tmp_paused
@@ -128,9 +133,6 @@ def run(read_from='clipboard',
                 tmp_paused = False
                 just_unpaused = True
 
-        global tmp_paused
-        tmp_paused = False
-
         tmp_paused_listener = keyboard.Listener(
             on_press=on_key_press,
             on_release=on_key_release)
@@ -140,7 +142,7 @@ def run(read_from='clipboard',
         if not read_from.is_dir():
             raise ValueError('read_from must be either "clipboard" or a path to a directory')
 
-        logger.info(f'Reading from directory {read_from}')
+        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <cyan>{get_engine_name(engine)}</cyan>')
 
         old_paths = set()
         for path in read_from.iterdir():
