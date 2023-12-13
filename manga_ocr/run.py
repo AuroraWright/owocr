@@ -153,6 +153,14 @@ def run(read_from='clipboard',
             on_press=on_key_press,
             on_release=on_key_release)
         tmp_paused_listener.start()
+
+        if sys.platform == "darwin" and 'objc' in sys.modules:
+            from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
+            pasteboard = NSPasteboard.generalPasteboard()
+            count = pasteboard.changeCount()
+            mac_clipboard_polling = True
+        else:
+            mac_clipboard_polling = False
     else:
         read_from = Path(read_from)
         if not read_from.is_dir():
@@ -225,22 +233,32 @@ def run(read_from='clipboard',
 
         if read_from == 'clipboard':
             if not paused and not tmp_paused:
-                old_img = img
-
-                try:
-                    img = ImageGrab.grabclipboard()
-                except OSError as error:
-                    if not verbose and "cannot identify image file" in str(error):
-                        # Pillow error when clipboard hasn't changed since last grab (Linux)
-                        pass
-                    elif not verbose and "target image/png not available" in str(error):
-                        # Pillow error when clipboard contains text (Linux, X11)
-                        pass
-                    else:
-                        logger.warning('Error while reading from clipboard ({})'.format(error))
+                if mac_clipboard_polling:
+                    changed = False
+                    old_count = count
+                    count = pasteboard.changeCount()
+                    if not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF]):
+                        changed = True
                 else:
-                    if not just_unpaused and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
-                        process_and_write_results(engine_instances[engine_index], img, write_to)
+                    changed = True
+
+                if changed:
+                    old_img = img
+
+                    try:
+                        img = ImageGrab.grabclipboard()
+                    except OSError as error:
+                        if not verbose and "cannot identify image file" in str(error):
+                            # Pillow error when clipboard hasn't changed since last grab (Linux)
+                            pass
+                        elif not verbose and "target image/png not available" in str(error):
+                            # Pillow error when clipboard contains text (Linux, X11)
+                            pass
+                        else:
+                            logger.warning('Error while reading from clipboard ({})'.format(error))
+                    else:
+                        if not just_unpaused and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
+                            process_and_write_results(engine_instances[engine_index], img, write_to)
 
             if just_unpaused:
                 just_unpaused = False
