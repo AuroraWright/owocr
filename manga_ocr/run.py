@@ -2,6 +2,7 @@ import sys
 import time
 import threading
 import os
+import configparser
 from pathlib import Path
 
 import fire
@@ -25,12 +26,12 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, engine_name, img_or_path, write_to):
+def process_and_write_results(engine_instance, img_or_path, write_to):
     t0 = time.time()
     text = engine_instance(img_or_path)
     t1 = time.time()
 
-    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <cyan>{engine_name}</cyan>: {text}")
+    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <cyan>{engine_instance.readable_name}</cyan>: {text}")
 
     if write_to == 'clipboard':
         pyperclip.copy(text)
@@ -49,10 +50,8 @@ def get_path_key(path):
 
 def run(read_from='clipboard',
         write_to='clipboard',
-        pretrained_model_name_or_path='kha-white/manga-ocr-base',
-        force_cpu=False,
         delay_secs=0.5,
-        engine='mangaocr',
+        engine='',
         start_paused=False,
         verbose=False
         ):
@@ -62,10 +61,8 @@ def run(read_from='clipboard',
 
     :param read_from: Specifies where to read input images from. Can be either "clipboard", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", or a path to a text file.
-    :param pretrained_model_name_or_path: Path to a trained model, either local or from Transformers' model hub.
-    :param force_cpu: If True, OCR will use CPU even if GPU is available.
     :param delay_secs: How often to check for new images, in seconds.
-    :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "easyocr", "paddleocr".
+    :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
     :param start_paused: Pause at startup.
     :param verbose: If True, unhides all warnings.
     """
@@ -78,28 +75,47 @@ def run(read_from='clipboard',
     }
     logger.configure(**config)
 
-    avision = AppleVision()
-    gvision = GoogleVision()
-    azure = AzureComputerVision()
-    mangaocr = MangaOcr(pretrained_model_name_or_path, force_cpu)
-    easyocr = EasyOCR()
-    paddleocr = PaddleOCR()
+    engine_classes = [AppleVision, WinRTOCR, GoogleVision, AzureComputerVision, MangaOcr, EasyOCR, PaddleOCR]
+    engines = []
+    engine_instances = []
+    engine_keys = []
 
-    engines = ['avision', 'gvision', 'azure', 'mangaocr', 'easyocr', 'paddleocr']
-    engine_names = ['Apple Vision', 'Google Vision', 'Azure Computer Vision', 'Manga OCR', 'EasyOCR', 'PaddleOCR']
-    engine_instances = [avision, gvision, azure, mangaocr, easyocr, paddleocr]
-    engine_keys = 'agvmeo'
+    logger.info(f'Parsing config file')
+    config_file = os.path.join(os.path.expanduser('~'),'.config','ocr_config.ini')
+    config = configparser.ConfigParser()
+    res = config.read(config_file)
 
-    def get_engine_name(engine):
-        return engine_names[engines.index(engine)]
+    if len(res) == 0:
+        logger.warning('No config file, defaults will be used')
+    else:
+        try:
+            for config_engine in config['common']['engines'].split(','):
+                engines.append(config_engine.strip())
+        except KeyError:
+            pass
 
-    if engine not in engines:
-        msg = 'Unknown OCR engine!'
+    default_engine = ''
+    for engine_class in engine_classes:
+        if len(engines) == 0 or engine_class.name in engines:
+            try:
+                engine_instance = engine_class(config[engine_class.name])
+            except KeyError:
+                engine_instance = engine_class()
+
+            if engine_instance.available:
+                engine_instances.append(engine_instance)
+                engine_keys.append(engine_class.key)
+                if engine == engine_class.name:
+                    default_engine = engine_class.key
+
+    if len(engine_keys) == 0:
+        msg = 'No engines available!'
         raise NotImplementedError(msg)
+
+    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
 
     if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
         # Check if the system is using Wayland
-        import os
         if os.environ.get('WAYLAND_DISPLAY'):
             # Check if the wl-clipboard package is installed
             if os.system("which wl-copy > /dev/null") == 0:
@@ -119,7 +135,7 @@ def run(read_from='clipboard',
         tmp_paused = False
         img = None
 
-        logger.opt(ansi=True).info(f"Reading from clipboard using <cyan>{get_engine_name(engine)}</cyan>{' (paused)' if paused else ''}")
+        logger.opt(ansi=True).info(f"Reading from clipboard using <cyan>{engine_instances[engine_index].readable_name}</cyan>{' (paused)' if paused else ''}")
 
         def on_key_press(key):
             global tmp_paused
@@ -142,7 +158,7 @@ def run(read_from='clipboard',
         if not read_from.is_dir():
             raise ValueError('read_from must be either "clipboard" or a path to a directory')
 
-        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <cyan>{get_engine_name(engine)}</cyan>')
+        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <cyan>{engine_instances[engine_index].readable_name}</cyan>')
 
         old_paths = set()
         for path in read_from.iterdir():
@@ -150,7 +166,6 @@ def run(read_from='clipboard',
 
     def getchar_thread():
         global user_input
-        import os
         if os.name == 'nt': # how it works on windows
             import msvcrt
             while True:
@@ -184,6 +199,9 @@ def run(read_from='clipboard',
                 user_input_thread.join()
                 logger.info('Terminated!')
                 break
+
+            new_engine_index = engine_index
+
             if read_from == 'clipboard' and user_input.lower() == 'p':
                 if paused:
                     logger.info('Unpaused!')
@@ -192,17 +210,16 @@ def run(read_from='clipboard',
                     logger.info('Paused!')
                 paused = not paused
             elif user_input.lower() == 's':
-                if engine == engines[-1]:
-                    engine = engines[0]
+                if engine_index == len(engine_keys) - 1:
+                    new_engine_index = 0
                 else:
-                    engine = engines[engines.index(engine) + 1]
-
-                logger.opt(ansi=True).info(f"Switched to <cyan>{get_engine_name(engine)}</cyan>!")
+                    new_engine_index = engine_index + 1
             elif user_input.lower() in engine_keys:
-                new_engine = engines[engine_keys.find(user_input.lower())]
-                if engine != new_engine:
-                    engine = new_engine
-                    logger.opt(ansi=True).info(f"Switched to <cyan>{get_engine_name(engine)}</cyan>!")
+                new_engine_index = engine_keys.index(user_input.lower())
+
+            if engine_index != new_engine_index:
+                engine_index = new_engine_index
+                logger.opt(ansi=True).info(f"Switched to <cyan>{engine_instances[engine_index].readable_name}</cyan>!")
 
             user_input = ''
 
@@ -223,7 +240,7 @@ def run(read_from='clipboard',
                         logger.warning('Error while reading from clipboard ({})'.format(error))
                 else:
                     if not just_unpaused and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
-                        process_and_write_results(engine_instances[engines.index(engine)], get_engine_name(engine), img, write_to)
+                        process_and_write_results(engine_instances[engine_index], img, write_to)
 
             if just_unpaused:
                 just_unpaused = False
@@ -239,7 +256,7 @@ def run(read_from='clipboard',
                     except (UnidentifiedImageError, OSError) as e:
                         logger.warning(f'Error while reading file {path}: {e}')
                     else:
-                        process_and_write_results(engine_instances[engines.index(engine)], get_engine_name(engine), img, write_to)
+                        process_and_write_results(engine_instances[engine_index], img, write_to)
 
         time.sleep(delay_secs)
 
