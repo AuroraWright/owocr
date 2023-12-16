@@ -213,7 +213,7 @@ class WinRTOCR:
     available = False
 
     def __init__(self, config={}):
-        if os.name == 'nt':
+        if sys.platform == "win32":
             if int(platform.release()) < 10:
                 logger.warning('WinRT OCR is not supported on Windows older than 10!')
             elif 'winocr' not in sys.modules:
@@ -240,7 +240,7 @@ class WinRTOCR:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        if os.name == 'nt':
+        if sys.platform == "win32":
             res = winocr.recognize_pil_sync(img, lang='ja')['text']
         else:
             params = {'lang': 'ja'}

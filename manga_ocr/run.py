@@ -13,6 +13,7 @@ from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 
+import inspect
 from manga_ocr import *
 
 
@@ -48,11 +49,48 @@ def get_path_key(path):
     return path, path.lstat().st_mtime
 
 
+def getchar_thread():
+    global user_input
+    if sys.platform == "win32":
+        import msvcrt
+        while True:
+            user_input = msvcrt.getch()
+            if user_input.lower() in 'tq':
+                break
+    else:
+        import tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            while True:
+                user_input = sys.stdin.read(1)
+                if user_input.lower() in 'tq':
+                    break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def on_key_press(key):
+    global tmp_paused
+    if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
+        tmp_paused = True
+
+
+def on_key_release(key):
+    global tmp_paused
+    global just_unpaused
+    if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
+        tmp_paused = False
+        just_unpaused = True
+
+
 def run(read_from='clipboard',
         write_to='clipboard',
         delay_secs=0.5,
         engine='',
-        start_paused=False,
+        pause_at_startup=False,
+        ignore_flag=False,
         verbose=False
         ):
     """
@@ -63,7 +101,8 @@ def run(read_from='clipboard',
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
-    :param start_paused: Pause at startup.
+    :param pause_at_startup: Pause at startup.
+    :param ignore_flag: Process flagged images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param verbose: If True, unhides all warnings.
     """
 
@@ -75,10 +114,21 @@ def run(read_from='clipboard',
     }
     logger.configure(**config)
 
-    engine_classes = [AppleVision, WinRTOCR, GoogleVision, AzureComputerVision, MangaOcr, EasyOCR, PaddleOCR]
-    engines = []
+    if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
+        # Check if the system is using Wayland
+        if os.environ.get('WAYLAND_DISPLAY'):
+            # Check if the wl-clipboard package is installed
+            if os.system("which wl-copy > /dev/null") == 0:
+                pyperclip.set_clipboard("wl-clipboard")
+            else:
+                msg = 'Your session uses wayland and does not have wl-clipboard installed. ' \
+                    'Install wl-clipboard for write in clipboard to work.'
+                raise NotImplementedError(msg)
+
     engine_instances = []
+    config_engines = []
     engine_keys = []
+    default_engine = ''
 
     logger.info(f'Parsing config file')
     config_file = os.path.join(os.path.expanduser('~'),'.config','ocr_config.ini')
@@ -90,13 +140,12 @@ def run(read_from='clipboard',
     else:
         try:
             for config_engine in config['common']['engines'].split(','):
-                engines.append(config_engine.strip())
+                config_engines.append(config_engine.strip())
         except KeyError:
             pass
 
-    default_engine = ''
-    for engine_class in engine_classes:
-        if len(engines) == 0 or engine_class.name in engines:
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ in x.__module__ and inspect.isclass(x))):
+        if len(config_engines) == 0 or engine_class.name in config_engines:
             try:
                 engine_instance = engine_class(config[engine_class.name])
             except KeyError:
@@ -114,45 +163,23 @@ def run(read_from='clipboard',
 
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
 
-    if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
-        # Check if the system is using Wayland
-        if os.environ.get('WAYLAND_DISPLAY'):
-            # Check if the wl-clipboard package is installed
-            if os.system("which wl-copy > /dev/null") == 0:
-                pyperclip.set_clipboard("wl-clipboard")
-            else:
-                msg = 'Your session uses wayland and does not have wl-clipboard installed. ' \
-                    'Install wl-clipboard for write in clipboard to work.'
-                raise NotImplementedError(msg)
+    global user_input
+    user_input = ''
+
+    user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
+    user_input_thread.start()
 
     if read_from == 'clipboard':
         from PIL import ImageGrab
 
         global just_unpaused
         global tmp_paused
-        paused = start_paused
+        paused = pause_at_startup
         just_unpaused = True
         tmp_paused = False
         img = None
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <cyan>{engine_instances[engine_index].readable_name}</cyan>{' (paused)' if paused else ''}")
-
-        def on_key_press(key):
-            global tmp_paused
-            if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
-                tmp_paused = True
-
-        def on_key_release(key):
-            global tmp_paused
-            global just_unpaused
-            if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
-                tmp_paused = False
-                just_unpaused = True
-
-        tmp_paused_listener = keyboard.Listener(
-            on_press=on_key_press,
-            on_release=on_key_release)
-        tmp_paused_listener.start()
 
         if sys.platform == "darwin" and 'objc' in sys.modules:
             from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
@@ -161,6 +188,11 @@ def run(read_from='clipboard',
             mac_clipboard_polling = True
         else:
             mac_clipboard_polling = False
+
+        tmp_paused_listener = keyboard.Listener(
+            on_press=on_key_press,
+            on_release=on_key_release)
+        tmp_paused_listener.start()
     else:
         read_from = Path(read_from)
         if not read_from.is_dir():
@@ -171,33 +203,6 @@ def run(read_from='clipboard',
         old_paths = set()
         for path in read_from.iterdir():
             old_paths.add(get_path_key(path))
-
-    def getchar_thread():
-        global user_input
-        if os.name == 'nt': # how it works on windows
-            import msvcrt
-            while True:
-                user_input = msvcrt.getch()
-                if user_input.lower() in 'tq':
-                    break
-        else:
-            import tty, termios, sys
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setcbreak(sys.stdin.fileno())
-                while True:
-                    user_input = sys.stdin.read(1)
-                    if user_input.lower() in 'tq':
-                        break
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-    global user_input
-    user_input = ''
-
-    user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
-    user_input_thread.start()
 
     while True:
         if user_input != '':
@@ -234,11 +239,9 @@ def run(read_from='clipboard',
         if read_from == 'clipboard':
             if not paused and not tmp_paused:
                 if mac_clipboard_polling:
-                    changed = False
                     old_count = count
                     count = pasteboard.changeCount()
-                    if not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF]):
-                        changed = True
+                    changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
                 else:
                     changed = True
 
@@ -257,7 +260,7 @@ def run(read_from='clipboard',
                         else:
                             logger.warning('Error while reading from clipboard ({})'.format(error))
                     else:
-                        if not just_unpaused and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
+                        if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
                             process_and_write_results(engine_instances[engine_index], img, write_to)
 
             if just_unpaused:
