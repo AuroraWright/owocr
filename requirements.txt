@@ -5,4 +5,5 @@ numpy
 Pillow>=10.0.0
 pyperclip
 unidic_lite
-pyinput
+pynput
+msvcrt;platform_system=="Windows"

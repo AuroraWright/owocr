@@ -25,7 +25,9 @@ setup(
         "numpy",
         "Pillow>=10.0.0",
         "pyperclip",
-        "unidic_lite"
+        "unidic_lite",
+        "pynput",
+        'msvcrt;platform_system=="Windows"'
     ],
     entry_points={
         "console_scripts": [
