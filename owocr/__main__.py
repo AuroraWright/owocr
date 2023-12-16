@@ -1,6 +1,6 @@
 import fire
 
-from manga_ocr.run import run
+from owocr.run import run
 
 
 def main():

@@ -8,12 +8,15 @@ import sys
 import platform
 
 import jaconv
-import torch
 import numpy as np
 import json
 from PIL import Image
 from loguru import logger
-from transformers import ViTImageProcessor, AutoTokenizer, VisionEncoderDecoderModel
+
+try:
+    from manga_ocr import MangaOcr as MOCR
+except ImportError:
+    pass
 
 try:
     import Vision
@@ -68,30 +71,22 @@ class MangaOcr:
     name = "mangaocr"
     readable_name = "Manga OCR"
     key = "m"
-    available = True
+    available = False
 
     def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu':'False'}, pretrained_model_name_or_path='', force_cpu=False):
-        if pretrained_model_name_or_path == '':
-            pretrained_model_name_or_path = config['pretrained_model_name_or_path']
-        if config['force_cpu'] == 'True':
-            force_cpu = True
-
-        logger.info(f'Loading Manga OCR model from {pretrained_model_name_or_path}')
-        self.processor = ViTImageProcessor.from_pretrained(pretrained_model_name_or_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
-        self.model = VisionEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path)
-
-        if not force_cpu and torch.cuda.is_available():
-            logger.info('Using CUDA')
-            self.model.cuda()
-        elif not force_cpu and torch.backends.mps.is_available():
-            logger.info('Using MPS')
-            warnings.filterwarnings("ignore", message=".*MPS: no support.*")
-            self.model.to('mps')
+        if 'manga_ocr' not in sys.modules:
+            logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
-            logger.info('Using CPU')
+            if pretrained_model_name_or_path == '':
+                pretrained_model_name_or_path = config['pretrained_model_name_or_path']
+            if config['force_cpu'] == 'True':
+                force_cpu = True
 
-        logger.info('Manga OCR ready')
+            logger.disable("manga_ocr")
+            logger.info(f'Loading Manga OCR model')
+            self.model = MOCR(pretrained_model_name_or_path, force_cpu)
+            self.available = True
+            logger.info('Manga OCR ready')
 
     def __call__(self, img_or_path):
         if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
@@ -101,17 +96,8 @@ class MangaOcr:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        img = img.convert('L').convert('RGB')
-
-        x = self._preprocess(img)
-        x = self.model.generate(x[None].to(self.model.device), max_length=300)[0].cpu()
-        x = self.tokenizer.decode(x, skip_special_tokens=True)
-        x = post_process(x)
+        x = self.model(img)
         return x
-
-    def _preprocess(self, img):
-        pixel_values = self.processor(img, return_tensors="pt").pixel_values
-        return pixel_values.squeeze()
 
 class GoogleVision:
     name = "gvision"

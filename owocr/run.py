@@ -14,7 +14,7 @@ from loguru import logger
 from pynput import keyboard
 
 import inspect
-from manga_ocr import *
+from owocr import *
 
 
 def are_images_identical(img1, img2):
@@ -131,7 +131,7 @@ def run(read_from='clipboard',
     default_engine = ''
 
     logger.info(f'Parsing config file')
-    config_file = os.path.join(os.path.expanduser('~'),'.config','ocr_config.ini')
+    config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     config = configparser.ConfigParser()
     res = config.read(config_file)
 
@@ -139,7 +139,7 @@ def run(read_from='clipboard',
         logger.warning('No config file, defaults will be used')
     else:
         try:
-            for config_engine in config['common']['engines'].split(','):
+            for config_engine in config['general']['engines'].split(','):
                 config_engines.append(config_engine.strip())
         except KeyError:
             pass
