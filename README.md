@@ -16,8 +16,8 @@ This has been tested with Python 3.11. Newer/older versions might work. For now 
 - WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server (`winocr_serve`), installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file (see below) ("w" key)
 
 ## Cloud providers
-- Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`)
-- Azure Computer Vision: you need to specify an api key and an endpoint in the config file (see below) and to install azure-cognitiveservices-vision-computervision (`pip install azure-cognitiveservices-vision-computervision`)
+- Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
+- Azure Computer Vision: you need to specify an api key and an endpoint in the config file (see below) and to install azure-cognitiveservices-vision-computervision (`pip install azure-cognitiveservices-vision-computervision`) ("v" key)
 
 # Usage
 
