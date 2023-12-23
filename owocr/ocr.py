@@ -2,7 +2,6 @@ import re
 import os
 import io
 from pathlib import Path
-import warnings
 import time
 import sys
 import platform

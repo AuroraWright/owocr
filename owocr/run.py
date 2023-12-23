@@ -27,12 +27,12 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, img_or_path, write_to):
+def process_and_write_results(engine_instance, engine_color, img_or_path, write_to):
     t0 = time.time()
     text = engine_instance(img_or_path)
     t1 = time.time()
 
-    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <cyan>{engine_instance.readable_name}</cyan>: {text}")
+    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
 
     if write_to == 'clipboard':
         pyperclip.copy(text)
@@ -106,14 +106,6 @@ def run(read_from='clipboard',
     :param verbose: If True, unhides all warnings.
     """
 
-    fmt = "<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>"
-    config = {
-        "handlers": [
-            {"sink": sys.stderr, "format": fmt},
-        ],
-    }
-    logger.configure(**config)
-
     if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
         # Check if the system is using Wayland
         if os.environ.get('WAYLAND_DISPLAY'):
@@ -129,20 +121,36 @@ def run(read_from='clipboard',
     config_engines = []
     engine_keys = []
     default_engine = ''
+    logger_format = '<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>'
+    engine_color = 'cyan'
 
-    logger.info(f'Parsing config file')
     config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     config = configparser.ConfigParser()
     res = config.read(config_file)
 
-    if len(res) == 0:
-        logger.warning('No config file, defaults will be used')
-    else:
+    if len(res) != 0:
         try:
             for config_engine in config['general']['engines'].split(','):
                 config_engines.append(config_engine.strip())
         except KeyError:
             pass
+
+        try:
+            logger_format = config['general']['logger_format'].strip()
+        except KeyError:
+            pass
+
+        try:
+            engine_color = config['general']['engine_color'].strip()
+        except KeyError:
+            pass
+
+    logger.configure(handlers=[{"sink": sys.stderr, "format": logger_format}])
+
+    if len(res) != 0:
+        logger.info('Parsed config file')
+    else:
+        logger.warning('No config file, defaults will be used')
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ in x.__module__ and inspect.isclass(x))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
@@ -179,7 +187,7 @@ def run(read_from='clipboard',
         tmp_paused = False
         img = None
 
-        logger.opt(ansi=True).info(f"Reading from clipboard using <cyan>{engine_instances[engine_index].readable_name}</cyan>{' (paused)' if paused else ''}")
+        logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
         if sys.platform == "darwin" and 'objc' in sys.modules:
             from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
@@ -198,7 +206,7 @@ def run(read_from='clipboard',
         if not read_from.is_dir():
             raise ValueError('read_from must be either "clipboard" or a path to a directory')
 
-        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <cyan>{engine_instances[engine_index].readable_name}</cyan>')
+        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>')
 
         old_paths = set()
         for path in read_from.iterdir():
@@ -232,7 +240,7 @@ def run(read_from='clipboard',
 
             if engine_index != new_engine_index:
                 engine_index = new_engine_index
-                logger.opt(ansi=True).info(f"Switched to <cyan>{engine_instances[engine_index].readable_name}</cyan>!")
+                logger.opt(ansi=True).info(f"Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!")
 
             user_input = ''
 
@@ -261,7 +269,7 @@ def run(read_from='clipboard',
                             logger.warning('Error while reading from clipboard ({})'.format(error))
                     else:
                         if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
-                            process_and_write_results(engine_instances[engine_index], img, write_to)
+                            process_and_write_results(engine_instances[engine_index], engine_color, img, write_to)
 
             if just_unpaused:
                 just_unpaused = False
@@ -277,7 +285,7 @@ def run(read_from='clipboard',
                     except (UnidentifiedImageError, OSError) as e:
                         logger.warning(f'Error while reading file {path}: {e}')
                     else:
-                        process_and_write_results(engine_instances[engine_index], img, write_to)
+                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to)
 
         time.sleep(delay_secs)
 
