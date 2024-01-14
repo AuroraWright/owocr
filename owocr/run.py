@@ -138,8 +138,8 @@ def run(read_from='clipboard',
         verbose=False
         ):
     """
-    Run OCR in the background, waiting for new images to appear either in system clipboard, or a directory.
-    Recognized texts can be either saved to system clipboard, or appended to a text file.
+    Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
+    Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
 
     :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
