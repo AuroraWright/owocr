@@ -23,6 +23,7 @@ This has been tested with Python 3.11. Newer/older versions might work. For now 
 
 It mostly functions like Manga OCR: https://github.com/kha-white/manga-ocr?tab=readme-ov-file#running-in-the-background
 However:
+- it supports writing text to a websocket when the -w=websocket parameter is specified (port 7331)
 - you can pause/unpause the clipboard image processing by pressing "p" or terminate the script with "t" or "q"
 - you can switch OCR provider with its corresponding keyboard key (refer to the list above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
 - holding ctrl or cmd at any time will pause the clipboard image processing temporarily

@@ -8,6 +8,8 @@ from pathlib import Path
 import fire
 import numpy as np
 import pyperclip
+import asyncio
+import websockets
 from PIL import Image
 from PIL import UnidentifiedImageError
 from loguru import logger
@@ -15,6 +17,37 @@ from pynput import keyboard
 
 import inspect
 from owocr import *
+
+
+class WebsocketServerThread(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.daemon = True
+        self.loop = asyncio.new_event_loop()
+        self.connected = set()
+
+    async def send_text_coroutine(self, text):
+        for conn in self.connected:
+            await conn.send(text)
+
+    def send_text(self, text):
+        return asyncio.run_coroutine_threadsafe(self.send_text_coroutine(text), self.loop)
+
+    async def server_handler(self, websocket):
+        logger.info("Websocket client connected")
+        self.connected.add(websocket)
+        try:
+            async for message in websocket:
+                pass
+        finally:
+            self.connected.remove(websocket)
+
+    def run(self):
+        asyncio.set_event_loop(self.loop)
+        start_server = websockets.serve(self.server_handler, 'localhost', 7331)
+        self.loop.run_until_complete(start_server)
+        self.loop.run_forever()
+        self.loop.close()
 
 
 def are_images_identical(img1, img2):
@@ -34,7 +67,9 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
 
     logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
 
-    if write_to == 'clipboard':
+    if write_to == 'websocket':
+        websocket_server_thread.send_text(text)
+    elif write_to == 'clipboard':
         pyperclip.copy(text)
     else:
         write_to = Path(write_to)
@@ -98,7 +133,7 @@ def run(read_from='clipboard',
     Recognized texts can be either saved to system clipboard, or appended to a text file.
 
     :param read_from: Specifies where to read input images from. Can be either "clipboard", or a path to a directory.
-    :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", or a path to a text file.
+    :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
     :param pause_at_startup: Pause at startup.
@@ -152,7 +187,7 @@ def run(read_from='clipboard',
     else:
         logger.warning('No config file, defaults will be used')
 
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ in x.__module__ and inspect.isclass(x))):
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ + ".ocr" in x.__module__ and inspect.isclass(x))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
             try:
                 engine_instance = engine_class(config[engine_class.name])
@@ -176,6 +211,11 @@ def run(read_from='clipboard',
 
     user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
     user_input_thread.start()
+
+    if write_to == 'websocket':
+        global websocket_server_thread
+        websocket_server_thread = WebsocketServerThread()
+        websocket_server_thread.start()
 
     if read_from == 'clipboard':
         from PIL import ImageGrab
@@ -217,6 +257,8 @@ def run(read_from='clipboard',
             if user_input.lower() in 'tq':
                 if read_from == 'clipboard':
                     tmp_paused_listener.stop()
+                if write_to == 'websocket':
+                    websocket_server_thread = WebsocketServerThread()
                 user_input_thread.join()
                 logger.info('Terminated!')
                 break

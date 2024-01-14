@@ -27,6 +27,7 @@ setup(
         "pyperclip",
         "unidic_lite",
         "pynput",
+        "websockets",
         'msvcrt;platform_system=="Windows"'
     ],
     entry_points={
