@@ -20,31 +20,35 @@ from owocr import *
 
 
 class WebsocketServerThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, port):
         super().__init__()
         self.daemon = True
         self.loop = asyncio.new_event_loop()
-        self.connected = set()
+        self.port = port
+        self.clients = set()
 
     async def send_text_coroutine(self, text):
-        for conn in self.connected:
-            await conn.send(text)
-
-    def send_text(self, text):
-        return asyncio.run_coroutine_threadsafe(self.send_text_coroutine(text), self.loop)
+        for client in self.clients:
+            await client.send(text)
 
     async def server_handler(self, websocket):
         logger.info("Websocket client connected")
-        self.connected.add(websocket)
+        self.clients.add(websocket)
         try:
             async for message in websocket:
                 pass
         finally:
-            self.connected.remove(websocket)
+            self.clients.remove(websocket)
+
+    def send_text(self, text):
+        return asyncio.run_coroutine_threadsafe(self.send_text_coroutine(text), self.loop)
+
+    def stop_server(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
 
     def run(self):
         asyncio.set_event_loop(self.loop)
-        start_server = websockets.serve(self.server_handler, 'localhost', 7331)
+        start_server = websockets.serve(self.server_handler, 'localhost', self.port)
         self.loop.run_until_complete(start_server)
         self.loop.run_forever()
         self.loop.close()
@@ -122,10 +126,10 @@ def on_key_release(key):
 
 def run(read_from='clipboard',
         write_to='clipboard',
-        delay_secs=0.5,
         engine='',
         pause_at_startup=False,
         ignore_flag=False,
+        delete_images=False,
         verbose=False
         ):
     """
@@ -137,7 +141,8 @@ def run(read_from='clipboard',
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
     :param pause_at_startup: Pause at startup.
-    :param ignore_flag: Process flagged images (images that are copied to the clipboard with the *ocr_ignore* string).
+    :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
+    :param delete_images: Delete image files after processing when reading from a directory.
     :param verbose: If True, unhides all warnings.
     """
 
@@ -158,6 +163,8 @@ def run(read_from='clipboard',
     default_engine = ''
     logger_format = '<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>'
     engine_color = 'cyan'
+    delay_secs = 0.5
+    websocket_port = 7331
 
     config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     config = configparser.ConfigParser()
@@ -177,6 +184,16 @@ def run(read_from='clipboard',
 
         try:
             engine_color = config['general']['engine_color'].strip()
+        except KeyError:
+            pass
+
+        try:
+            delay_secs = float(config['general']['delay_secs'].strip())
+        except KeyError:
+            pass
+
+        try:
+            websocket_port = int(config['general']['websocket_port'].strip())
         except KeyError:
             pass
 
@@ -206,25 +223,29 @@ def run(read_from='clipboard',
 
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
 
+    global just_unpaused
+    global tmp_paused
     global user_input
     user_input = ''
+    paused = pause_at_startup
+    just_unpaused = True
+    tmp_paused = False
 
     user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
     user_input_thread.start()
 
+    tmp_paused_listener = keyboard.Listener(
+        on_press=on_key_press,
+        on_release=on_key_release)
+    tmp_paused_listener.start()
+
     if write_to == 'websocket':
         global websocket_server_thread
-        websocket_server_thread = WebsocketServerThread()
+        websocket_server_thread = WebsocketServerThread(websocket_port)
         websocket_server_thread.start()
 
     if read_from == 'clipboard':
         from PIL import ImageGrab
-
-        global just_unpaused
-        global tmp_paused
-        paused = pause_at_startup
-        just_unpaused = True
-        tmp_paused = False
         img = None
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
@@ -236,36 +257,33 @@ def run(read_from='clipboard',
             mac_clipboard_polling = True
         else:
             mac_clipboard_polling = False
-
-        tmp_paused_listener = keyboard.Listener(
-            on_press=on_key_press,
-            on_release=on_key_release)
-        tmp_paused_listener.start()
     else:
+        allowed_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
         read_from = Path(read_from)
         if not read_from.is_dir():
             raise ValueError('read_from must be either "clipboard" or a path to a directory')
 
-        logger.opt(ansi=True).info(f'Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>')
+        logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
         old_paths = set()
         for path in read_from.iterdir():
-            old_paths.add(get_path_key(path))
+            if str(path).lower().endswith(allowed_extensions):
+                old_paths.add(get_path_key(path))
 
     while True:
         if user_input != '':
             if user_input.lower() in 'tq':
-                if read_from == 'clipboard':
-                    tmp_paused_listener.stop()
                 if write_to == 'websocket':
-                    websocket_server_thread = WebsocketServerThread()
+                    websocket_server_thread.stop_server()
+                    websocket_server_thread.join()
                 user_input_thread.join()
+                tmp_paused_listener.stop()
                 logger.info('Terminated!')
                 break
 
             new_engine_index = engine_index
 
-            if read_from == 'clipboard' and user_input.lower() == 'p':
+            if user_input.lower() == 'p':
                 if paused:
                     logger.info('Unpaused!')
                     just_unpaused = True
@@ -317,17 +335,22 @@ def run(read_from='clipboard',
                 just_unpaused = False
         else:
             for path in read_from.iterdir():
-                path_key = get_path_key(path)
-                if path_key not in old_paths:
-                    old_paths.add(path_key)
+                if str(path).lower().endswith(allowed_extensions):
+                    path_key = get_path_key(path)
+                    if path_key not in old_paths:
+                        old_paths.add(path_key)
 
-                    try:
-                        img = Image.open(path)
-                        img.load()
-                    except (UnidentifiedImageError, OSError) as e:
-                        logger.warning(f'Error while reading file {path}: {e}')
-                    else:
-                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to)
+                        if not paused and not tmp_paused:
+                            try:
+                                img = Image.open(path)
+                                img.load()
+                            except (UnidentifiedImageError, OSError) as e:
+                                logger.warning(f'Error while reading file {path}: {e}')
+                            else:
+                                process_and_write_results(engine_instances[engine_index], engine_color, img, write_to)
+                                img.close()
+                                if delete_images:
+                                    Path.unlink(path)
 
         time.sleep(delay_secs)
 
