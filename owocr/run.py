@@ -10,6 +10,9 @@ import numpy as np
 import pyperclip
 import asyncio
 import websockets
+import queue
+import io
+
 from PIL import Image
 from PIL import UnidentifiedImageError
 from loguru import logger
@@ -20,11 +23,12 @@ from owocr import *
 
 
 class WebsocketServerThread(threading.Thread):
-    def __init__(self, port):
+    def __init__(self, port, read):
         super().__init__()
         self.daemon = True
         self.loop = asyncio.new_event_loop()
         self.port = port
+        self.read = read
         self.clients = set()
 
     async def send_text_coroutine(self, text):
@@ -36,7 +40,8 @@ class WebsocketServerThread(threading.Thread):
         self.clients.add(websocket)
         try:
             async for message in websocket:
-                pass
+                if self.read:
+                    websocket_queue.put(message)
         finally:
             self.clients.remove(websocket)
 
@@ -136,7 +141,7 @@ def run(read_from='clipboard',
     Run OCR in the background, waiting for new images to appear either in system clipboard, or a directory.
     Recognized texts can be either saved to system clipboard, or appended to a text file.
 
-    :param read_from: Specifies where to read input images from. Can be either "clipboard", or a path to a directory.
+    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
@@ -239,12 +244,16 @@ def run(read_from='clipboard',
         on_release=on_key_release)
     tmp_paused_listener.start()
 
-    if write_to == 'websocket':
+    if read_from == 'websocket' or write_to == 'websocket':
         global websocket_server_thread
-        websocket_server_thread = WebsocketServerThread(websocket_port)
+        websocket_server_thread = WebsocketServerThread(websocket_port, read_from == 'websocket')
         websocket_server_thread.start()
 
-    if read_from == 'clipboard':
+    if read_from == 'websocket':
+        global websocket_queue
+        websocket_queue = queue.Queue()
+        logger.opt(ansi=True).info(f"Reading from websocket using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+    elif read_from == 'clipboard':
         from PIL import ImageGrab
         img = None
 
@@ -273,7 +282,7 @@ def run(read_from='clipboard',
     while True:
         if user_input != '':
             if user_input.lower() in 'tq':
-                if write_to == 'websocket':
+                if read_from == 'websocket' or write_to == 'websocket':
                     websocket_server_thread.stop_server()
                     websocket_server_thread.join()
                 user_input_thread.join()
@@ -304,7 +313,17 @@ def run(read_from='clipboard',
 
             user_input = ''
 
-        if read_from == 'clipboard':
+        if read_from == 'websocket':
+            while True:
+                try:
+                    item = websocket_queue.get(timeout=delay_secs)
+                except queue.Empty:
+                    break
+                else:
+                    if not paused and not tmp_paused:
+                        img = Image.open(io.BytesIO(item))
+                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to)
+        elif read_from == 'clipboard':
             if not paused and not tmp_paused:
                 if mac_clipboard_polling:
                     old_count = count
@@ -333,6 +352,8 @@ def run(read_from='clipboard',
 
             if just_unpaused:
                 just_unpaused = False
+
+            time.sleep(delay_secs)
         else:
             for path in read_from.iterdir():
                 if str(path).lower().endswith(allowed_extensions):
@@ -352,7 +373,7 @@ def run(read_from='clipboard',
                                 if delete_images:
                                     Path.unlink(path)
 
-        time.sleep(delay_secs)
+            time.sleep(delay_secs)
 
 if __name__ == '__main__':
     fire.Fire(run)
