@@ -36,7 +36,6 @@ class WebsocketServerThread(threading.Thread):
             await client.send(text)
 
     async def server_handler(self, websocket):
-        logger.info("Websocket client connected")
         self.clients.add(websocket)
         try:
             async for message in websocket:
