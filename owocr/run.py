@@ -125,16 +125,20 @@ def getchar_thread():
 
 def on_key_press(key):
     global tmp_paused
-    if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
+    global first_pressed
+    if first_pressed == None and key in (keyboard.Key.cmd, keyboard.Key.cmd_r, keyboard.Key.ctrl, keyboard.Key.ctrl_r):
+        first_pressed = key
         tmp_paused = True
 
 
 def on_key_release(key):
     global tmp_paused
     global just_unpaused
-    if key == keyboard.Key.cmd_r or key == keyboard.Key.ctrl_r:
+    global first_pressed
+    if key == first_pressed:
         tmp_paused = False
         just_unpaused = True
+        first_pressed = None
 
 
 def run(read_from='clipboard',
@@ -240,10 +244,12 @@ def run(read_from='clipboard',
     global tmp_paused
     global just_unpaused
     global user_input
+    global first_pressed
     user_input = ''
     paused = pause_at_startup
     just_unpaused = True
     tmp_paused = False
+    first_pressed = None
 
     user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
     user_input_thread.start()
