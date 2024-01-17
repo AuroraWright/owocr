@@ -39,8 +39,17 @@ class WebsocketServerThread(threading.Thread):
         self.clients.add(websocket)
         try:
             async for message in websocket:
-                if self.read:
+                if self.read and not (paused or tmp_paused):
                     websocket_queue.put(message)
+                    try:
+                        await websocket.send("True")
+                    except websockets.exceptions.ConnectionClosedOK:
+                        pass
+                else:
+                    try:
+                        await websocket.send("False")
+                    except websockets.exceptions.ConnectionClosedOK:
+                        pass
         finally:
             self.clients.remove(websocket)
 
@@ -227,8 +236,9 @@ def run(read_from='clipboard',
 
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
 
-    global just_unpaused
+    global paused
     global tmp_paused
+    global just_unpaused
     global user_input
     user_input = ''
     paused = pause_at_startup
