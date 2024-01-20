@@ -142,7 +142,7 @@ def getchar_thread():
 def on_key_press(key):
     global tmp_paused
     global first_pressed
-    if first_pressed == None and key in (keyboard.Key.cmd, keyboard.Key.cmd_r, keyboard.Key.ctrl, keyboard.Key.ctrl_r):
+    if first_pressed == None and key in (keyboard.Key.cmd_l, keyboard.Key.cmd_r, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
         first_pressed = key
         tmp_paused = True
 
