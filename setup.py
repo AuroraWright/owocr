@@ -25,7 +25,6 @@ setup(
         "numpy",
         "Pillow>=10.0.0",
         "pyperclip",
-        "unidic_lite",
         "pynput",
         "websockets",
         "notify-py"
