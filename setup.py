@@ -28,7 +28,7 @@ setup(
         "unidic_lite",
         "pynput",
         "websockets",
-        "desktop-notifier"
+        "notify-py"
     ],
     entry_points={
         "console_scripts": [

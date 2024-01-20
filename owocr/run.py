@@ -17,7 +17,7 @@ from PIL import Image
 from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
-from desktop_notifier import DesktopNotifier
+from notifypy import Notify
 
 import inspect
 from owocr import *
@@ -78,14 +78,18 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, engine_color, img_or_path, write_to, notifier):
+def process_and_write_results(engine_instance, engine_color, img_or_path, write_to, notifications):
     t0 = time.time()
     text = engine_instance(img_or_path)
     t1 = time.time()
 
     logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
-    if notifier != None:
-        notifier.send_sync(title="owocr", message=text, timeout=5)
+    if notifications == True:
+        notification = Notify()
+        notification.application_name = 'owocr'
+        notification.title = 'Text recognized:'
+        notification.message = text
+        notification.send(block=False)
 
     if write_to == 'websocket':
         websocket_server_thread.send_text(text)
@@ -185,7 +189,7 @@ def run(read_from='clipboard',
     engine_color = 'cyan'
     delay_secs = 0.5
     websocket_port = 7331
-    notifier = None
+    notifications = False
 
     config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     config = configparser.ConfigParser()
@@ -220,7 +224,7 @@ def run(read_from='clipboard',
 
         try:
             if config['general']['notifications'].strip().lower() == 'true':
-                notifier = DesktopNotifier()
+                notifications = True
         except KeyError:
             pass
 
@@ -347,7 +351,7 @@ def run(read_from='clipboard',
                 else:
                     if not paused and not tmp_paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifier)
+                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
         elif read_from == 'clipboard':
             if not paused and not tmp_paused:
                 if mac_clipboard_polling:
@@ -373,7 +377,7 @@ def run(read_from='clipboard',
                             logger.warning('Error while reading from clipboard ({})'.format(error))
                     else:
                         if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
-                            process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifier)
+                            process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
 
             if just_unpaused:
                 just_unpaused = False
@@ -393,7 +397,7 @@ def run(read_from='clipboard',
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifier)
+                                process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
