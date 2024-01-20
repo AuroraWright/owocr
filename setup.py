@@ -27,7 +27,8 @@ setup(
         "pyperclip",
         "unidic_lite",
         "pynput",
-        "websockets"
+        "websockets",
+        "desktop-notifier"
     ],
     entry_points={
         "console_scripts": [

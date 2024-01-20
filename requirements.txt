@@ -7,3 +7,4 @@ pyperclip
 unidic_lite
 pynput
 websockets
+desktop-notifier

@@ -29,7 +29,8 @@ However:
 - you can switch OCR provider with its corresponding keyboard key (refer to the list above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
 - holding ctrl or cmd at any time will pause image processing temporarily
 - for systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored
-- a config file (located in `user directory/.config/owocr_config.ini`) can be used to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc (a sample config file is provided)
+- optionally, notifications can be enabled in the config file to show the text with a native OS notification
+- a config file (to be created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 
 # Acknowledgments
 
