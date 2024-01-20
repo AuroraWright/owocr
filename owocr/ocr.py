@@ -168,18 +168,23 @@ class GoogleLens:
 
         timestamp = int(time.time() * 1000)
         url = f"https://lens.google.com/v3/upload?stcs={timestamp}"
-        files = {"encoded_image": ('owo' + str(timestamp) +'.png', self._preprocess(img), 'image/png')}
-        res = requests.post(url, files=files)
+        files = {"encoded_image": ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
+        try:
+            res = requests.post(url, files=files, timeout=(3, 10))
+        except requests.exceptions.Timeout:
+            return "Request timeout!"
 
         x = ''
         if res.status_code == 200:
             regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?);</script>")
             match = regex.search(res.text)
             if match != None:
-                lines = chompjs.parse_js_object(match.group(1))["data"][3][4][0][0]
-                for line in lines:
-                    x += line + ' '
-                x = post_process(x)
+                text = chompjs.parse_js_object(match.group(1))["data"][3][4][0]
+                if len(text) > 0:
+                    lines = text[0]
+                    for line in lines:
+                        x += line + ' '
+                    x = post_process(x)
 
         return x
 
