@@ -16,6 +16,7 @@ This has been tested with Python 3.11. Newer/older versions might work. For now 
 - WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server (`winocr_serve`), installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file (see below) ("w" key)
 
 ## Cloud providers
+- Google Lens: Google Vision in disguise (no need for API keys!), however it needs to download a couple megabytes of data for each request. You need to install chompjs and requests (`pip install chompjs requests`) ("l" key)
 - Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
 - Azure Computer Vision: you need to specify an api key and an endpoint in the config file (see below) and to install azure-cognitiveservices-vision-computervision (`pip install azure-cognitiveservices-vision-computervision`) ("v" key)
 
@@ -36,3 +37,5 @@ This uses code from/references these projects:
 - [Manga OCR](https://github.com/kha-white/manga-ocr)
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
+
+Thanks to viola for working on the Google Lens implementation!

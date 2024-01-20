@@ -56,6 +56,11 @@ try:
 except ImportError:
     pass
 
+try:
+    import chompjs
+except ImportError:
+    pass
+
 
 def post_process(text):
     text = ''.join(text.split())
@@ -136,6 +141,51 @@ class GoogleVision:
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
         img.save(image_bytes, format=img.format)
+        return image_bytes.getvalue()
+
+class GoogleLens:
+    name = "glens"
+    readable_name = "Google Lens"
+    key = "l"
+    available = False
+
+    def __init__(self):
+        if 'chompjs' not in sys.modules:
+            logger.warning('chompjs not available, Google Lens will not work!')
+        elif 'requests' not in sys.modules:
+            logger.warning('requests not available, Google Lens will not work!')
+        else:
+            self.available = True
+            logger.info('Google Lens ready')
+
+    def __call__(self, img_or_path):
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        timestamp = int(time.time() * 1000)
+        url = f"https://lens.google.com/v3/upload?stcs={timestamp}"
+        files = {"encoded_image": ('owo' + str(timestamp) +'.png', self._preprocess(img), 'image/png')}
+        res = requests.post(url, files=files)
+
+        x = ''
+        if res.status_code == 200:
+            regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?);</script>")
+            match = regex.search(res.text)
+            if match != None:
+                lines = chompjs.parse_js_object(match.group(1))["data"][3][4][0][0]
+                for line in lines:
+                    x += line + ' '
+                x = post_process(x)
+
+        return x
+
+    def _preprocess(self, img):
+        image_bytes = io.BytesIO()
+        img.save(image_bytes, format="png")
         return image_bytes.getvalue()
 
 class AppleVision:
