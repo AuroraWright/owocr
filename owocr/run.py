@@ -58,13 +58,18 @@ class WebsocketServerThread(threading.Thread):
         return asyncio.run_coroutine_threadsafe(self.send_text_coroutine(text), self.loop)
 
     def stop_server(self):
+        self.loop.call_soon_threadsafe(self.server.ws_server.close)
         self.loop.call_soon_threadsafe(self.loop.stop)
 
     def run(self):
         asyncio.set_event_loop(self.loop)
         start_server = websockets.serve(self.server_handler, 'localhost', self.port, max_size=50000000)
+        self.server = start_server
         self.loop.run_until_complete(start_server)
         self.loop.run_forever()
+        pending = asyncio.all_tasks(loop=self.loop)
+        if len(pending) > 0:
+            self.loop.run_until_complete(asyncio.wait(pending))
         self.loop.close()
 
 
@@ -114,8 +119,12 @@ def getchar_thread():
         import msvcrt
         while True:
             user_input = msvcrt.getch()
-            if user_input.lower() in 'tq':
-                break
+            try:
+                user_input = user_input.decode()
+                if user_input.lower() in 'tq':
+                    break
+            except UnicodeDecodeError:
+                pass
     else:
         import tty, termios
         fd = sys.stdin.fileno()
