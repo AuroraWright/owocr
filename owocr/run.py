@@ -194,7 +194,7 @@ def run(read_from='clipboard',
     if len(res) != 0:
         try:
             for config_engine in config['general']['engines'].split(','):
-                config_engines.append(config_engine.strip())
+                config_engines.append(config_engine.strip().lower())
         except KeyError:
             pass
 
@@ -219,7 +219,7 @@ def run(read_from='clipboard',
             pass
 
         try:
-            if config['general']['notifications'].strip() == 'True':
+            if config['general']['notifications'].strip().lower() == 'true':
                 notifier = DesktopNotifier()
         except KeyError:
             pass
