@@ -57,7 +57,7 @@ except ImportError:
     pass
 
 try:
-    import chompjs
+    import pyjson5
 except ImportError:
     pass
 
@@ -150,8 +150,8 @@ class GoogleLens:
     available = False
 
     def __init__(self):
-        if 'chompjs' not in sys.modules:
-            logger.warning('chompjs not available, Google Lens will not work!')
+        if 'pyjson5' not in sys.modules:
+            logger.warning('pyjson5 not available, Google Lens will not work!')
         elif 'requests' not in sys.modules:
             logger.warning('requests not available, Google Lens will not work!')
         else:
@@ -176,15 +176,17 @@ class GoogleLens:
 
         x = ''
         if res.status_code == 200:
-            regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?);</script>")
+            regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
             match = regex.search(res.text)
             if match != None:
-                text = chompjs.parse_js_object(match.group(1))["data"][3][4][0]
-                if len(text) > 0:
-                    lines = text[0]
-                    for line in lines:
-                        x += line + ' '
-                    x = post_process(x)
+                lens_object = pyjson5.loads(match.group(1))
+                if not 'errorHasStatus' in lens_object:
+                    text = lens_object['data'][3][4][0]
+                    if len(text) > 0:
+                        lines = text[0]
+                        for line in lines:
+                            x += line + ' '
+                        x = post_process(x)
 
         return x
 
