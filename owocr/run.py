@@ -22,6 +22,43 @@ from notifypy import Notify
 import inspect
 from owocr import *
 
+try:
+    import win32gui
+    import win32api 
+    import win32con
+    import win32clipboard
+    import ctypes
+except ImportError:
+    pass
+
+
+class WindowsClipboardThread(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.daemon = True
+
+    def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
+        WM_CLIPBOARDUPDATE = 0x031D
+        if msg == WM_CLIPBOARDUPDATE and not (paused or tmp_paused):
+            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP):
+                clipboard_event.set()
+        return 0
+
+    def create_window(self):
+        className = "ClipboardHook"
+        wc = win32gui.WNDCLASS()
+        wc.lpfnWndProc = self.process_message
+        wc.lpszClassName = className
+        wc.hInstance = win32api.GetModuleHandle(None)
+        class_atom = win32gui.RegisterClass(wc)
+        return win32gui.CreateWindow(class_atom, className, 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
+
+    def run(self):
+        hwnd = self.create_window()
+        self.thread_id = win32api.GetCurrentThreadId()
+        ctypes.windll.user32.AddClipboardFormatListener(hwnd)
+        win32gui.PumpMessages()
+
 
 class WebsocketServerThread(threading.Thread):
     def __init__(self, port, read):
@@ -73,46 +110,6 @@ class WebsocketServerThread(threading.Thread):
         self.loop.close()
 
 
-def are_images_identical(img1, img2):
-    if None in (img1, img2):
-        return img1 == img2
-
-    img1 = np.array(img1)
-    img2 = np.array(img2)
-
-    return (img1.shape == img2.shape) and (img1 == img2).all()
-
-
-def process_and_write_results(engine_instance, engine_color, img_or_path, write_to, notifications):
-    t0 = time.time()
-    text = engine_instance(img_or_path)
-    t1 = time.time()
-
-    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
-    if notifications == True:
-        notification = Notify()
-        notification.application_name = 'owocr'
-        notification.title = 'Text recognized:'
-        notification.message = text
-        notification.send(block=False)
-
-    if write_to == 'websocket':
-        websocket_server_thread.send_text(text)
-    elif write_to == 'clipboard':
-        pyperclip.copy(text)
-    else:
-        write_to = Path(write_to)
-        if write_to.suffix != '.txt':
-            raise ValueError('write_to must be either "clipboard" or a path to a text file')
-
-        with write_to.open('a', encoding="utf-8") as f:
-            f.write(text + '\n')
-
-
-def get_path_key(path):
-    return path, path.lstat().st_mtime
-
-
 def getchar_thread():
     global user_input
     if sys.platform == "win32":
@@ -155,6 +152,46 @@ def on_key_release(key):
         tmp_paused = False
         just_unpaused = True
         first_pressed = None
+
+
+def are_images_identical(img1, img2):
+    if None in (img1, img2):
+        return img1 == img2
+
+    img1 = np.array(img1)
+    img2 = np.array(img2)
+
+    return (img1.shape == img2.shape) and (img1 == img2).all()
+
+
+def process_and_write_results(engine_instance, engine_color, img_or_path, write_to, notifications):
+    t0 = time.time()
+    text = engine_instance(img_or_path)
+    t1 = time.time()
+
+    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
+    if notifications == True:
+        notification = Notify()
+        notification.application_name = 'owocr'
+        notification.title = 'Text recognized:'
+        notification.message = text
+        notification.send(block=False)
+
+    if write_to == 'websocket':
+        websocket_server_thread.send_text(text)
+    elif write_to == 'clipboard':
+        pyperclip.copy(text)
+    else:
+        write_to = Path(write_to)
+        if write_to.suffix != '.txt':
+            raise ValueError('write_to must be either "clipboard" or a path to a text file')
+
+        with write_to.open('a', encoding="utf-8") as f:
+            f.write(text + '\n')
+
+
+def get_path_key(path):
+    return path, path.lstat().st_mtime
 
 
 def run(read_from='clipboard',
@@ -293,17 +330,23 @@ def run(read_from='clipboard',
         logger.opt(ansi=True).info(f"Reading from websocket using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     elif read_from == 'clipboard':
         from PIL import ImageGrab
+        mac_clipboard_polling = False
+        windows_clipboard_polling = False
         img = None
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
-        if sys.platform == "darwin" and 'objc' in sys.modules:
+        if sys.platform == 'darwin' and 'objc' in sys.modules:
             from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
             mac_clipboard_polling = True
-        else:
-            mac_clipboard_polling = False
+        elif sys.platform == 'win32' and 'win32gui' in sys.modules:
+            global clipboard_event
+            clipboard_event = threading.Event()
+            windows_clipboard_thread = WindowsClipboardThread()
+            windows_clipboard_thread.start()
+            windows_clipboard_polling = True
     else:
         allowed_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
         read_from = Path(read_from)
@@ -323,6 +366,9 @@ def run(read_from='clipboard',
                 if read_from == 'websocket' or write_to == 'websocket':
                     websocket_server_thread.stop_server()
                     websocket_server_thread.join()
+                if read_from == 'clipboard' and windows_clipboard_polling:
+                    win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
+                    windows_clipboard_thread.join()
                 user_input_thread.join()
                 tmp_paused_listener.stop()
                 logger.info('Terminated!')
@@ -362,36 +408,40 @@ def run(read_from='clipboard',
                         img = Image.open(io.BytesIO(item))
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
         elif read_from == 'clipboard':
-            if not paused and not tmp_paused:
-                if mac_clipboard_polling:
-                    old_count = count
-                    count = pasteboard.changeCount()
-                    changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
-                else:
-                    changed = True
-
+            if windows_clipboard_polling:
+                changed = clipboard_event.wait(delay_secs)
                 if changed:
-                    old_img = img
+                    clipboard_event.clear()
+            elif mac_clipboard_polling and not (paused or tmp_paused):
+                old_count = count
+                count = pasteboard.changeCount()
+                changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
+            else:
+                changed = not (paused or tmp_paused)
 
-                    try:
-                        img = ImageGrab.grabclipboard()
-                    except OSError as error:
-                        if not verbose and "cannot identify image file" in str(error):
-                            # Pillow error when clipboard hasn't changed since last grab (Linux)
-                            pass
-                        elif not verbose and "target image/png not available" in str(error):
-                            # Pillow error when clipboard contains text (Linux, X11)
-                            pass
-                        else:
-                            logger.warning('Error while reading from clipboard ({})'.format(error))
+            if changed:
+                old_img = img
+
+                try:
+                    img = ImageGrab.grabclipboard()
+                except OSError as error:
+                    if not verbose and "cannot identify image file" in str(error):
+                        # Pillow error when clipboard hasn't changed since last grab (Linux)
+                        pass
+                    elif not verbose and "target image/png not available" in str(error):
+                        # Pillow error when clipboard contains text (Linux, X11)
+                        pass
                     else:
-                        if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
-                            process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
+                        logger.warning('Error while reading from clipboard ({})'.format(error))
+                else:
+                    if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
+                        process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
+
+            if not windows_clipboard_polling:
+                time.sleep(delay_secs)
 
             if just_unpaused:
                 just_unpaused = False
-
-            time.sleep(delay_secs)
         else:
             for path in read_from.iterdir():
                 if str(path).lower().endswith(allowed_extensions):
