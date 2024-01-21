@@ -39,5 +39,6 @@ This uses code from/references these projects:
 - [Manga OCR](https://github.com/kha-white/manga-ocr)
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
+- [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code
 
 Thanks to viola for working on the Google Lens implementation!
