@@ -332,6 +332,7 @@ def run(read_from='clipboard',
         from PIL import ImageGrab
         mac_clipboard_polling = False
         windows_clipboard_polling = False
+        generic_clipboard_polling = False
         img = None
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
@@ -347,6 +348,8 @@ def run(read_from='clipboard',
             windows_clipboard_thread = WindowsClipboardThread()
             windows_clipboard_thread.start()
             windows_clipboard_polling = True
+        else:
+            generic_clipboard_polling = True
     else:
         allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         read_from = Path(read_from)
@@ -374,7 +377,7 @@ def run(read_from='clipboard',
                 logger.info('Terminated!')
                 break
 
-            new_engine_index = engine_index
+            old_engine_index = engine_index
 
             if user_input.lower() == 'p':
                 if paused:
@@ -385,14 +388,13 @@ def run(read_from='clipboard',
                 paused = not paused
             elif user_input.lower() == 's':
                 if engine_index == len(engine_keys) - 1:
-                    new_engine_index = 0
+                    engine_index = 0
                 else:
-                    new_engine_index = engine_index + 1
+                    engine_index += 1
             elif user_input.lower() in engine_keys:
-                new_engine_index = engine_keys.index(user_input.lower())
+                engine_index = engine_keys.index(user_input.lower())
 
-            if engine_index != new_engine_index:
-                engine_index = new_engine_index
+            if engine_index != old_engine_index:
                 logger.opt(ansi=True).info(f'Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!')
 
             user_input = ''
@@ -408,20 +410,20 @@ def run(read_from='clipboard',
                         img = Image.open(io.BytesIO(item))
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
         elif read_from == 'clipboard':
-            changed = False
             if windows_clipboard_polling:
-                changed = clipboard_event.wait(delay_secs)
-                if changed:
+                clipboard_changed = clipboard_event.wait(delay_secs)
+                if clipboard_changed:
                     clipboard_event.clear()
             elif mac_clipboard_polling:
                 if not (paused or tmp_paused):
                     old_count = count
                     count = pasteboard.changeCount()
-                    changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
+                    clipboard_changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
             else:
-                changed = not (paused or tmp_paused)
+                clipboard_changed = not (paused or tmp_paused)
 
-            if changed:
+
+            if clipboard_changed:
                 old_img = img
 
                 try:
@@ -436,14 +438,13 @@ def run(read_from='clipboard',
                     else:
                         logger.warning('Error while reading from clipboard ({})'.format(error))
                 else:
-                    if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and not are_images_identical(img, old_img):
+                    if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
+
+            just_unpaused = False
 
             if not windows_clipboard_polling:
                 time.sleep(delay_secs)
-
-            if just_unpaused:
-                just_unpaused = False
         else:
             for path in read_from.iterdir():
                 if str(path).lower().endswith(allowed_extensions):
