@@ -1,11 +1,11 @@
 from pathlib import Path
 from setuptools import setup
 
-long_description = (Path(__file__).parent / "README.md").read_text('utf-8').split('# Installation')[0]
+long_description = (Path(__file__).parent / "README.md").read_text('utf-8')
 
 setup(
     name="owocr",
-    version='0.1',
+    version='1.0',
     description="Japanese OCR",
     long_description=long_description,
     long_description_content_type="text/markdown",

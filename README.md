@@ -4,7 +4,7 @@ Command line client for several Japanese OCR providers derived from [Manga OCR](
 
 # Installation
 
-This has been tested with Python 3.11. Newer/older versions might work. For now it can be installed with `pip install https://github.com/AuroraWright/owocr/archive/master.zip`
+This has been tested with Python 3.11. Newer/older versions might work. It can be installed with `pip install owocr`
 
 # Supported providers
 
