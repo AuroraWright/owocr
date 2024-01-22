@@ -100,7 +100,7 @@ class WebsocketServerThread(threading.Thread):
 
     def run(self):
         asyncio.set_event_loop(self.loop)
-        start_server = websockets.serve(self.server_handler, 'localhost', self.port, max_size=50000000)
+        start_server = websockets.serve(self.server_handler, '0.0.0.0', self.port, max_size=50000000)
         self.server = start_server
         self.loop.run_until_complete(start_server)
         self.loop.run_forever()
