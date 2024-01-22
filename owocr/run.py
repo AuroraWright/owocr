@@ -45,7 +45,7 @@ class WindowsClipboardThread(threading.Thread):
         return 0
 
     def create_window(self):
-        className = "ClipboardHook"
+        className = 'ClipboardHook'
         wc = win32gui.WNDCLASS()
         wc.lpfnWndProc = self.process_message
         wc.lpszClassName = className
@@ -80,12 +80,12 @@ class WebsocketServerThread(threading.Thread):
                 if self.read and not (paused or tmp_paused):
                     websocket_queue.put(message)
                     try:
-                        await websocket.send("True")
+                        await websocket.send('True')
                     except websockets.exceptions.ConnectionClosedOK:
                         pass
                 else:
                     try:
-                        await websocket.send("False")
+                        await websocket.send('False')
                     except websockets.exceptions.ConnectionClosedOK:
                         pass
         finally:
@@ -112,7 +112,7 @@ class WebsocketServerThread(threading.Thread):
 
 def getchar_thread():
     global user_input
-    if sys.platform == "win32":
+    if sys.platform == 'win32':
         import msvcrt
         while True:
             user_input = msvcrt.getch()
@@ -169,7 +169,7 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
     text = engine_instance(img_or_path)
     t1 = time.time()
 
-    logger.opt(ansi=True).info(f"Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}")
+    logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
     if notifications == True:
         notification = Notify()
         notification.application_name = 'owocr'
@@ -186,7 +186,7 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
         if write_to.suffix != '.txt':
             raise ValueError('write_to must be either "clipboard" or a path to a text file')
 
-        with write_to.open('a', encoding="utf-8") as f:
+        with write_to.open('a', encoding='utf-8') as f:
             f.write(text + '\n')
 
 
@@ -220,8 +220,8 @@ def run(read_from='clipboard',
         # Check if the system is using Wayland
         if os.environ.get('WAYLAND_DISPLAY'):
             # Check if the wl-clipboard package is installed
-            if os.system("which wl-copy > /dev/null") == 0:
-                pyperclip.set_clipboard("wl-clipboard")
+            if os.system('which wl-copy > /dev/null') == 0:
+                pyperclip.set_clipboard('wl-clipboard')
             else:
                 msg = 'Your session uses wayland and does not have wl-clipboard installed. ' \
                     'Install wl-clipboard for write in clipboard to work.'
@@ -274,14 +274,14 @@ def run(read_from='clipboard',
         except KeyError:
             pass
 
-    logger.configure(handlers=[{"sink": sys.stderr, "format": logger_format}])
+    logger.configure(handlers=[{'sink': sys.stderr, 'format': logger_format}])
 
     if len(res) != 0:
         logger.info('Parsed config file')
     else:
         logger.warning('No config file, defaults will be used')
 
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ + ".ocr" in x.__module__ and inspect.isclass(x))):
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ + '.ocr' in x.__module__ and inspect.isclass(x))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
             try:
                 engine_instance = engine_class(config[engine_class.name])
@@ -348,7 +348,7 @@ def run(read_from='clipboard',
             windows_clipboard_thread.start()
             windows_clipboard_polling = True
     else:
-        allowed_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
+        allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         read_from = Path(read_from)
         if not read_from.is_dir():
             raise ValueError('read_from must be either "clipboard" or a path to a directory')
@@ -393,7 +393,7 @@ def run(read_from='clipboard',
 
             if engine_index != new_engine_index:
                 engine_index = new_engine_index
-                logger.opt(ansi=True).info(f"Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!")
+                logger.opt(ansi=True).info(f'Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!')
 
             user_input = ''
 
@@ -408,14 +408,16 @@ def run(read_from='clipboard',
                         img = Image.open(io.BytesIO(item))
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
         elif read_from == 'clipboard':
+            changed = False
             if windows_clipboard_polling:
                 changed = clipboard_event.wait(delay_secs)
                 if changed:
                     clipboard_event.clear()
-            elif mac_clipboard_polling and not (paused or tmp_paused):
-                old_count = count
-                count = pasteboard.changeCount()
-                changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
+            elif mac_clipboard_polling:
+                if not (paused or tmp_paused):
+                    old_count = count
+                    count = pasteboard.changeCount()
+                    changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
             else:
                 changed = not (paused or tmp_paused)
 
@@ -425,10 +427,10 @@ def run(read_from='clipboard',
                 try:
                     img = ImageGrab.grabclipboard()
                 except OSError as error:
-                    if not verbose and "cannot identify image file" in str(error):
+                    if not verbose and 'cannot identify image file' in str(error):
                         # Pillow error when clipboard hasn't changed since last grab (Linux)
                         pass
-                    elif not verbose and "target image/png not available" in str(error):
+                    elif not verbose and 'target image/png not available' in str(error):
                         # Pillow error when clipboard contains text (Linux, X11)
                         pass
                     else:

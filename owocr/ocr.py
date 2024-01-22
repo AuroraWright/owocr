@@ -72,9 +72,9 @@ def post_process(text):
 
 
 class MangaOcr:
-    name = "mangaocr"
-    readable_name = "Manga OCR"
-    key = "m"
+    name = 'mangaocr'
+    readable_name = 'Manga OCR'
+    key = 'm'
     available = False
 
     def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu':'False'}, pretrained_model_name_or_path='', force_cpu=False):
@@ -86,7 +86,7 @@ class MangaOcr:
             if config['force_cpu'] == 'True':
                 force_cpu = True
 
-            logger.disable("manga_ocr")
+            logger.disable('manga_ocr')
             logger.info(f'Loading Manga OCR model')
             self.model = MOCR(pretrained_model_name_or_path, force_cpu)
             self.available = True
@@ -104,9 +104,9 @@ class MangaOcr:
         return x
 
 class GoogleVision:
-    name = "gvision"
-    readable_name = "Google Vision"
-    key = "g"
+    name = 'gvision'
+    readable_name = 'Google Vision'
+    key = 'g'
     available = False
 
     def __init__(self):
@@ -144,9 +144,9 @@ class GoogleVision:
         return image_bytes.getvalue()
 
 class GoogleLens:
-    name = "glens"
-    readable_name = "Google Lens"
-    key = "l"
+    name = 'glens'
+    readable_name = 'Google Lens'
+    key = 'l'
     available = False
 
     def __init__(self):
@@ -167,12 +167,12 @@ class GoogleLens:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         timestamp = int(time.time() * 1000)
-        url = f"https://lens.google.com/v3/upload?stcs={timestamp}"
-        files = {"encoded_image": ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
+        url = f'https://lens.google.com/v3/upload?stcs={timestamp}'
+        files = {'encoded_image': ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
         try:
             res = requests.post(url, files=files, timeout=(3, 10))
         except requests.exceptions.Timeout:
-            return "Request timeout!"
+            return 'Request timeout!'
 
         x = ''
         if res.status_code == 200:
@@ -192,17 +192,17 @@ class GoogleLens:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format="png")
+        img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
 class AppleVision:
-    name = "avision"
-    readable_name = "Apple Vision"
-    key = "a"
+    name = 'avision'
+    readable_name = 'Apple Vision'
+    key = 'a'
     available = False
 
     def __init__(self):
-        if sys.platform != "darwin":
+        if sys.platform != 'darwin':
             logger.warning('Apple Vision is not supported on non-macOS platforms!')
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
@@ -249,13 +249,13 @@ class AppleVision:
         return image_bytes.getvalue()
 
 class WinRTOCR:
-    name = "winrtocr"
-    readable_name = "WinRT OCR"
-    key = "w"
+    name = 'winrtocr'
+    readable_name = 'WinRT OCR'
+    key = 'w'
     available = False
 
     def __init__(self, config={}):
-        if sys.platform == "win32":
+        if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('WinRT OCR is not supported on Windows older than 10!')
             elif 'winocr' not in sys.modules:
@@ -282,14 +282,14 @@ class WinRTOCR:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        if sys.platform == "win32":
+        if sys.platform == 'win32':
             res = winocr.recognize_pil_sync(img, lang='ja')['text']
         else:
             params = {'lang': 'ja'}
             try:
                 res = requests.post(self.url, params=params, data=self._preprocess(img), timeout=3)
             except requests.exceptions.Timeout:
-                return "Request timeout!"
+                return 'Request timeout!'
 
             res = json.loads(res.text)['text']
 
@@ -302,9 +302,9 @@ class WinRTOCR:
         return image_bytes.getvalue()
 
 class AzureComputerVision:
-    name = "azure"
-    readable_name = "Azure Computer Vision"
-    key = "v"
+    name = 'azure'
+    readable_name = 'Azure Computer Vision'
+    key = 'v'
     available = False
 
     def __init__(self, config={}):
@@ -330,8 +330,8 @@ class AzureComputerVision:
         image_io = self._preprocess(img)
         read_response = self.client.read_in_stream(image_io, raw=True)
 
-        read_operation_location = read_response.headers["Operation-Location"]
-        operation_id = read_operation_location.split("/")[-1]
+        read_operation_location = read_response.headers['Operation-Location']
+        operation_id = read_operation_location.split('/')[-1]
 
         while True:
             read_result = self.client.get_read_result(operation_id)
@@ -355,9 +355,9 @@ class AzureComputerVision:
         return image_io
 
 class EasyOCR:
-    name = "easyocr"
-    readable_name = "EasyOCR"
-    key = "e"
+    name = 'easyocr'
+    readable_name = 'EasyOCR'
+    key = 'e'
     available = False
 
     def __init__(self):
@@ -391,9 +391,9 @@ class EasyOCR:
         return image_bytes.getvalue()
 
 class PaddleOCR:
-    name = "paddleocr"
-    readable_name = "PaddleOCR"
-    key = "o"
+    name = 'paddleocr'
+    readable_name = 'PaddleOCR'
+    key = 'o'
     available = False
 
     def __init__(self):
