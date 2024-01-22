@@ -199,8 +199,7 @@ def run(read_from='clipboard',
         engine='',
         pause_at_startup=False,
         ignore_flag=False,
-        delete_images=False,
-        verbose=False
+        delete_images=False
         ):
     """
     Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
@@ -213,7 +212,6 @@ def run(read_from='clipboard',
     :param pause_at_startup: Pause at startup.
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
-    :param verbose: If True, unhides all warnings.
     """
 
     if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
@@ -428,17 +426,10 @@ def run(read_from='clipboard',
 
                 try:
                     img = ImageGrab.grabclipboard()
-                except OSError as error:
-                    if not verbose and 'cannot identify image file' in str(error):
-                        # Pillow error when clipboard hasn't changed since last grab (Linux)
-                        pass
-                    elif not verbose and 'target image/png not available' in str(error):
-                        # Pillow error when clipboard contains text (Linux, X11)
-                        pass
-                    else:
-                        logger.warning('Error while reading from clipboard ({})'.format(error))
+                except Exception:
+                    pass
                 else:
-                    if not just_unpaused and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and isinstance(img, Image.Image) and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
+                    if not just_unpaused and isinstance(img, Image.Image) and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
 
             just_unpaused = False
