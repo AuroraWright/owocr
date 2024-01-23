@@ -7,7 +7,7 @@ from pathlib import Path
 
 import fire
 import numpy as np
-import pyperclip
+import pyperclipfix
 import asyncio
 import websockets
 import queue
@@ -180,7 +180,7 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
     if write_to == 'websocket':
         websocket_server_thread.send_text(text)
     elif write_to == 'clipboard':
-        pyperclip.copy(text)
+        pyperclipfix.copy(text)
     else:
         write_to = Path(write_to)
         if write_to.suffix != '.txt':
@@ -213,17 +213,6 @@ def run(read_from='clipboard',
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
     """
-
-    if sys.platform not in ('darwin', 'win32') and write_to == 'clipboard':
-        # Check if the system is using Wayland
-        if os.environ.get('WAYLAND_DISPLAY'):
-            # Check if the wl-clipboard package is installed
-            if os.system('which wl-copy > /dev/null') == 0:
-                pyperclip.set_clipboard('wl-clipboard')
-            else:
-                msg = 'Your session uses wayland and does not have wl-clipboard installed. ' \
-                    'Install wl-clipboard for write in clipboard to work.'
-                raise NotImplementedError(msg)
 
     engine_instances = []
     config_engines = []
@@ -429,7 +418,7 @@ def run(read_from='clipboard',
                 except Exception:
                     pass
                 else:
-                    if not just_unpaused and isinstance(img, Image.Image) and (ignore_flag or pyperclip.paste() != '*ocr_ignore*') and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
+                    if not just_unpaused and isinstance(img, Image.Image) and (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
 
             just_unpaused = False

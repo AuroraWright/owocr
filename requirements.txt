@@ -3,7 +3,7 @@ jaconv
 loguru
 numpy
 Pillow>=10.0.0
-pyperclip
+pyperclipfix
 pynput
 websockets
 notify-py
