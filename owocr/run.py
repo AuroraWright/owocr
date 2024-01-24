@@ -36,12 +36,15 @@ class WindowsClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__()
         self.daemon = True
+        self.last_update = time.time()
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
-        if msg == WM_CLIPBOARDUPDATE and not (paused or tmp_paused):
+        timestamp = time.time()
+        if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not (paused or tmp_paused):
             if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP):
                 clipboard_event.set()
+                self.last_update = timestamp
         return 0
 
     def create_window(self):
