@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 import sys
 import platform
+from math import sqrt
 
 import jaconv
 import numpy as np
@@ -192,14 +193,11 @@ class GoogleLens:
 
     def _preprocess(self, img):
         w,h = img.size
-        ratio = w/h
-        while True:
-            if h * w < 3000000:
-                if (w,h) != img.size:
-                    img = img.resize((w, h), Image.LANCZOS)
-                break
-            h -= 1
-            w = int(h * ratio)
+        if w * h > 3000000:
+            aspect_ratio = w/h
+            new_w = int(sqrt(3000000 * aspect_ratio))
+            new_h = int(new_w / aspect_ratio)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
 
         image_bytes = io.BytesIO()
         img.save(image_bytes, format='png')
