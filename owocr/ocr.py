@@ -171,7 +171,7 @@ class GoogleLens:
         url = f'https://lens.google.com/v3/upload?stcs={timestamp}'
         files = {'encoded_image': ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
         try:
-            res = requests.post(url, files=files, timeout=(3, 10))
+            res = requests.post(url, files=files, timeout=30)
         except requests.exceptions.Timeout:
             return 'Request timeout!'
 
