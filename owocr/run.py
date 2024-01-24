@@ -115,9 +115,9 @@ def getchar_thread():
     if sys.platform == 'win32':
         import msvcrt
         while True:
-            user_input = msvcrt.getch()
+            user_input_bytes = msvcrt.getch()
             try:
-                user_input = user_input.decode()
+                user_input = user_input_bytes.decode()
                 if user_input.lower() in 'tq':
                     break
             except UnicodeDecodeError:
@@ -170,7 +170,7 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
     t1 = time.time()
 
     logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
-    if notifications == True:
+    if notifications:
         notification = Notify()
         notification.application_name = 'owocr'
         notification.title = 'Text recognized:'
@@ -183,7 +183,7 @@ def process_and_write_results(engine_instance, engine_color, img_or_path, write_
         pyperclipfix.copy(text)
     else:
         write_to = Path(write_to)
-        if write_to.suffix != '.txt':
+        if write_to.suffix.lower() != '.txt':
             raise ValueError('write_to must be either "clipboard" or a path to a text file')
 
         with write_to.open('a', encoding='utf-8') as f:
@@ -347,7 +347,7 @@ def run(read_from='clipboard',
 
         old_paths = set()
         for path in read_from.iterdir():
-            if str(path).lower().endswith(allowed_extensions):
+            if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
 
     while True:
@@ -427,7 +427,7 @@ def run(read_from='clipboard',
                 time.sleep(delay_secs)
         else:
             for path in read_from.iterdir():
-                if str(path).lower().endswith(allowed_extensions):
+                if path.suffix.lower() in allowed_extensions:
                     path_key = get_path_key(path)
                     if path_key not in old_paths:
                         old_paths.add(path_key)
