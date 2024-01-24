@@ -191,6 +191,16 @@ class GoogleLens:
         return x
 
     def _preprocess(self, img):
+        w,h = img.size
+        ratio = w/h
+        while True:
+            if h * w < 3000000:
+                if (w,h) != img.size:
+                    img = img.resize((w, h), Image.LANCZOS)
+                break
+            h -= 1
+            w = int(h * ratio)
+
         image_bytes = io.BytesIO()
         img.save(image_bytes, format='png')
         return image_bytes.getvalue()
