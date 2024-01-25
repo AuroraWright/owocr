@@ -18,7 +18,7 @@ from pynput import keyboard
 from notifypy import Notify
 
 import inspect
-from owocr import *
+from owocr.ocr import *
 from owocr.config import Config
 
 try:
@@ -233,6 +233,9 @@ def run(read_from='clipboard',
     delay_secs = 0.5
     websocket_port = 7331
     notifications = False
+
+    if not config:
+        init_config()
 
     if config.has_config:
         if config.get_general('engines'):
