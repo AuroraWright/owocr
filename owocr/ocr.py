@@ -78,18 +78,13 @@ class MangaOcr:
     key = 'm'
     available = False
 
-    def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu':'False'}, pretrained_model_name_or_path='', force_cpu=False):
+    def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu': False}):
         if 'manga_ocr' not in sys.modules:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
-            if pretrained_model_name_or_path == '':
-                pretrained_model_name_or_path = config['pretrained_model_name_or_path']
-            if config['force_cpu'] == 'True':
-                force_cpu = True
-
             logger.disable('manga_ocr')
             logger.info(f'Loading Manga OCR model')
-            self.model = MOCR(pretrained_model_name_or_path, force_cpu)
+            self.model = MOCR(config['pretrained_model_name_or_path'], config['force_cpu'])
             self.available = True
             logger.info('Manga OCR ready')
 

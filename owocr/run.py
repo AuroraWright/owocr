@@ -1,8 +1,6 @@
 import sys
 import time
 import threading
-import os
-import configparser
 from pathlib import Path
 
 import fire
@@ -21,6 +19,7 @@ from notifypy import Notify
 
 import inspect
 from owocr import *
+from owocr.config import Config
 
 try:
     import win32gui
@@ -31,6 +30,7 @@ try:
 except ImportError:
     pass
 
+config = None
 
 class WindowsClipboardThread(threading.Thread):
     def __init__(self):
@@ -197,6 +197,11 @@ def get_path_key(path):
     return path, path.lstat().st_mtime
 
 
+def init_config():
+    global config
+    config = Config()
+
+
 def run(read_from='clipboard',
         write_to='clipboard',
         engine='',
@@ -205,6 +210,8 @@ def run(read_from='clipboard',
         delete_images=False
         ):
     """
+    Japanese OCR client
+
     Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
     Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
 
@@ -227,56 +234,39 @@ def run(read_from='clipboard',
     websocket_port = 7331
     notifications = False
 
-    config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
-    config = configparser.ConfigParser()
-    res = config.read(config_file)
+    if config.has_config:
+        if config.get_general('engines'):
+            for config_engine in config.get_general('engines').split(','):
+                config_engines.append(config_engine.lower())
 
-    if len(res) != 0:
-        try:
-            for config_engine in config['general']['engines'].split(','):
-                config_engines.append(config_engine.strip().lower())
-        except KeyError:
-            pass
+        if config.get_general('logger_format'):
+            logger_format = config.get_general('logger_format')
 
-        try:
-            logger_format = config['general']['logger_format'].strip()
-        except KeyError:
-            pass
+        if config.get_general('engine_color'):
+            engine_color = config.get_general('engine_color')
 
-        try:
-            engine_color = config['general']['engine_color'].strip()
-        except KeyError:
-            pass
+        if config.get_general('delay_secs'):
+            delay_secs = config.get_general('delay_secs')
 
-        try:
-            delay_secs = float(config['general']['delay_secs'].strip())
-        except KeyError:
-            pass
+        if config.get_general('websocket_port'):
+            websocket_port = config.get_general('websocket_port')
 
-        try:
-            websocket_port = int(config['general']['websocket_port'].strip())
-        except KeyError:
-            pass
-
-        try:
-            if config['general']['notifications'].strip().lower() == 'true':
-                notifications = True
-        except KeyError:
-            pass
+        if config.get_general('notifications'):
+            notifications = config.get_general('notifications')
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': logger_format}])
 
-    if len(res) != 0:
+    if config.has_config:
         logger.info('Parsed config file')
     else:
         logger.warning('No config file, defaults will be used')
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ + '.ocr' in x.__module__ and inspect.isclass(x))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
-            try:
-                engine_instance = engine_class(config[engine_class.name])
-            except KeyError:
+            if config.get_engine(engine_class.name) == None:
                 engine_instance = engine_class()
+            else:
+                engine_instance = engine_class(config.get_engine(engine_class.name))
 
             if engine_instance.available:
                 engine_instances.append(engine_instance)
