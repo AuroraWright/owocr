@@ -282,7 +282,7 @@ def run(read_from='clipboard',
     if config.has_config:
         if config.get_general('engines'):
             for config_engine in config.get_general('engines').split(','):
-                config_engines.append(config_engine.lower())
+                config_engines.append(config_engine.strip().lower())
 
         if config.get_general('logger_format'):
             logger_format = config.get_general('logger_format')
@@ -306,7 +306,7 @@ def run(read_from='clipboard',
             screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
 
         if config.get_general('screen_capture_coords'):
-            screen_capture_coords = config.get_general('screen_capture_coords')
+            screen_capture_coords = config.get_general('screen_capture_coords').lower()
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': logger_format}])
 
@@ -396,7 +396,7 @@ def run(read_from='clipboard',
             coord_width = mon[screen_capture_monitor]["width"]
             coord_height = mon[screen_capture_monitor]["height"]
         else:
-            x, y, coord_width, coord_height = [int(c) for c in screen_capture_coords.split(',')]
+            x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
             coord_left = mon[screen_capture_monitor]["left"] + x
             coord_top = mon[screen_capture_monitor]["top"] + y
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
