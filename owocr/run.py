@@ -272,6 +272,9 @@ def run(read_from='clipboard',
     delay_secs = 0.5
     websocket_port = 7331
     notifications = False
+    screen_capture_monitor = 1
+    screen_capture_coords = 'whole'
+    screen_capture_delay_secs = 3
 
     if not config:
         init_config()
@@ -295,6 +298,15 @@ def run(read_from='clipboard',
 
         if config.get_general('notifications'):
             notifications = config.get_general('notifications')
+
+        if config.get_general('screen_capture_monitor'):
+            screen_capture_monitor = config.get_general('screen_capture_monitor')
+
+        if config.get_general('screen_capture_delay_secs'):
+            screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
+
+        if config.get_general('screen_capture_coords'):
+            screen_capture_coords = config.get_general('screen_capture_coords')
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': logger_format}])
 
@@ -373,24 +385,18 @@ def run(read_from='clipboard',
         else:
             generic_clipboard_polling = True
     elif read_from == 'screencapture':
-        screen_capture_monitor = config.get_general('screen_capture_monitor')
-        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
-        if not screen_capture_monitor:
-            screen_capture_monitor = 1
-        if not screen_capture_delay_secs:
-            screen_capture_delay_secs = 3
         with mss.mss() as sct:
             mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
             msg = '"screen_capture_monitor" has to be a valid monitor number!'
             raise ValueError(msg)
-        if config.get_general('screen_capture_coords') in (None, 'whole'):
+        if screen_capture_coords == 'whole':
             coord_left = mon[screen_capture_monitor]["left"]
             coord_top = mon[screen_capture_monitor]["top"]
             coord_width = mon[screen_capture_monitor]["width"]
             coord_height = mon[screen_capture_monitor]["height"]
         else:
-            x, y, coord_width, coord_height = [int(c) for c in config.get_general('screen_capture_coords').split(',')]
+            x, y, coord_width, coord_height = [int(c) for c in screen_capture_coords.split(',')]
             coord_left = mon[screen_capture_monitor]["left"] + x
             coord_top = mon[screen_capture_monitor]["top"] + y
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
