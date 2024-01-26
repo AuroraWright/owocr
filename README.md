@@ -25,13 +25,14 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 It mostly functions like Manga OCR: https://github.com/kha-white/manga-ocr?tab=readme-ov-file#running-in-the-background
 However:
 - it supports reading images and/or writing text to a websocket when the -r=websocket and/or -w=websocket parameters are specified (port 7331 by default, configurable in the config file)
+- it supports capturing the screen directly with -r screencapture. It will default to the entire first screen every 3 seconds, but a different screen/coordinates/delay can be specified in the config file
 - you can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q"
 - you can switch OCR provider with its corresponding keyboard key (refer to the list above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
 - holding ctrl or cmd at any time will pause image processing temporarily
 - for systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored
 - optionally, notifications can be enabled in the config file to show the text with a native OS notification
-- optionally, idle resource usage on macOS and Windows when reading from the clipboard can be eliminated by making owocr use native OS polling. This requires installing pyobjc on macOS (`pip install pyobjc`) and pywin32 on Windows (`pip install pywin32`)
-- a config file (to be created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
+- idle resource usage on macOS and Windows when reading from the clipboard has been eliminated using native OS polling
+- a config file (to be created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 
 # Acknowledgments
 
