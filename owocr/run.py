@@ -6,6 +6,7 @@ from pathlib import Path
 import fire
 import numpy as np
 import pyperclipfix
+import mss
 import asyncio
 import websockets
 import queue
@@ -215,7 +216,7 @@ def run(read_from='clipboard',
     Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
     Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
 
-    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", or a path to a directory.
+    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "screencapture", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "glens", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
@@ -333,6 +334,30 @@ def run(read_from='clipboard',
             windows_clipboard_polling = True
         else:
             generic_clipboard_polling = True
+    elif read_from == 'screencapture':
+        screen_capture_monitor = config.get_general('screen_capture_monitor')
+        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
+        if not screen_capture_monitor:
+            screen_capture_monitor = 1
+        if not screen_capture_delay_secs:
+            screen_capture_delay_secs = 3
+        with mss.mss() as sct:
+            mon = sct.monitors
+        if len(mon) <= screen_capture_monitor:
+            msg = '"screen_capture_monitor" has to be a valid monitor number!'
+            raise ValueError(msg)
+        if config.get_general('screen_capture_coords') in (None, 'whole'):
+            coord_left = mon[screen_capture_monitor]["left"]
+            coord_top = mon[screen_capture_monitor]["top"]
+            coord_width = mon[screen_capture_monitor]["width"]
+            coord_height = mon[screen_capture_monitor]["height"]
+        else:
+            x, y, coord_width, coord_height = [int(c) for c in config.get_general('screen_capture_coords').split(',')]
+            coord_left = mon[screen_capture_monitor]["left"] + x
+            coord_top = mon[screen_capture_monitor]["top"] + y
+        sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
+
+        logger.opt(ansi=True).info(f"Reading with screen capture using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     else:
         allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         read_from = Path(read_from)
@@ -420,6 +445,15 @@ def run(read_from='clipboard',
             just_unpaused = False
 
             if not windows_clipboard_polling:
+                time.sleep(delay_secs)
+        elif read_from == 'screencapture':
+            if not paused and not tmp_paused:
+                with mss.mss() as sct:
+                    sct_img = sct.grab(sct_params)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
+                time.sleep(screen_capture_delay_secs)
+            else:
                 time.sleep(delay_secs)
         else:
             for path in read_from.iterdir():

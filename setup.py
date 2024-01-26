@@ -27,7 +27,9 @@ setup(
         "pyperclipfix",
         "pynput",
         "websockets",
-        "notify-py"
+        "notify-py",
+        "pywin32;platform_system=='Windows'",
+        "pyobjc;platform_system=='Darwin'"
     ],
     entry_points={
         "console_scripts": [

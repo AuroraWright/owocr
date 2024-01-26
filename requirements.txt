@@ -7,3 +7,6 @@ pyperclipfix
 pynput
 websockets
 notify-py
+mss
+pywin32;platform_system=='Windows'
+pyobjc;platform_system=='Darwin'
