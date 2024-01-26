@@ -210,11 +210,8 @@ class AppleVision:
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
         else:
-            if 'objc' not in sys.modules:
-                logger.warning('pyobjc not available, Apple Vision will not work!')
-            else:
-                self.available = True
-                logger.info('Apple Vision ready')
+            self.available = True
+            logger.info('Apple Vision ready')
 
     def __call__(self, img_or_path):
         if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
