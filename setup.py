@@ -5,7 +5,7 @@ long_description = (Path(__file__).parent / "README.md").read_text('utf-8')
 
 setup(
     name="owocr",
-    version='1.2',
+    version='1.3',
     description="Japanese OCR",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -28,6 +28,7 @@ setup(
         "pynput",
         "websockets",
         "notify-py",
+        "mss",
         "pywin32;platform_system=='Windows'",
         "pyobjc;platform_system=='Darwin'"
     ],
