@@ -371,12 +371,12 @@ def run(read_from='clipboard',
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
-        if sys.platform == 'darwin' and 'objc' in sys.modules:
+        if sys.platform == 'darwin':
             from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
             mac_clipboard_polling = True
-        elif sys.platform == 'win32' and 'win32gui' in sys.modules:
+        elif sys.platform == 'win32':
             global clipboard_event
             clipboard_event = threading.Event()
             windows_clipboard_thread = WindowsClipboardThread()
