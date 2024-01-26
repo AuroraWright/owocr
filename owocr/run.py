@@ -114,8 +114,34 @@ class WebsocketServerThread(threading.Thread):
         self.loop.close()
 
 
-def getchar_thread():
-    global user_input
+def user_input_thread_run(engine_instances, engine_keys, engine_color):
+    global terminated
+
+    def _pause_handler(user_input):   
+        global paused
+        global just_unpaused
+        if paused:
+            logger.info('Unpaused!')
+            just_unpaused = True
+        else:
+            logger.info('Paused!')
+        paused = not paused
+
+    def _engine_change_handler(user_input):
+        global engine_index
+        old_engine_index = engine_index
+
+        if user_input.lower() == 's':
+            if engine_index == len(engine_keys) - 1:
+                engine_index = 0
+            else:
+                engine_index += 1
+        elif user_input.lower() in engine_keys:
+            engine_index = engine_keys.index(user_input.lower())
+
+        if engine_index != old_engine_index:
+            logger.opt(ansi=True).info(f'Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!')
+
     if sys.platform == 'win32':
         import msvcrt
         while True:
@@ -123,7 +149,13 @@ def getchar_thread():
             try:
                 user_input = user_input_bytes.decode()
                 if user_input.lower() in 'tq':
+                    logger.info('Terminated!')
+                    terminated = True
                     break
+                elif user_input.lower() == 'p':
+                    _pause_handler(user_input)
+                else:
+                    _engine_change_handler(user_input)
             except UnicodeDecodeError:
                 pass
     else:
@@ -135,7 +167,13 @@ def getchar_thread():
             while True:
                 user_input = sys.stdin.read(1)
                 if user_input.lower() in 'tq':
+                    logger.info('Terminated!')
+                    terminated = True
                     break
+                if user_input.lower() == 'p':
+                    _pause_handler(user_input)
+                else:
+                    _engine_change_handler(user_input)
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -282,20 +320,20 @@ def run(read_from='clipboard',
         msg = 'No engines available!'
         raise NotImplementedError(msg)
 
-    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
-
+    global engine_index
+    global terminated
     global paused
     global tmp_paused
     global just_unpaused
-    global user_input
     global first_pressed
-    user_input = ''
+    terminated = False
     paused = pause_at_startup
     just_unpaused = True
     tmp_paused = False
     first_pressed = None
+    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
 
-    user_input_thread = threading.Thread(target=getchar_thread, daemon=True)
+    user_input_thread = threading.Thread(target=user_input_thread_run, args=(engine_instances, engine_keys, engine_color), daemon=True)
     user_input_thread.start()
 
     tmp_paused_listener = keyboard.Listener(
@@ -372,40 +410,16 @@ def run(read_from='clipboard',
                 old_paths.add(get_path_key(path))
 
     while True:
-        if user_input != '':
-            if user_input.lower() in 'tq':
-                if read_from == 'websocket' or write_to == 'websocket':
-                    websocket_server_thread.stop_server()
-                    websocket_server_thread.join()
-                if read_from == 'clipboard' and windows_clipboard_polling:
-                    win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
-                    windows_clipboard_thread.join()
-                user_input_thread.join()
-                tmp_paused_listener.stop()
-                logger.info('Terminated!')
-                break
-
-            old_engine_index = engine_index
-
-            if user_input.lower() == 'p':
-                if paused:
-                    logger.info('Unpaused!')
-                    just_unpaused = True
-                else:
-                    logger.info('Paused!')
-                paused = not paused
-            elif user_input.lower() == 's':
-                if engine_index == len(engine_keys) - 1:
-                    engine_index = 0
-                else:
-                    engine_index += 1
-            elif user_input.lower() in engine_keys:
-                engine_index = engine_keys.index(user_input.lower())
-
-            if engine_index != old_engine_index:
-                logger.opt(ansi=True).info(f'Switched to <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>!')
-
-            user_input = ''
+        if terminated:
+            if read_from == 'websocket' or write_to == 'websocket':
+                websocket_server_thread.stop_server()
+                websocket_server_thread.join()
+            if read_from == 'clipboard' and windows_clipboard_polling:
+                win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
+                windows_clipboard_thread.join()
+            user_input_thread.join()
+            tmp_paused_listener.stop()
+            break
 
         if read_from == 'websocket':
             while True:
@@ -439,7 +453,10 @@ def run(read_from='clipboard',
                 except Exception:
                     pass
                 else:
-                    if not just_unpaused and isinstance(img, Image.Image) and (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
+                    if (windows_clipboard_polling or (not just_unpaused)) and \
+                        isinstance(img, Image.Image) and \
+                        (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
+                        ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
                         process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
 
             just_unpaused = False
