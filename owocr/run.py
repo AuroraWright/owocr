@@ -136,7 +136,7 @@ def user_input_thread_run(engine_instances, engine_keys, engine_color):
                 engine_index = 0
             else:
                 engine_index += 1
-        elif user_input.lower() in engine_keys:
+        elif user_input.lower() != '' and user_input.lower() in engine_keys:
             engine_index = engine_keys.index(user_input.lower())
 
         if engine_index != old_engine_index:

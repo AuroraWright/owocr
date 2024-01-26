@@ -136,7 +136,7 @@ class GoogleVision:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format=img.format)
+        img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
 class GoogleLens:
@@ -248,7 +248,7 @@ class AppleVision:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format=img.format)
+        img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
 class WinRTOCR:
@@ -301,7 +301,7 @@ class WinRTOCR:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format=img.format)
+        img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
 class AzureComputerVision:
@@ -353,7 +353,7 @@ class AzureComputerVision:
 
     def _preprocess(self, img):
         image_io = io.BytesIO()
-        img.save(image_io, format=img.format)
+        img.save(image_io, format='png')
         image_io.seek(0)
         return image_io
 
@@ -390,7 +390,7 @@ class EasyOCR:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format=img.format)
+        img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
 class PaddleOCR:
