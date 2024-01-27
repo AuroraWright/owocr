@@ -470,7 +470,7 @@ def run(read_from='clipboard',
             if read_from == 'clipboard' and windows_clipboard_polling:
                 win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
                 windows_clipboard_thread.join()
-            if read_from == 'screencapture' and screencapture_window_mode:
+            elif read_from == 'screencapture' and screencapture_window_mode:
                 target_window.watchdog.stop()
             user_input_thread.join()
             tmp_paused_listener.stop()
