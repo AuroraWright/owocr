@@ -29,6 +29,7 @@ setup(
         "websockets",
         "notify-py",
         "mss",
+        "pywinctl",
         "pywin32;platform_system=='Windows'",
         "pyobjc;platform_system=='Darwin'"
     ],

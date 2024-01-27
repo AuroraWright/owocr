@@ -7,6 +7,7 @@ import fire
 import numpy as np
 import pyperclipfix
 import mss
+import pywinctl
 import asyncio
 import websockets
 import queue
@@ -196,6 +197,23 @@ def on_key_release(key):
         first_pressed = None
 
 
+def on_window_activated(active):
+    global screencapture_window_active
+    screencapture_window_active = active
+
+
+def on_window_resized(size):
+    global sct_params
+    sct_params['width'] = size[0]
+    sct_params['height'] = size[1]
+
+
+def on_window_moved(pos):
+    global sct_params
+    sct_params['left'] = pos[0]
+    sct_params['top'] = pos[1]
+
+
 def are_images_identical(img1, img2):
     if None in (img1, img2):
         return img1 == img2
@@ -273,7 +291,7 @@ def run(read_from='clipboard',
     websocket_port = 7331
     notifications = False
     screen_capture_monitor = 1
-    screen_capture_coords = 'whole'
+    screen_capture_coords = ''
     screen_capture_delay_secs = 3
 
     if not config:
@@ -306,7 +324,7 @@ def run(read_from='clipboard',
             screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
 
         if config.get_general('screen_capture_coords'):
-            screen_capture_coords = config.get_general('screen_capture_coords').lower()
+            screen_capture_coords = config.get_general('screen_capture_coords')
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': logger_format}])
 
@@ -385,20 +403,48 @@ def run(read_from='clipboard',
         else:
             generic_clipboard_polling = True
     elif read_from == 'screencapture':
+        global screencapture_window_active
+        screencapture_window_mode = False
+        screencapture_window_active = True
         with mss.mss() as sct:
             mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
             msg = '"screen_capture_monitor" has to be a valid monitor number!'
             raise ValueError(msg)
-        if screen_capture_coords == 'whole':
+        if screen_capture_coords == '':
             coord_left = mon[screen_capture_monitor]["left"]
             coord_top = mon[screen_capture_monitor]["top"]
             coord_width = mon[screen_capture_monitor]["width"]
             coord_height = mon[screen_capture_monitor]["height"]
-        else:
+        elif len(screen_capture_coords.split(',')) == 4:
             x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
             coord_left = mon[screen_capture_monitor]["left"] + x
             coord_top = mon[screen_capture_monitor]["top"] + y
+        else:
+            window_titles = pywinctl.getAllTitles()
+            if screen_capture_coords in window_titles:
+                window_title = screen_capture_coords
+            else:
+                for window_title in window_titles:
+                    if screen_capture_coords in window_title:
+                        break
+
+            windows = pywinctl.getWindowsWithTitle(window_title)
+            if len(windows) == 0:
+                msg = '"screen_capture_coords" has to be empty (for the whole screen), a valid set of coordinates, or a valid window name!'
+                raise ValueError(msg)
+
+            screencapture_window_mode = True
+            target_window = windows[0]
+            coord_top = target_window.top
+            coord_left = target_window.left
+            coord_width = target_window.width
+            coord_height = target_window.height
+            screencapture_window_active = target_window.isActive
+            target_window.watchdog.start(isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
+            target_window.watchdog.setTryToFind(True)
+
+        global sct_params
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
 
         logger.opt(ansi=True).info(f"Reading with screen capture using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
@@ -423,6 +469,8 @@ def run(read_from='clipboard',
             if read_from == 'clipboard' and windows_clipboard_polling:
                 win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
                 windows_clipboard_thread.join()
+            if read_from == 'screencapture' and screencapture_window_mode:
+                target_window.watchdog.stop()
             user_input_thread.join()
             tmp_paused_listener.stop()
             break
@@ -470,7 +518,7 @@ def run(read_from='clipboard',
             if not windows_clipboard_polling:
                 time.sleep(delay_secs)
         elif read_from == 'screencapture':
-            if not paused and not tmp_paused:
+            if screencapture_window_active and not paused and not tmp_paused:
                 with mss.mss() as sct:
                     sct_img = sct.grab(sct_params)
                 img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
