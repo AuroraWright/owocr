@@ -421,21 +421,22 @@ def run(read_from='clipboard',
             coord_left = mon[screen_capture_monitor]["left"] + x
             coord_top = mon[screen_capture_monitor]["top"] + y
         else:
+            window_title = None
             window_titles = pywinctl.getAllTitles()
             if screen_capture_coords in window_titles:
                 window_title = screen_capture_coords
             else:
-                for window_title in window_titles:
-                    if screen_capture_coords in window_title:
+                for t in window_titles:
+                    if screen_capture_coords in t:
+                        window_title = t
                         break
 
-            windows = pywinctl.getWindowsWithTitle(window_title)
-            if len(windows) == 0:
+            if not window_title:
                 msg = '"screen_capture_coords" has to be empty (for the whole screen), a valid set of coordinates, or a valid window name!'
                 raise ValueError(msg)
 
             screencapture_window_mode = True
-            target_window = windows[0]
+            target_window = pywinctl.getWindowsWithTitle(window_title)[0]
             coord_top = target_window.top
             coord_left = target_window.left
             coord_width = target_window.width
