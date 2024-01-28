@@ -1,4 +1,5 @@
 import sys
+import signal
 import time
 import threading
 from pathlib import Path
@@ -194,6 +195,19 @@ def on_key_release(key):
         tmp_paused = False
         just_unpaused = True
         first_pressed = None
+
+
+def signal_handler(sig, frame):
+    global terminated
+    logger.info('Terminated!')
+    terminated = True
+
+
+def on_window_closed(alive):
+    global terminated
+    if not alive:
+        logger.info('Window closed, terminated!')
+        terminated = True
 
 
 def on_window_activated(active):
@@ -423,11 +437,10 @@ def run(read_from=None,
             coord_height = target_window.height
             if screen_capture_only_active_windows:
                 screencapture_window_active = target_window.isActive
-                target_window.watchdog.start(isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
+                target_window.watchdog.start(isAliveCB=on_window_closed, isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
             else:
                 screencapture_window_visible = not target_window.isMinimized
-                target_window.watchdog.start(isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
-            target_window.watchdog.setTryToFind(True)
+                target_window.watchdog.start(isAliveCB=on_window_closed, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
 
         global sct_params
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
@@ -446,6 +459,7 @@ def run(read_from=None,
             if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
 
+    signal.signal(signal.SIGINT, signal_handler)
     while not terminated:
         if read_from == 'websocket':
             while True:
@@ -526,7 +540,6 @@ def run(read_from=None,
         windows_clipboard_thread.join()
     elif read_from == 'screencapture' and screencapture_window_mode:
         target_window.watchdog.stop()
-    user_input_thread.join()
     tmp_paused_listener.stop()
 
 if __name__ == '__main__':
