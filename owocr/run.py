@@ -201,6 +201,11 @@ def on_window_activated(active):
     screencapture_window_active = active
 
 
+def on_window_minimized(minimized):
+    global screencapture_window_visible
+    screencapture_window_visible = not minimized
+
+
 def on_window_resized(size):
     global sct_params
     sct_params['width'] = size[0]
@@ -376,8 +381,10 @@ def run(read_from=None,
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_coords = config.get_general('screen_capture_coords')
         global screencapture_window_active
+        global screencapture_window_visible
         screencapture_window_mode = False
         screencapture_window_active = True
+        screencapture_window_visible = True
         sct = mss.mss()
         mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
@@ -393,6 +400,7 @@ def run(read_from=None,
             coord_left = mon[screen_capture_monitor]["left"] + x
             coord_top = mon[screen_capture_monitor]["top"] + y
         else:
+            screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             window_title = None
             window_titles = pywinctl.getAllTitles()
             if screen_capture_coords in window_titles:
@@ -413,8 +421,12 @@ def run(read_from=None,
             coord_left = target_window.left
             coord_width = target_window.width
             coord_height = target_window.height
-            screencapture_window_active = target_window.isActive
-            target_window.watchdog.start(isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
+            if screen_capture_only_active_windows:
+                screencapture_window_active = target_window.isActive
+                target_window.watchdog.start(isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
+            else:
+                screencapture_window_visible = not target_window.isMinimized
+                target_window.watchdog.start(isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
             target_window.watchdog.setTryToFind(True)
 
         global sct_params
@@ -478,7 +490,7 @@ def run(read_from=None,
             if not windows_clipboard_polling:
                 time.sleep(delay_secs)
         elif read_from == 'screencapture':
-            if screencapture_window_active and not paused and not tmp_paused:
+            if screencapture_window_active and screencapture_window_visible and not paused and not tmp_paused:
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
                 process_and_write_results(engine_instances[engine_index], img, write_to)

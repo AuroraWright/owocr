@@ -1,6 +1,7 @@
 import os
 import configparser
 
+
 class Config:
     has_config = False
     __general_config = {}
@@ -20,7 +21,8 @@ class Config:
         'notifications': False,
         'screen_capture_monitor': 1,
         'screen_capture_coords': '',
-        'screen_capture_delay_secs': 3
+        'screen_capture_delay_secs': 3,
+        'screen_capture_only_active_windows': True
     }
 
     def __parse(self, value):
