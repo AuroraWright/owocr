@@ -116,7 +116,10 @@ class WebsocketServerThread(threading.Thread):
 
 
 def user_input_thread_run(engine_instances, engine_keys, engine_color):
-    global terminated
+    def _terminate_handler(user_input):
+        global terminated
+        logger.info('Terminated!')
+        terminated = True
 
     def _pause_handler(user_input):   
         global paused
@@ -145,14 +148,12 @@ def user_input_thread_run(engine_instances, engine_keys, engine_color):
 
     if sys.platform == 'win32':
         import msvcrt
-        while True:
+        while not terminated:
             user_input_bytes = msvcrt.getch()
             try:
                 user_input = user_input_bytes.decode()
                 if user_input.lower() in 'tq':
-                    logger.info('Terminated!')
-                    terminated = True
-                    break
+                    _terminate_handler(user_input)
                 elif user_input.lower() == 'p':
                     _pause_handler(user_input)
                 else:
@@ -165,13 +166,11 @@ def user_input_thread_run(engine_instances, engine_keys, engine_color):
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setcbreak(sys.stdin.fileno())
-            while True:
+            while not terminated:
                 user_input = sys.stdin.read(1)
                 if user_input.lower() in 'tq':
-                    logger.info('Terminated!')
-                    terminated = True
-                    break
-                if user_input.lower() == 'p':
+                    _terminate_handler(user_input)
+                elif user_input.lower() == 'p':
                     _pause_handler(user_input)
                 else:
                     _engine_change_handler(user_input)
@@ -406,8 +405,8 @@ def run(read_from='clipboard',
         global screencapture_window_active
         screencapture_window_mode = False
         screencapture_window_active = True
-        with mss.mss() as sct:
-            mon = sct.monitors
+        sct = mss.mss()
+        mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
             msg = '"screen_capture_monitor" has to be a valid monitor number!'
             raise ValueError(msg)
@@ -462,20 +461,7 @@ def run(read_from='clipboard',
             if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
 
-    while True:
-        if terminated:
-            if read_from == 'websocket' or write_to == 'websocket':
-                websocket_server_thread.stop_server()
-                websocket_server_thread.join()
-            if read_from == 'clipboard' and windows_clipboard_polling:
-                win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
-                windows_clipboard_thread.join()
-            elif read_from == 'screencapture' and screencapture_window_mode:
-                target_window.watchdog.stop()
-            user_input_thread.join()
-            tmp_paused_listener.stop()
-            break
-
+    while not terminated:
         if read_from == 'websocket':
             while True:
                 try:
@@ -520,8 +506,7 @@ def run(read_from='clipboard',
                 time.sleep(delay_secs)
         elif read_from == 'screencapture':
             if screencapture_window_active and not paused and not tmp_paused:
-                with mss.mss() as sct:
-                    sct_img = sct.grab(sct_params)
+                sct_img = sct.grab(sct_params)
                 img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
                 process_and_write_results(engine_instances[engine_index], engine_color, img, write_to, notifications)
                 time.sleep(screen_capture_delay_secs)
@@ -547,6 +532,17 @@ def run(read_from='clipboard',
                                     Path.unlink(path)
 
             time.sleep(delay_secs)
+
+    if read_from == 'websocket' or write_to == 'websocket':
+        websocket_server_thread.stop_server()
+        websocket_server_thread.join()
+    if read_from == 'clipboard' and windows_clipboard_polling:
+        win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
+        windows_clipboard_thread.join()
+    elif read_from == 'screencapture' and screencapture_window_mode:
+        target_window.watchdog.stop()
+    user_input_thread.join()
+    tmp_paused_listener.stop()
 
 if __name__ == '__main__':
     fire.Fire(run)
