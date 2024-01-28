@@ -6,21 +6,15 @@ def main():
     init_config()
 
     from owocr.run import config
-    fullargspec = inspect.getfullargspec(run)
-    old_defaults = fullargspec[0]
-    old_default_values = fullargspec[3]
-    new_defaults = []
+    cli_args = inspect.getfullargspec(run)[0]
+    defaults = []
 
-    if config.has_config:
-        index = 0
-        for argument in old_defaults:
-            if config.get_general(argument) == None:
-                new_defaults.append(old_default_values[index])
-            else:
-                new_defaults.append(config.get_general(argument))
-            index += 1
+    index = 0
+    for arg in cli_args:
+        defaults.append(config.get_general(arg))
+        index += 1
 
-        run.__defaults__ = tuple(new_defaults)
+    run.__defaults__ = tuple(defaults)
 
     fire.Fire(run)
 
