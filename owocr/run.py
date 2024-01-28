@@ -437,10 +437,10 @@ def run(read_from=None,
             coord_height = target_window.height
             if screen_capture_only_active_windows:
                 screencapture_window_active = target_window.isActive
-                target_window.watchdog.start(isAliveCB=on_window_closed, isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
+                target_window.watchdog.start(isAliveCB=on_window_closed if target_window.isAlive else None, isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
             else:
                 screencapture_window_visible = not target_window.isMinimized
-                target_window.watchdog.start(isAliveCB=on_window_closed, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
+                target_window.watchdog.start(isAliveCB=on_window_closed if target_window.isAlive else None, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
 
         global sct_params
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
