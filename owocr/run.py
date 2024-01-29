@@ -263,7 +263,7 @@ def process_and_write_results(engine_instance, img_or_path, write_to):
     else:
         write_to = Path(write_to)
         if write_to.suffix.lower() != '.txt':
-            raise ValueError('write_to must be either "clipboard" or a path to a text file')
+            raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
 
         with write_to.open('a', encoding='utf-8') as f:
             f.write(text + '\n')
@@ -402,17 +402,17 @@ def run(read_from=None,
         sct = mss.mss()
         mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
-            msg = '"screen_capture_monitor" has to be a valid monitor number!'
+            msg = '"screen_capture_monitor" must be a valid monitor number'
             raise ValueError(msg)
         if screen_capture_coords == '':
-            coord_left = mon[screen_capture_monitor]["left"]
-            coord_top = mon[screen_capture_monitor]["top"]
-            coord_width = mon[screen_capture_monitor]["width"]
-            coord_height = mon[screen_capture_monitor]["height"]
+            coord_left = mon[screen_capture_monitor]['left']
+            coord_top = mon[screen_capture_monitor]['top']
+            coord_width = mon[screen_capture_monitor]['width']
+            coord_height = mon[screen_capture_monitor]['height']
         elif len(screen_capture_coords.split(',')) == 4:
             x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
-            coord_left = mon[screen_capture_monitor]["left"] + x
-            coord_top = mon[screen_capture_monitor]["top"] + y
+            coord_left = mon[screen_capture_monitor]['left'] + x
+            coord_top = mon[screen_capture_monitor]['top'] + y
         else:
             screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             window_title = None
@@ -426,7 +426,7 @@ def run(read_from=None,
                         break
 
             if not window_title:
-                msg = '"screen_capture_coords" has to be empty (for the whole screen), a valid set of coordinates, or a valid window name!'
+                msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
                 raise ValueError(msg)
 
             screencapture_window_mode = True
@@ -450,7 +450,7 @@ def run(read_from=None,
         allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         read_from = Path(read_from)
         if not read_from.is_dir():
-            raise ValueError('read_from must be either "clipboard" or a path to a directory')
+            raise ValueError('read_from must be either "websocket", "clipboard", "screencapture" or a path to a directory')
 
         logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
@@ -506,7 +506,7 @@ def run(read_from=None,
         elif read_from == 'screencapture':
             if screencapture_window_active and screencapture_window_visible and not paused and not tmp_paused:
                 sct_img = sct.grab(sct_params)
-                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
                 process_and_write_results(engine_instances[engine_index], img, write_to)
                 time.sleep(screen_capture_delay_secs)
             else:
