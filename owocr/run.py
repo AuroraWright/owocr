@@ -288,7 +288,9 @@ def run(read_from=None,
         engine=None,
         pause_at_startup=None,
         ignore_flag=None,
-        delete_images=None
+        delete_images=None,
+        screen_capture_monitor=None,
+        screen_capture_coords=None
         ):
     """
     Japanese OCR client
@@ -303,10 +305,12 @@ def run(read_from=None,
     :param pause_at_startup: Pause at startup.
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
+    :param screen_capture_monitor: Specifies monitor to target when reading with screen capture.
+    :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
     """
 
-    if not config:
-        init_config()
+    if read_from == 'screencapture':
+        active_window_name = pywinctl.getActiveWindowTitle()
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
@@ -396,9 +400,9 @@ def run(read_from=None,
         else:
             generic_clipboard_polling = True
     elif read_from == 'screencapture':
-        screen_capture_monitor = config.get_general('screen_capture_monitor')
+        if type(screen_capture_coords) == tuple:
+            screen_capture_coords = ','.join(map(str, screen_capture_coords))
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
-        screen_capture_coords = config.get_general('screen_capture_coords')
         global screencapture_window_active
         global screencapture_window_visible
         screencapture_window_mode = False
@@ -426,7 +430,7 @@ def run(read_from=None,
                 window_title = screen_capture_coords
             else:
                 for t in window_titles:
-                    if screen_capture_coords in t:
+                    if screen_capture_coords in t and t != active_window_name:
                         window_title = t
                         break
 
@@ -546,6 +550,3 @@ def run(read_from=None,
     elif read_from == 'screencapture' and screencapture_window_mode:
         target_window.watchdog.stop()
     tmp_paused_listener.stop()
-
-if __name__ == '__main__':
-    fire.Fire(run)
