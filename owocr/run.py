@@ -13,6 +13,7 @@ import asyncio
 import websockets
 import queue
 import io
+import re
 
 from PIL import Image
 from PIL import UnidentifiedImageError
@@ -249,13 +250,17 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, img_or_path, write_to):
+def process_and_write_results(engine_instance, img_or_path, write_to, last_text):
     t0 = time.time()
     res, text = engine_instance(img_or_path)
     t1 = time.time()
 
     engine_color = config.get_general('engine_color')
     if res:
+        orig_text = text
+        if last_text != '':
+            text = ''.join(map(str, [block for block in re.split(r'[ 　,!?.、。？！"「」\']', text) if block not in re.split(r'[ 　,!?.、。？！"「」\']', last_text)]))
+        text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if config.get_general('notifications'):
             notification = Notify()
@@ -264,6 +269,7 @@ def process_and_write_results(engine_instance, img_or_path, write_to):
             notification.message = text
             notification.send(block=False)
     else:
+        orig_text = ''
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
     if write_to == 'websocket':
@@ -277,6 +283,8 @@ def process_and_write_results(engine_instance, img_or_path, write_to):
 
         with write_to.open('a', encoding='utf-8') as f:
             f.write(text + '\n')
+
+    return (res, orig_text)
 
 
 def get_path_key(path):
@@ -422,6 +430,7 @@ def run(read_from=None,
         screencapture_window_mode = False
         screencapture_window_active = True
         screencapture_window_visible = True
+        last_text = ''
         sct = mss.mss()
         mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
@@ -501,7 +510,7 @@ def run(read_from=None,
                 else:
                     if not paused and not tmp_paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(engine_instances[engine_index], img, write_to)
+                        process_and_write_results(engine_instances[engine_index], img, write_to, '')
         elif read_from == 'clipboard':
             if windows_clipboard_polling:
                 clipboard_changed = clipboard_event.wait(delay_secs)
@@ -528,7 +537,7 @@ def run(read_from=None,
                         isinstance(img, Image.Image) and \
                         (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
                         ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
-                        process_and_write_results(engine_instances[engine_index], img, write_to)
+                        process_and_write_results(engine_instances[engine_index], img, write_to, '')
 
             just_unpaused = False
 
@@ -545,7 +554,9 @@ def run(read_from=None,
             if take_screenshot and screencapture_window_visible:
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-                process_and_write_results(engine_instances[engine_index], img, write_to)
+                res = process_and_write_results(engine_instances[engine_index], img, write_to, last_text)
+                if res[0] and res[1] != '':
+                    last_text = res[1]
                 delay = screen_capture_delay_secs
             else:
                 delay = delay_secs
@@ -566,7 +577,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(engine_instances[engine_index], img, write_to)
+                                process_and_write_results(engine_instances[engine_index], img, write_to, '')
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)

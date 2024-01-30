@@ -67,12 +67,15 @@ except ImportError:
     pass
 
 
+def empty_post_process(text):
+    return text
+
+
 def post_process(text):
     text = ''.join(text.split())
     text = text.replace('…', '...')
     text = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', text)
     text = jaconv.h2z(text, ascii=True, digit=True)
-
     return text
 
 
@@ -87,6 +90,8 @@ class MangaOcr:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
             logger.disable('manga_ocr')
+            from manga_ocr import ocr
+            ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
             self.model = MOCR(config['pretrained_model_name_or_path'], config['force_cpu'])
             self.available = True
@@ -140,7 +145,7 @@ class GoogleVision:
         except:
             return (False, 'Unknown error!')
         texts = response.text_annotations
-        x = (True, post_process(texts[0].description))
+        x = (True, texts[0].description)
         return x
 
     def _preprocess(self, img):
@@ -200,7 +205,7 @@ class GoogleLens:
             for line in lines:
                 res += line + ' '
 
-        x = (True, post_process(res))
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
@@ -255,7 +260,7 @@ class AppleVision:
                 for result in req.results():
                     res += result.text() + ' '
                 req.dealloc()
-                x = (True, post_process(res))
+                x = (True, res)
             else:
                 x = (False, 'Unknown error!')
 
@@ -317,7 +322,7 @@ class WinRTOCR:
 
             res = json.loads(res.text)['text']
 
-        x = (True, post_process(res))
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
@@ -378,7 +383,7 @@ class AzureComputerVision:
         else:
             return (False, 'Unknown error!')
 
-        x = (True, post_process(res))
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
@@ -415,7 +420,7 @@ class EasyOCR:
         for text in read_result:
             res += text + ' '
 
-        x = (True, post_process(res))
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
@@ -463,7 +468,7 @@ class RapidOCR:
             for read_result in read_results:
                 res += read_result[1] + ' '
 
-        x = (True, post_process(res))
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
