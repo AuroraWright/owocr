@@ -25,7 +25,7 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 It mostly functions like Manga OCR: https://github.com/kha-white/manga-ocr?tab=readme-ov-file#running-in-the-background
 However:
 - it supports reading images and/or writing text to a websocket when the -r=websocket and/or -w=websocket parameters are specified (port 7331 by default, configurable in the config file)
-- it supports capturing the screen directly with -r screencapture. It will default to the entire first screen every 3 seconds, but a different screen/coordinates/window/delay can be specified in the config file
+- it supports capturing the screen directly with -r screencapture. It will default to the entire first screen every 3 seconds, but a different screen/coordinates/window/delay can be specified in the config file. Instead of using a delay it's also possible to specify a keyboard combo (refer to the config file or the help page)
 - you can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q"
 - you can switch OCR provider with its corresponding keyboard key (refer to the list above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
 - holding ctrl or cmd at any time will pause image processing temporarily

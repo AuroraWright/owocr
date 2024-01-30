@@ -199,6 +199,11 @@ def on_key_release(key):
         first_pressed = None
 
 
+def on_screenshot_combo():
+    if not paused:
+        screenshot_event.set()
+
+
 def signal_handler(sig, frame):
     global terminated
     logger.info('Terminated!')
@@ -293,7 +298,8 @@ def run(read_from=None,
         screen_capture_monitor=None,
         screen_capture_coords=None,
         screen_capture_delay_secs=None,
-        screen_capture_only_active_windows=None
+        screen_capture_only_active_windows=None,
+        screen_capture_combo=None
         ):
     """
     Japanese OCR client
@@ -313,6 +319,7 @@ def run(read_from=None,
     :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
     :param screen_capture_delay_secs: Specifies the delay (in seconds) between screenshots when reading with screen capture.
     :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_coords is a window name, specifies whether to only target the window while it's active.
+    :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
 
     if read_from == 'screencapture':
@@ -365,14 +372,10 @@ def run(read_from=None,
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
     delay_secs = config.get_general('delay_secs')
+    screen_capture_on_combo = False
 
     user_input_thread = threading.Thread(target=user_input_thread_run, args=(engine_instances, engine_keys), daemon=True)
     user_input_thread.start()
-
-    tmp_paused_listener = keyboard.Listener(
-        on_press=on_key_press,
-        on_release=on_key_release)
-    tmp_paused_listener.start()
 
     if read_from == 'websocket' or write_to == 'websocket':
         global websocket_server_thread
@@ -406,6 +409,10 @@ def run(read_from=None,
         else:
             generic_clipboard_polling = True
     elif read_from == 'screencapture':
+        if screen_capture_combo != '':
+            screen_capture_on_combo = True
+            global screenshot_event
+            screenshot_event = threading.Event()
         if type(screen_capture_coords) == tuple:
             screen_capture_coords = ','.join(map(str, screen_capture_coords))
         global screencapture_window_active
@@ -472,6 +479,15 @@ def run(read_from=None,
             if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
 
+    if screen_capture_on_combo:
+        tmp_paused_listener = keyboard.GlobalHotKeys({
+            screen_capture_combo: on_screenshot_combo})
+    else:
+        tmp_paused_listener = keyboard.Listener(
+            on_press=on_key_press,
+            on_release=on_key_release)
+    tmp_paused_listener.start()
+
     signal.signal(signal.SIGINT, signal_handler)
     while not terminated:
         if read_from == 'websocket':
@@ -517,13 +533,23 @@ def run(read_from=None,
             if not windows_clipboard_polling:
                 time.sleep(delay_secs)
         elif read_from == 'screencapture':
-            if screencapture_window_active and screencapture_window_visible and not paused and not tmp_paused:
+            if screen_capture_on_combo:
+                take_screenshot = screenshot_event.wait(delay_secs)
+                if take_screenshot:
+                    screenshot_event.clear()
+            else:
+                take_screenshot = screencapture_window_active and not (paused or tmp_paused)
+
+            if take_screenshot and screencapture_window_visible:
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
                 process_and_write_results(engine_instances[engine_index], img, write_to)
-                time.sleep(screen_capture_delay_secs)
+                delay = screen_capture_delay_secs
             else:
-                time.sleep(delay_secs)
+                delay = delay_secs
+
+            if not screen_capture_on_combo:
+                time.sleep(delay)
         else:
             for path in read_from.iterdir():
                 if path.suffix.lower() in allowed_extensions:

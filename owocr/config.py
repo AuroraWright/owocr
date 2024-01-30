@@ -22,7 +22,8 @@ class Config:
         'screen_capture_monitor': 1,
         'screen_capture_coords': '',
         'screen_capture_delay_secs': 3,
-        'screen_capture_only_active_windows': True
+        'screen_capture_only_active_windows': True,
+        'screen_capture_combo': ''
     }
 
     def __parse(self, value):
