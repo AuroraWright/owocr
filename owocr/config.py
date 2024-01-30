@@ -1,9 +1,12 @@
 import os
 import configparser
+import urllib.request
 
 
 class Config:
     has_config = False
+    downloaded_config = False
+    config_path = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     __general_config = {}
     __engine_config = {}
     __default_config = {
@@ -45,20 +48,28 @@ class Config:
         return value
 
     def __init__(self):
-        config_file = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
         config = configparser.ConfigParser()
-        res = config.read(config_file)
+        res = config.read(self.config_path)
 
-        if len(res) != 0:
-            self.has_config = True
-            for key in config:
-                if key == 'general':
-                    for sub_key in config[key]:
-                        self.__general_config[sub_key.lower()] = self.__parse(config[key][sub_key])
-                elif key != 'DEFAULT':
-                    self.__engine_config[key.lower()] = {}
-                    for sub_key in config[key]:
-                        self.__engine_config[key.lower()][sub_key.lower()] = self.__parse(config[key][sub_key])
+        if len(res) == 0:
+            try:
+                config_folder = os.path.join(os.path.expanduser('~'),'.config')
+                if not os.path.isdir(config_folder):
+                    os.makedirs(config_folder)
+                urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/owocr_config.ini', self.config_path)
+                self.downloaded_config = True
+            finally:
+                return
+
+        self.has_config = True
+        for key in config:
+            if key == 'general':
+                for sub_key in config[key]:
+                    self.__general_config[sub_key.lower()] = self.__parse(config[key][sub_key])
+            elif key != 'DEFAULT':
+                self.__engine_config[key.lower()] = {}
+                for sub_key in config[key]:
+                    self.__engine_config[key.lower()][sub_key.lower()] = self.__parse(config[key][sub_key])
 
     def get_general(self, value):
         try:

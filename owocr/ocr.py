@@ -435,6 +435,9 @@ class RapidOCR:
             if not os.path.isfile(rapidocr_model_file):
                 logger.info('Downloading RapidOCR model')
                 try:
+                    cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
+                    if not os.path.isdir(cache_folder):
+                        os.makedirs(cache_folder)
                     urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/rapidocr_japan_PP-OCRv4_rec_infer.onnx', rapidocr_model_file)
                 except:
                     logger.warning('Download failed. RapidOCR will not work!')

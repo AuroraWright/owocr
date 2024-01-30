@@ -330,7 +330,9 @@ def run(read_from=None,
     if config.has_config:
         logger.info('Parsed config file')
     else:
-        logger.warning('No config file, defaults will be used')
+        logger.warning('No config file, defaults will be used.')
+        if config.downloaded_config:
+            logger.info(f'A default config file has been downloaded to {config.config_path}')
 
     engine_instances = []
     config_engines = []
