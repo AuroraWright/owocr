@@ -289,8 +289,11 @@ def run(read_from=None,
         pause_at_startup=None,
         ignore_flag=None,
         delete_images=None,
+        notifications=None,
         screen_capture_monitor=None,
-        screen_capture_coords=None
+        screen_capture_coords=None,
+        screen_capture_delay_secs=None,
+        screen_capture_only_active_windows=None
         ):
     """
     Japanese OCR client
@@ -305,8 +308,11 @@ def run(read_from=None,
     :param pause_at_startup: Pause at startup.
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
+    :param notifications: Show an operating system notification with the detected text.
     :param screen_capture_monitor: Specifies monitor to target when reading with screen capture.
     :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
+    :param screen_capture_delay_secs: Specifies the delay (in seconds) between screenshots when reading with screen capture.
+    :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_coords is a window name, specifies whether to only target the window while it's active.
     """
 
     if read_from == 'screencapture':
@@ -402,7 +408,6 @@ def run(read_from=None,
     elif read_from == 'screencapture':
         if type(screen_capture_coords) == tuple:
             screen_capture_coords = ','.join(map(str, screen_capture_coords))
-        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         global screencapture_window_active
         global screencapture_window_visible
         screencapture_window_mode = False
@@ -423,7 +428,6 @@ def run(read_from=None,
             coord_left = mon[screen_capture_monitor]['left'] + x
             coord_top = mon[screen_capture_monitor]['top'] + y
         else:
-            screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             window_title = None
             window_titles = pywinctl.getAllTitles()
             if screen_capture_coords in window_titles:
