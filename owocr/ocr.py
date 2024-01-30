@@ -263,7 +263,7 @@ class AppleVision:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format='png')
+        img.save(image_bytes, format='bmp')
         return image_bytes.getvalue()
 
 class WinRTOCR:
@@ -321,7 +321,7 @@ class WinRTOCR:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format='png')
+        img.save(image_bytes, format='png', compress_level=1)
         return image_bytes.getvalue()
 
 class AzureComputerVision:
@@ -418,9 +418,7 @@ class EasyOCR:
         return x
 
     def _preprocess(self, img):
-        image_bytes = io.BytesIO()
-        img.save(image_bytes, format='png')
-        return image_bytes.getvalue()
+        return np.array(img.convert('RGB'))
 
 class RapidOCR:
     name = 'rapidocr'
@@ -466,4 +464,3 @@ class RapidOCR:
 
     def _preprocess(self, img):
         return np.array(img.convert('RGB'))
-
