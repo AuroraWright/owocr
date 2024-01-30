@@ -284,7 +284,7 @@ def process_and_write_results(engine_instance, img_or_path, write_to, last_text)
         with write_to.open('a', encoding='utf-8') as f:
             f.write(text + '\n')
 
-    return (res, orig_text)
+    return orig_text
 
 
 def get_path_key(path):
@@ -555,8 +555,8 @@ def run(read_from=None,
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
                 res = process_and_write_results(engine_instances[engine_index], img, write_to, last_text)
-                if res[0] and res[1] != '':
-                    last_text = res[1]
+                if res != '':
+                    last_text = res
                 delay = screen_capture_delay_secs
             else:
                 delay = delay_secs
