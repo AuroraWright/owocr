@@ -47,6 +47,7 @@ except ImportError:
 
 try:
     from rapidocr_onnxruntime import RapidOCR as ROCR
+    import urllib.request
 except ImportError:
     pass
 
@@ -434,8 +435,8 @@ class RapidOCR:
             if not os.path.isfile(rapidocr_model_file):
                 logger.info('Downloading RapidOCR model')
                 try:
-                    urllib.request.urlretrieve('https://raw.githubusercontent.com/AuroraWright/owocr/master/rapidocr_japan_PP-OCRv4_rec_infer.onnx', rapidocr_model_file)
-                except Exception as inst:
+                    urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/rapidocr_japan_PP-OCRv4_rec_infer.onnx', rapidocr_model_file)
+                except:
                     logger.warning('Download failed. RapidOCR will not work!')
                     return
 
