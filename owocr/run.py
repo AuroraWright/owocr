@@ -93,6 +93,8 @@ class WebsocketServerThread(threading.Thread):
                         await websocket.send('False')
                     except websockets.exceptions.ConnectionClosedOK:
                         pass
+        except websockets.exceptions.ConnectionClosedError:
+            pass
         finally:
             self.clients.remove(websocket)
 
@@ -105,7 +107,7 @@ class WebsocketServerThread(threading.Thread):
 
     def run(self):
         asyncio.set_event_loop(self.loop)
-        start_server = websockets.serve(self.server_handler, '0.0.0.0', config.get_general('websocket_port'), max_size=50000000)
+        start_server = websockets.serve(self.server_handler, '0.0.0.0', config.get_general('websocket_port'), max_size=1000000000)
         self.server = start_server
         self.loop.run_until_complete(start_server)
         self.loop.run_forever()
@@ -244,17 +246,20 @@ def are_images_identical(img1, img2):
 
 def process_and_write_results(engine_instance, img_or_path, write_to):
     t0 = time.time()
-    text = engine_instance(img_or_path)
+    res, text = engine_instance(img_or_path)
     t1 = time.time()
 
     engine_color = config.get_general('engine_color')
-    logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
-    if config.get_general('notifications'):
-        notification = Notify()
-        notification.application_name = 'owocr'
-        notification.title = 'Text recognized:'
-        notification.message = text
-        notification.send(block=False)
+    if res:
+        logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
+        if config.get_general('notifications'):
+            notification = Notify()
+            notification.application_name = 'owocr'
+            notification.title = 'Text recognized:'
+            notification.message = text
+            notification.send(block=False)
+    else:
+        logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
     if write_to == 'websocket':
         websocket_server_thread.send_text(text)
@@ -294,7 +299,7 @@ def run(read_from=None,
     :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "screencapture", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
-    :param engine: OCR engine to use. Available: "mangaocr", "glens", "gvision", "avision", "azure", "winrtocr", "easyocr", "paddleocr".
+    :param engine: OCR engine to use. Available: "mangaocr", "glens", "gvision", "avision", "azure", "winrtocr", "easyocr", "rapidocr".
     :param pause_at_startup: Pause at startup.
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.

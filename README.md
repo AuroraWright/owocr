@@ -11,7 +11,7 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 ## Local providers
 - [Manga OCR](https://github.com/kha-white/manga-ocr): refer to the readme for installation ("m" key)
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR): refer to the readme for installation ("e" key)
-- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR): refer to the [wiki](https://github.com/PaddlePaddle/PaddleOCR/blob/release/2.7/doc/doc_en/quickstart_en.md) for installation ("o" key)
+- [RapidOCR](https://github.com/RapidAI/RapidOCR): refer to the readme for installation ("r" key)
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
 - WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server (`winocr_serve`), installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file (see below) ("w" key)
 

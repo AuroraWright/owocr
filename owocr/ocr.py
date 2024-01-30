@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 import sys
 import platform
+import logging
 from math import sqrt
 
 import jaconv
@@ -27,6 +28,7 @@ except ImportError:
 try:
     from google.cloud import vision
     from google.oauth2 import service_account
+    from google.api_core.exceptions import ServiceUnavailable
 except ImportError:
     pass
 
@@ -34,6 +36,7 @@ try:
     from azure.cognitiveservices.vision.computervision import ComputerVisionClient
     from azure.cognitiveservices.vision.computervision.models import OperationStatusCodes
     from msrest.authentication import CognitiveServicesCredentials
+    from msrest.exceptions import ClientRequestError
 except ImportError:
     pass
 
@@ -43,7 +46,7 @@ except ImportError:
     pass
 
 try:
-    from paddleocr import PaddleOCR as POCR
+    from rapidocr_onnxruntime import RapidOCR as ROCR
 except ImportError:
     pass
 
@@ -96,7 +99,7 @@ class MangaOcr:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        x = self.model(img)
+        x = (True, self.model(img))
         return x
 
 class GoogleVision:
@@ -129,9 +132,14 @@ class GoogleVision:
 
         image_bytes = self._preprocess(img)
         image = vision.Image(content=image_bytes)
-        response = self.client.text_detection(image=image)
+        try:
+            response = self.client.text_detection(image=image)
+        except ServiceUnavailable:
+            return (False, 'Connection error!')
+        except:
+            return (False, 'Unknown error!')
         texts = response.text_annotations
-        x = post_process(texts[0].description)
+        x = (True, post_process(texts[0].description))
         return x
 
     def _preprocess(self, img):
@@ -168,22 +176,30 @@ class GoogleLens:
         try:
             res = requests.post(url, files=files, timeout=20)
         except requests.exceptions.Timeout:
-            return 'Request timeout!'
+            return (False, 'Request timeout!')
+        except requests.exceptions.ConnectionError:
+            return (False, 'Connection error!')
 
-        x = ''
-        if res.status_code == 200:
-            regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
-            match = regex.search(res.text)
-            if match != None:
-                lens_object = pyjson5.loads(match.group(1))
-                if not 'errorHasStatus' in lens_object:
-                    text = lens_object['data'][3][4][0]
-                    if len(text) > 0:
-                        lines = text[0]
-                        for line in lines:
-                            x += line + ' '
-                        x = post_process(x)
+        if res.status_code != 200:
+            return (False, 'Unknown error!')
 
+        regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
+        match = regex.search(res.text)
+        if match == None:
+            return (False, 'Regex error!')
+
+        lens_object = pyjson5.loads(match.group(1))
+        if 'errorHasStatus' in lens_object:
+            return (False, 'Unknown Lens error!')
+
+        res = ''
+        text = lens_object['data'][3][4][0]
+        if len(text) > 0:
+            lines = text[0]
+            for line in lines:
+                res += line + ' '
+
+        x = (True, post_process(res))
         return x
 
     def _preprocess(self, img):
@@ -238,9 +254,11 @@ class AppleVision:
                 for result in req.results():
                     res += result.text() + ' '
                 req.dealloc()
+                x = (True, post_process(res))
+            else:
+                x = (False, 'Unknown error!')
 
             handler.dealloc()
-            x = post_process(res)
             return x
 
     def _preprocess(self, img):
@@ -289,11 +307,16 @@ class WinRTOCR:
             try:
                 res = requests.post(self.url, params=params, data=self._preprocess(img), timeout=3)
             except requests.exceptions.Timeout:
-                return 'Request timeout!'
+                return (False, 'Request timeout!')
+            except requests.exceptions.ConnectionError:
+                return (False, 'Connection error!')
+
+            if res.status_code != 200:
+                return (False, 'Unknown error!')
 
             res = json.loads(res.text)['text']
 
-        x = post_process(res)
+        x = (True, post_process(res))
         return x
 
     def _preprocess(self, img):
@@ -328,24 +351,33 @@ class AzureComputerVision:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         image_io = self._preprocess(img)
-        read_response = self.client.read_in_stream(image_io, raw=True)
+        logging.getLogger('urllib3.connectionpool').disabled = True
 
-        read_operation_location = read_response.headers['Operation-Location']
-        operation_id = read_operation_location.split('/')[-1]
+        try:
+            read_response = self.client.read_in_stream(image_io, raw=True)
 
-        while True:
-            read_result = self.client.get_read_result(operation_id)
-            if read_result.status.lower() not in ['notstarted', 'running']:
-                break
-            time.sleep(0.3)
+            read_operation_location = read_response.headers['Operation-Location']
+            operation_id = read_operation_location.split('/')[-1]
+
+            while True:
+                read_result = self.client.get_read_result(operation_id)
+                if read_result.status.lower() not in [OperationStatusCodes.not_started, OperationStatusCodes.running]:
+                    break
+                time.sleep(0.3)
+        except ClientRequestError:
+            return (False, 'Connection error!')
+        except:
+            return (False, 'Unknown error!')
 
         res = ''
         if read_result.status == OperationStatusCodes.succeeded:
             for text_result in read_result.analyze_result.read_results:
                 for line in text_result.lines:
                     res += line.text + ' '
+        else:
+            return (False, 'Unknown error!')
 
-        x = post_process(res)
+        x = (True, post_process(res))
         return x
 
     def _preprocess(self, img):
@@ -382,7 +414,7 @@ class EasyOCR:
         for text in read_result:
             res += text + ' '
 
-        x = post_process(res)
+        x = (True, post_process(res))
         return x
 
     def _preprocess(self, img):
@@ -390,20 +422,29 @@ class EasyOCR:
         img.save(image_bytes, format='png')
         return image_bytes.getvalue()
 
-class PaddleOCR:
-    name = 'paddleocr'
-    readable_name = 'PaddleOCR'
-    key = 'o'
+class RapidOCR:
+    name = 'rapidocr'
+    readable_name = 'RapidOCR'
+    key = 'r'
     available = False
 
     def __init__(self):
-        if 'paddleocr' not in sys.modules:
-            logger.warning('paddleocr not available, PaddleOCR will not work!')
+        if 'rapidocr_onnxruntime' not in sys.modules:
+            logger.warning('rapidocr_onnxruntime not available, RapidOCR will not work!')
         else:
-            logger.info('Loading PaddleOCR model')
-            self.model = POCR(use_angle_cls=True, show_log=False, lang='japan')
+            rapidocr_model_file = os.path.join(os.path.expanduser('~'),'.cache','rapidocr_japan_PP-OCRv4_rec_infer.onnx')
+            if not os.path.isfile(rapidocr_model_file):
+                logger.info('Downloading RapidOCR model')
+                try:
+                    urllib.request.urlretrieve('https://raw.githubusercontent.com/AuroraWright/owocr/master/rapidocr_japan_PP-OCRv4_rec_infer.onnx', rapidocr_model_file)
+                except Exception as inst:
+                    logger.warning('Download failed. RapidOCR will not work!')
+                    return
+
+            logger.info('Loading RapidOCR model')
+            self.model = ROCR(rec_model_path=rapidocr_model_file)
             self.available = True
-            logger.info('PaddleOCR ready')
+            logger.info('RapidOCR ready')
 
     def __call__(self, img_or_path):
         if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
@@ -413,15 +454,16 @@ class PaddleOCR:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
+        logging.getLogger().disabled = True
         res = ''
-        read_results = self.model.ocr(self._preprocess(img), cls=True)
-        for read_result in read_results:
-            if read_result:
-                for text in read_result:
-                    res += text[1][0] + ' '
+        read_results, elapsed = self.model(self._preprocess(img))
+        if read_results:
+            for read_result in read_results:
+                res += read_result[1] + ' '
 
-        x = post_process(res)
+        x = (True, post_process(res))
         return x
 
     def _preprocess(self, img):
         return np.array(img.convert('RGB'))
+
