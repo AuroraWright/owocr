@@ -269,7 +269,7 @@ class AppleVision:
 
     def _preprocess(self, img):
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format='bmp')
+        img.save(image_bytes, format='tiff')
         return image_bytes.getvalue()
 
 class WinRTOCR:

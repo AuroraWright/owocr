@@ -30,6 +30,7 @@ try:
     import win32api 
     import win32con
     import win32clipboard
+    import pywintypes
     import ctypes
 except ImportError:
     pass
@@ -400,13 +401,12 @@ def run(read_from=None,
         from PIL import ImageGrab
         mac_clipboard_polling = False
         windows_clipboard_polling = False
-        generic_clipboard_polling = False
         img = None
 
         logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
         if sys.platform == 'darwin':
-            from AppKit import NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF
+            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
             mac_clipboard_polling = True
@@ -416,8 +416,6 @@ def run(read_from=None,
             windows_clipboard_thread = WindowsClipboardThread()
             windows_clipboard_thread.start()
             windows_clipboard_polling = True
-        else:
-            generic_clipboard_polling = True
     elif read_from == 'screencapture':
         if screen_capture_combo != '':
             screen_capture_on_combo = True
@@ -512,32 +510,51 @@ def run(read_from=None,
                         img = Image.open(io.BytesIO(item))
                         process_and_write_results(engine_instances[engine_index], img, write_to, '')
         elif read_from == 'clipboard':
+            process_clipboard = False
             if windows_clipboard_polling:
-                clipboard_changed = clipboard_event.wait(delay_secs)
-                if clipboard_changed:
+                if clipboard_event.wait(delay_secs):
                     clipboard_event.clear()
+                    while True:
+                        try:
+                            win32clipboard.OpenClipboard()
+                            break
+                        except pywintypes.error:
+                            pass
+                        time.sleep(0.1)
+                    if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
+                        clipboard_text = ''
+                        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+                            clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                        if ignore_flag or clipboard_text != '*ocr_ignore*':
+                            img = Image.open(io.BytesIO(win32clipboard.GetClipboardData(win32clipboard.CF_DIB)))
+                            process_clipboard = True
+                    win32clipboard.CloseClipboard()
             elif mac_clipboard_polling:
                 if not (paused or tmp_paused):
                     old_count = count
                     count = pasteboard.changeCount()
-                    clipboard_changed = not just_unpaused and count != old_count and any(x in pasteboard.types() for x in [NSPasteboardTypePNG, NSPasteboardTypeTIFF])
+                    if not just_unpaused and count != old_count and NSPasteboardTypeTIFF in pasteboard.types():
+                        clipboard_text = ''
+                        if NSPasteboardTypeString in pasteboard.types():
+                            clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
+                        if ignore_flag or clipboard_text != '*ocr_ignore*':
+                            img = Image.open(io.BytesIO(pasteboard.dataForType_(NSPasteboardTypeTIFF)))
+                            process_clipboard = True
             else:
-                clipboard_changed = not (paused or tmp_paused)
+                if not (paused or tmp_paused):
+                    old_img = img
+                    try:
+                        img = ImageGrab.grabclipboard()
+                    except Exception:
+                        pass
+                    else:
+                        if ((not just_unpaused) and isinstance(img, Image.Image) and \
+                            (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
+                            (not are_images_identical(img, old_img))):
+                            process_clipboard = True
 
-
-            if clipboard_changed:
-                old_img = img
-
-                try:
-                    img = ImageGrab.grabclipboard()
-                except Exception:
-                    pass
-                else:
-                    if (windows_clipboard_polling or (not just_unpaused)) and \
-                        isinstance(img, Image.Image) and \
-                        (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
-                        ((not generic_clipboard_polling) or (not are_images_identical(img, old_img))):
-                        process_and_write_results(engine_instances[engine_index], img, write_to, '')
+            if process_clipboard:
+                process_and_write_results(engine_instances[engine_index], img, write_to, '')
 
             just_unpaused = False
 
