@@ -35,7 +35,9 @@ try:
 except ImportError:
     pass
 
+
 config = None
+
 
 class WindowsClipboardThread(threading.Thread):
     def __init__(self):
@@ -398,12 +400,9 @@ def run(read_from=None,
         websocket_queue = queue.Queue()
         logger.opt(ansi=True).info(f"Reading from websocket using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     elif read_from == 'clipboard':
-        from PIL import ImageGrab
         mac_clipboard_polling = False
         windows_clipboard_polling = False
         img = None
-
-        logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
         if sys.platform == 'darwin':
             from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
@@ -416,6 +415,10 @@ def run(read_from=None,
             windows_clipboard_thread = WindowsClipboardThread()
             windows_clipboard_thread.start()
             windows_clipboard_polling = True
+        else:
+            from PIL import ImageGrab
+
+        logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     elif read_from == 'screencapture':
         if screen_capture_combo != '':
             screen_capture_on_combo = True
@@ -476,17 +479,17 @@ def run(read_from=None,
 
         logger.opt(ansi=True).info(f"Reading with screen capture using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     else:
-        allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         read_from = Path(read_from)
         if not read_from.is_dir():
             raise ValueError('read_from must be either "websocket", "clipboard", "screencapture" or a path to a directory')
 
-        logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
-
+        allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         old_paths = set()
         for path in read_from.iterdir():
             if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
+
+        logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     if screen_capture_on_combo:
         tmp_paused_listener = keyboard.GlobalHotKeys({
