@@ -18,7 +18,7 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 ## Cloud providers
 - Google Lens: Google Vision in disguise (no need for API keys!), however it needs to download a couple megabytes of data for each request. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("l" key)
 - Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
-- Azure Computer Vision: you need to specify an api key and an endpoint in the config file (see below) and to install azure-cognitiveservices-vision-computervision (`pip install azure-cognitiveservices-vision-computervision`) ("v" key)
+- Azure Image Analysis: you need to specify an api key and an endpoint in the config file (see below) and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key)
 
 # Usage
 
@@ -31,6 +31,7 @@ However:
 - holding ctrl or cmd at any time will pause image processing temporarily
 - for systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored
 - optionally, notifications can be enabled in the config file to show the text with a native OS notification
+- optionally, you can speed up the online providers by installing fpng-py: `pip install fpng-py` (requires a developer environment on some operating systems/Python versions)
 - idle resource usage on macOS and Windows when reading from the clipboard has been eliminated using native OS polling
 - a config file (to be created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 
