@@ -167,7 +167,8 @@ class GoogleVision:
         except:
             return (False, 'Unknown error!')
         texts = response.text_annotations
-        x = (True, texts[0].description)
+        res = texts[0].description if len(texts) > 0 else ''
+        x = (True, res)
         return x
 
     def _preprocess(self, img):
@@ -379,8 +380,9 @@ class AzureImageAnalysis:
 
         res = ''
         if read_result.read:
-            for line in read_result.read.blocks[0].lines:
-                res += line.text + ' '
+            for block in read_result.read.blocks:
+                for line in block.lines:
+                    res += line.text + ' '
         else:
             return (False, 'Unknown error!')
 
