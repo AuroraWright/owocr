@@ -13,13 +13,13 @@ import asyncio
 import websockets
 import queue
 import io
-import re
 
 from PIL import Image
 from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 from notifypy import Notify
+from pysbd import Segmenter
 
 import inspect
 from owocr.ocr import *
@@ -253,16 +253,17 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, img_or_path, write_to, last_text):
+def process_and_write_results(engine_instance, img_or_path, write_to, last_text, segmenter):
     t0 = time.time()
     res, text = engine_instance(img_or_path)
     t1 = time.time()
 
+    orig_text = ''
     engine_color = config.get_general('engine_color')
     if res:
-        orig_text = text
         if last_text != '':
-            text = ''.join(map(str, [block for block in re.split(r'[ 　,!?.、。？！"「」\n\']', text) if block not in re.split(r'[ 　,!?.、。？！"「」\n\']', last_text)]))
+            orig_text = segmenter.segment(text)
+            text = '\n'.join([block for block in orig_text if block not in last_text])
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if config.get_general('notifications'):
@@ -272,7 +273,6 @@ def process_and_write_results(engine_instance, img_or_path, write_to, last_text)
             notification.message = text
             notification.send(block=False)
     else:
-        orig_text = ''
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
     if write_to == 'websocket':
@@ -431,7 +431,7 @@ def run(read_from=None,
         screencapture_window_mode = False
         screencapture_window_active = True
         screencapture_window_visible = True
-        last_text = ''
+        last_text = []
         sct = mss.mss()
         mon = sct.monitors
         if len(mon) <= screen_capture_monitor:
@@ -476,6 +476,7 @@ def run(read_from=None,
 
         global sct_params
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
+        segmenter = Segmenter(language="ja", clean=True)
 
         logger.opt(ansi=True).info(f"Reading with screen capture using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     else:
@@ -511,7 +512,7 @@ def run(read_from=None,
                 else:
                     if not paused and not tmp_paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(engine_instances[engine_index], img, write_to, '')
+                        process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -557,7 +558,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(engine_instances[engine_index], img, write_to, '')
+                process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
 
             just_unpaused = False
 
@@ -574,7 +575,7 @@ def run(read_from=None,
             if take_screenshot and screencapture_window_visible:
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-                res = process_and_write_results(engine_instances[engine_index], img, write_to, last_text)
+                res = process_and_write_results(engine_instances[engine_index], img, write_to, last_text, segmenter)
                 if res != '':
                     last_text = res
                 delay = screen_capture_delay_secs
@@ -597,7 +598,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(engine_instances[engine_index], img, write_to, '')
+                                process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)

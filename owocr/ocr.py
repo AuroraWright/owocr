@@ -186,6 +186,7 @@ class GoogleLens:
         elif 'requests' not in sys.modules:
             logger.warning('requests not available, Google Lens will not work!')
         else:
+            self.regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
             self.available = True
             logger.info('Google Lens ready')
 
@@ -210,8 +211,7 @@ class GoogleLens:
         if res.status_code != 200:
             return (False, 'Unknown error!')
 
-        regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
-        match = regex.search(res.text)
+        match = self.regex.search(res.text)
         if match == None:
             return (False, 'Regex error!')
 

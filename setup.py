@@ -30,6 +30,7 @@ setup(
         "notify-py",
         "mss",
         "pywinctl",
+        "pysbd",
         "pywin32;platform_system=='Windows'",
         "pyobjc;platform_system=='Darwin'"
     ],
