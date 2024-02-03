@@ -78,7 +78,7 @@ def empty_post_process(text):
 
 
 def post_process(text):
-    text = ''.join(text.split())
+    text = ' '.join([''.join(i.split()) for i in text.splitlines()])
     text = text.replace('…', '...')
     text = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', text)
     text = jaconv.h2z(text, ascii=True, digit=True)
@@ -224,7 +224,7 @@ class GoogleLens:
         if len(text) > 0:
             lines = text[0]
             for line in lines:
-                res += line + ' '
+                res += line + '\n'
 
         x = (True, res)
         return x
@@ -277,7 +277,7 @@ class AppleVision:
             res = ''
             if success[0]:
                 for result in req.results():
-                    res += result.text() + ' '
+                    res += result.text() + '\n'
                 req.dealloc()
                 x = (True, res)
             else:
@@ -382,7 +382,7 @@ class AzureImageAnalysis:
         if read_result.read:
             for block in read_result.read.blocks:
                 for line in block.lines:
-                    res += line.text + ' '
+                    res += line.text + '\n'
         else:
             return (False, 'Unknown error!')
 
@@ -418,7 +418,7 @@ class EasyOCR:
         res = ''
         read_result = self.model.readtext(self._preprocess(img), detail=0)
         for text in read_result:
-            res += text + ' '
+            res += text + '\n'
 
         x = (True, res)
         return x
@@ -466,7 +466,7 @@ class RapidOCR:
         read_results, elapsed = self.model(self._preprocess(img))
         if read_results:
             for read_result in read_results:
-                res += read_result[1] + ' '
+                res += read_result[1] + '\n'
 
         x = (True, res)
         return x
