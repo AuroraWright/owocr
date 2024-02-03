@@ -262,7 +262,7 @@ def process_and_write_results(engine_instance, img_or_path, write_to, last_text)
     if res:
         orig_text = text
         if last_text != '':
-            text = ''.join(map(str, [block for block in re.split(r'[ 　,!?.、。？！"「」\']', text) if block not in re.split(r'[ 　,!?.、。？！"「」\']', last_text)]))
+            text = ''.join(map(str, [block for block in re.split(r'[ 　,!?.、。？！"「」\n\']', text) if block not in re.split(r'[ 　,!?.、。？！"「」\n\']', last_text)]))
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if config.get_general('notifications'):
