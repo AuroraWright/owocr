@@ -13,6 +13,7 @@ import asyncio
 import websockets
 import queue
 import io
+import unicodedata
 
 from PIL import Image
 from PIL import UnidentifiedImageError
@@ -253,7 +254,12 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(engine_instance, img_or_path, write_to, last_text, segmenter):
+def is_japanese(text):
+    japanese_count = sum(1 for char in text if 'HIRAGANA' in unicodedata.name(char) or 'KATAKANA' in unicodedata.name(char) or 'CJK UNIFIED' in unicodedata.name(char))    
+    return japanese_count / len(text) >= 0.7
+
+
+def process_and_write_results(engine_instance, img_or_path, write_to, enable_filtering, last_text, segmenter):
     t0 = time.time()
     res, text = engine_instance(img_or_path)
     t1 = time.time()
@@ -261,9 +267,9 @@ def process_and_write_results(engine_instance, img_or_path, write_to, last_text,
     orig_text = ''
     engine_color = config.get_general('engine_color')
     if res:
-        if last_text != '':
+        if enable_filtering:
             orig_text = segmenter.segment(text)
-            text = '\n'.join([block for block in orig_text if block not in last_text])
+            text = '\n'.join([block for block in orig_text if (block not in last_text and is_japanese(block))])
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if config.get_general('notifications'):
@@ -512,7 +518,7 @@ def run(read_from=None,
                 else:
                     if not paused and not tmp_paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
+                        process_and_write_results(engine_instances[engine_index], img, write_to, False, '', None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -558,7 +564,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
+                process_and_write_results(engine_instances[engine_index], img, write_to, False, '', None)
 
             just_unpaused = False
 
@@ -575,7 +581,7 @@ def run(read_from=None,
             if take_screenshot and screencapture_window_visible:
                 sct_img = sct.grab(sct_params)
                 img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-                res = process_and_write_results(engine_instances[engine_index], img, write_to, last_text, segmenter)
+                res = process_and_write_results(engine_instances[engine_index], img, write_to, True, last_text, segmenter)
                 if res != '':
                     last_text = res
                 delay = screen_capture_delay_secs
@@ -598,7 +604,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(engine_instances[engine_index], img, write_to, '', None)
+                                process_and_write_results(engine_instances[engine_index], img, write_to, False, '', None)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
