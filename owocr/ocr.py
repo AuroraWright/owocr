@@ -6,6 +6,7 @@ import time
 import sys
 import platform
 import logging
+import warnings
 from math import sqrt
 
 import jaconv
@@ -112,6 +113,7 @@ class MangaOcr:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
             logger.disable('manga_ocr')
+            warnings.filterwarnings("ignore", message=".*MPS: no support.*")
             from manga_ocr import ocr
             ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
@@ -390,6 +392,13 @@ class AzureImageAnalysis:
         return x
 
     def _preprocess(self, img):
+        if any(x < 50 for x in img.size):
+            w,h = img.size
+            resize_factor = max(50/w, 50/h)
+            new_w = int(w * resize_factor)
+            new_h = int(h * resize_factor)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
         return pil_image_to_bytes(img)
 
 class EasyOCR:

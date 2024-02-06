@@ -308,20 +308,20 @@ def process_and_write_results(engine_instance, img_or_path, write_to, enable_fil
             notification.title = 'Text recognized:'
             notification.message = text
             notification.send(block=False)
+
+        if write_to == 'websocket':
+            websocket_server_thread.send_text(text)
+        elif write_to == 'clipboard':
+            pyperclipfix.copy(text)
+        else:
+            write_to = Path(write_to)
+            if write_to.suffix.lower() != '.txt':
+                raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
+
+            with write_to.open('a', encoding='utf-8') as f:
+                f.write(text + '\n')
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
-
-    if write_to == 'websocket':
-        websocket_server_thread.send_text(text)
-    elif write_to == 'clipboard':
-        pyperclipfix.copy(text)
-    else:
-        write_to = Path(write_to)
-        if write_to.suffix.lower() != '.txt':
-            raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
-
-        with write_to.open('a', encoding='utf-8') as f:
-            f.write(text + '\n')
 
     return orig_text
 
