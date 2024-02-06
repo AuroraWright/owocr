@@ -6,7 +6,6 @@ import time
 import sys
 import platform
 import logging
-import warnings
 from math import sqrt
 
 import jaconv
@@ -113,7 +112,6 @@ class MangaOcr:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
             logger.disable('manga_ocr')
-            warnings.filterwarnings("ignore", message=".*MPS: no support.*")
             from manga_ocr import ocr
             ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
