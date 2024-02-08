@@ -26,9 +26,9 @@ It mostly functions like Manga OCR: https://github.com/kha-white/manga-ocr?tab=r
 However:
 - it supports reading images and/or writing text to a websocket when the -r=websocket and/or -w=websocket parameters are specified (port 7331 by default, configurable in the config file)
 - it supports capturing the screen directly with -r screencapture. It will default to the entire first screen every 3 seconds, but a different screen/coordinates/window/delay can be specified in the config file. Instead of using a delay it's also possible to specify a keyboard combo (refer to the config file or the help page)
-- you can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q"
-- you can switch OCR provider with its corresponding keyboard key (refer to the list above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
-- holding ctrl or cmd at any time will pause image processing temporarily
+- you can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" in the terminal window
+- you can switch OCR provider pressing its corresponding keyboard key in the terminal window (refer to the list of keys above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
+- holding ctrl or cmd at any time will pause image processing temporarily, or you can specify keyboard combos in the config file to pause/unpause and switch the OCR provider (refer to the config file or the help page)
 - for systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored
 - optionally, notifications can be enabled in the config file to show the text with a native OS notification
 - optionally, you can speed up the online providers by installing fpng-py: `pip install fpng-py` (requires a developer environment on some operating systems/Python versions)
