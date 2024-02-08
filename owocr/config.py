@@ -22,6 +22,8 @@ class Config:
         'delay_secs': 0.5,
         'websocket_port': 7331,
         'notifications': False,
+        'combo_pause': '',
+        'combo_engine_switch': '',
         'screen_capture_monitor': 1,
         'screen_capture_coords': '',
         'screen_capture_delay_secs': 3,
