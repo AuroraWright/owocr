@@ -10,5 +10,6 @@ notify-py
 mss
 pywinctl
 pysbd
+langid
 pywin32;platform_system=='Windows'
 pyobjc;platform_system=='Darwin'

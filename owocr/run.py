@@ -19,7 +19,6 @@ from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 from notifypy import Notify
-from pysbd import Segmenter
 
 import inspect
 from owocr.ocr import *
@@ -125,6 +124,7 @@ class TextFiltering:
     accurate_filtering = False
 
     def __init__(self):
+        from pysbd import Segmenter
         self.segmenter = Segmenter(language='ja', clean=True)
         try:
             from transformers import pipeline, AutoTokenizer
