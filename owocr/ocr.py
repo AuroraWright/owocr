@@ -265,7 +265,8 @@ class AppleVision:
         with objc.autorelease_pool():
             req = Vision.VNRecognizeTextRequest.alloc().init()
 
-            req.setRecognitionLevel_(0)
+            req.setRevision_(Vision.VNRecognizeTextRequestRevision3)
+            req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
             req.setUsesLanguageCorrection_(True)
             req.setRecognitionLanguages_(['ja','en'])
 
