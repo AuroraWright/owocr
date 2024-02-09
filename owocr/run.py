@@ -372,7 +372,7 @@ def run(read_from=None,
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
     :param notifications: Show an operating system notification with the detected text.
-    :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". To be used with combo_engine_switch. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
+    :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param combo_engine_switch: Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param screen_capture_monitor: Specifies monitor to target when reading with screen capture.
     :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
@@ -437,6 +437,15 @@ def run(read_from=None,
     screen_capture_on_combo = False
     notification = Notify()
     notification.application_name = 'owocr'
+    key_combos = {}
+
+    if combo_pause != '':
+        key_combos[combo_pause] = pause_handler
+    if combo_engine_switch != '':
+        if combo_pause != '':
+            key_combos[combo_engine_switch] = engine_change_handler
+        else:
+            raise ValueError('combo_pause must also be specified')
 
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
@@ -475,6 +484,7 @@ def run(read_from=None,
             screen_capture_on_combo = True
             global screenshot_event
             screenshot_event = threading.Event()
+            key_combos[screen_capture_combo] = on_screenshot_combo
         if type(screen_capture_coords) == tuple:
             screen_capture_coords = ','.join(map(str, screen_capture_coords))
         global screencapture_window_active
@@ -543,24 +553,13 @@ def run(read_from=None,
 
         logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
-    key_combos = {}
-    if screen_capture_on_combo:
-        key_combos[screen_capture_combo] = on_screenshot_combo
-    if any(x != '' for x in [combo_pause, combo_engine_switch]):
-        if any(x == '' for x in [combo_pause, combo_engine_switch]):
-            raise ValueError('both combo_pause and combo_engine_switch must be specified')
-        key_combos[combo_pause] = pause_handler
-        key_combos[combo_engine_switch] = engine_change_handler
-
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
     else:
-        key_combo_listener = keyboard.Listener(
-            on_press=on_key_press,
-            on_release=on_key_release)
+        key_combo_listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)
     key_combo_listener.start()
-
     signal.signal(signal.SIGINT, signal_handler)
+
     while not terminated:
         if read_from == 'websocket':
             while True:
