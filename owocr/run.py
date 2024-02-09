@@ -47,7 +47,7 @@ class WindowsClipboardThread(threading.Thread):
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
         timestamp = time.time()
-        if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not (paused or tmp_paused):
+        if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused:
             if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP):
                 clipboard_event.set()
                 self.last_update = timestamp
@@ -85,7 +85,7 @@ class WebsocketServerThread(threading.Thread):
         self.clients.add(websocket)
         try:
             async for message in websocket:
-                if self.read and not (paused or tmp_paused):
+                if self.read and not paused:
                     websocket_queue.put(message)
                     try:
                         await websocket.send('True')
@@ -236,20 +236,16 @@ def user_input_thread_run():
 
 
 def on_key_press(key):
-    global tmp_paused
     global first_pressed
     if first_pressed == None and key in (keyboard.Key.cmd_l, keyboard.Key.cmd_r, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
         first_pressed = key
-        tmp_paused = True
+        pause_handler(False)
 
 
 def on_key_release(key):
-    global tmp_paused
-    global just_unpaused
     global first_pressed
     if key == first_pressed:
-        tmp_paused = False
-        just_unpaused = True
+        pause_handler(False)
         first_pressed = None
 
 
@@ -428,14 +424,12 @@ def run(read_from=None,
     global engine_index
     global terminated
     global paused
-    global tmp_paused
     global just_unpaused
     global first_pressed
     global notification
     terminated = False
     paused = pause_at_startup
     just_unpaused = True
-    tmp_paused = False
     first_pressed = None
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
@@ -575,7 +569,7 @@ def run(read_from=None,
                 except queue.Empty:
                     break
                 else:
-                    if not paused and not tmp_paused:
+                    if not paused:
                         img = Image.open(io.BytesIO(item))
                         process_and_write_results(img, write_to, notifications, False, '', None)
         elif read_from == 'clipboard':
@@ -599,7 +593,7 @@ def run(read_from=None,
                             process_clipboard = True
                     win32clipboard.CloseClipboard()
             elif mac_clipboard_polling:
-                if not (paused or tmp_paused):
+                if not paused:
                     old_count = count
                     count = pasteboard.changeCount()
                     if not just_unpaused and count != old_count and NSPasteboardTypeTIFF in pasteboard.types():
@@ -610,7 +604,7 @@ def run(read_from=None,
                             img = Image.open(io.BytesIO(pasteboard.dataForType_(NSPasteboardTypeTIFF)))
                             process_clipboard = True
             else:
-                if not (paused or tmp_paused):
+                if not paused:
                     old_img = img
                     try:
                         img = ImageGrab.grabclipboard()
@@ -635,7 +629,7 @@ def run(read_from=None,
                 if take_screenshot:
                     screenshot_event.clear()
             else:
-                take_screenshot = screencapture_window_active and not (paused or tmp_paused)
+                take_screenshot = screencapture_window_active and not paused
 
             if take_screenshot and screencapture_window_visible:
                 sct_img = sct.grab(sct_params)
@@ -656,7 +650,7 @@ def run(read_from=None,
                     if path_key not in old_paths:
                         old_paths.add(path_key)
 
-                        if not paused and not tmp_paused:
+                        if not paused:
                             try:
                                 img = Image.open(path)
                                 img.load()
