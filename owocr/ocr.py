@@ -22,7 +22,8 @@ except ImportError:
 try:
     import Vision
     import objc
-    from subprocess import Popen, PIPE, STDOUT
+    from AppKit import NSData, NSImage, NSBundle
+    from PyObjCTools.AppHelper import runConsoleEventLoop, stopEventLoop
 except ImportError:
     pass
 
@@ -280,12 +281,10 @@ class AppleVision:
             if success[0]:
                 for result in req.results():
                     res += result.text() + '\n'
-                req.dealloc()
                 x = (True, res)
             else:
                 x = (False, 'Unknown error!')
 
-            handler.dealloc()
             return x
 
     def _preprocess(self, img):
@@ -300,24 +299,41 @@ class AppleLiveText:
 
     def __init__(self):
         if sys.platform != 'darwin':
-            logger.warning('Apple Vision is not supported on non-macOS platforms!')
+            logger.warning('Apple Live Text is not supported on non-macOS platforms!')
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
-            logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
+            logger.warning('Apple Live Text is not supported on macOS older than Ventura/13.0!')
         else:
-            self.helper_executable = os.path.join(os.path.expanduser('~'),'.cache','livetexthelper')
-            if not os.path.isfile(self.helper_executable):
-                logger.info('Downloading helper executable ' + self.helper_executable)
-                try:
-                    cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
-                    if not os.path.isdir(cache_folder):
-                        os.makedirs(cache_folder)
-                    urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/livetexthelper', self.helper_executable)
-                    mode = os.stat(self.helper_executable).st_mode
-                    mode |= (mode & 0o444) >> 2
-                    os.chmod(self.helper_executable, mode)
-                except:
-                    logger.warning('Download failed. Apple Live Text will not work!')
-                    return
+            objc.loadBundle('VisionKit', globals(), '/System/Library/Frameworks/VisionKit.framework')
+            objc.registerMetaDataForSelector(
+                b'VKCImageAnalyzer',
+                b'processRequest:progressHandler:completionHandler:',
+                {
+                    'arguments': {
+                        3: {
+                            'callable': {
+                                'retval': {'type': b'v'},
+                                'arguments': {
+                                    0: {'type': b'^v'},
+                                    1: {'type': b'd'},
+                                }
+                            }
+                        },
+                        4: {
+                            'callable': {
+                                'retval': {'type': b'v'},
+                                'arguments': {
+                                    0: {'type': b'^v'},
+                                    1: {'type': b'@'},
+                                    2: {'type': b'@'},
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+            app_info = NSBundle.mainBundle().infoDictionary()
+            app_info['LSBackgroundOnly'] = '1'
+            self.analyzer = VKCImageAnalyzer.alloc().init()
             self.available = True
             logger.info('Apple Live Text ready')
 
@@ -329,15 +345,30 @@ class AppleLiveText:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        process = Popen([self.helper_executable], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-        stdout, stderr = process.communicate(input=self._preprocess(img))
-        stdout = stdout.decode().rstrip()
-        if stdout == '':
-            return (False, stderr.decode().rstrip())
-        return (True, stdout)
+        req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1)
+        req.setLocales_(['ja','en'])
+        self.result = None
+        self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
+        runConsoleEventLoop()
+
+        if not self.result:
+            return (False, 'Unknown error!')
+        return (True, self.result)
+
+    def _process(self, analysis, error):
+        res = ''
+        lines = analysis.allLines()
+        if lines:
+            for line in lines:
+                res += line.string() + '\n'
+        self.result = res
+        stopEventLoop()
 
     def _preprocess(self, img):
-        return pil_image_to_bytes(img, 'tiff')
+        image_bytes = pil_image_to_bytes(img, 'tiff')
+        ns_data = NSData.dataWithBytes_length_(image_bytes, len(image_bytes))
+        ns_image = NSImage.alloc().initWithData_(ns_data)
+        return ns_image
 
 
 class WinRTOCR:
