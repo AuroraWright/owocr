@@ -306,12 +306,15 @@ class AppleLiveText:
         else:
             self.helper_executable = os.path.join(os.path.expanduser('~'),'.cache','livetexthelper')
             if not os.path.isfile(self.helper_executable):
-                logger.info('Downloading helper executable')
+                logger.info('Downloading helper executable ' + self.helper_executable)
                 try:
                     cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
                     if not os.path.isdir(cache_folder):
                         os.makedirs(cache_folder)
                     urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/livetexthelper', self.helper_executable)
+                    mode = os.stat(self.helper_executable).st_mode
+                    mode |= (mode & 0o444) >> 2
+                    os.chmod(self.helper_executable, mode)
                 except:
                     logger.warning('Download failed. Apple Live Text will not work!')
                     return
@@ -493,7 +496,7 @@ class RapidOCR:
         else:
             rapidocr_model_file = os.path.join(os.path.expanduser('~'),'.cache','rapidocr_japan_PP-OCRv4_rec_infer.onnx')
             if not os.path.isfile(rapidocr_model_file):
-                logger.info('Downloading RapidOCR model')
+                logger.info('Downloading RapidOCR model ' + rapidocr_model_file)
                 try:
                     cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
                     if not os.path.isdir(cache_folder):
