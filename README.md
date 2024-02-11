@@ -13,6 +13,7 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR): refer to the readme for installation ("e" key)
 - [RapidOCR](https://github.com/RapidAI/RapidOCR): refer to the readme for installation ("r" key)
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
+- Apple Live Text (VisionKit framework): this will work on macOS Ventura or later. It should be the same as Vision except that in Sonoma Apple added vertical text reading, on the other hand it's a bit slower/requires a small Swift helper tool to be downloaded (source code is in this repo, it's a stripped down version of LiTeX). ("d" key)
 - WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server (`winocr_serve`), installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file (see below) ("w" key)
 
 ## Cloud providers
@@ -39,9 +40,9 @@ However:
 # Acknowledgments
 
 This uses code from/references these projects:
+- Viola for working on the Google Lens implementation and helping with the (shelved) pyobjc VisionKit code!
 - [Manga OCR](https://github.com/kha-white/manga-ocr)
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code
-
-Thanks to viola for working on the Google Lens implementation!
+- [LiTeX](https://github.com/Shakshi3104/LiTeX) for the Swift Live Text helper

@@ -22,6 +22,7 @@ except ImportError:
 try:
     import Vision
     import objc
+    from subprocess import Popen, PIPE, STDOUT
 except ImportError:
     pass
 
@@ -289,6 +290,52 @@ class AppleVision:
 
     def _preprocess(self, img):
         return pil_image_to_bytes(img, 'tiff')
+
+
+class AppleLiveText:
+    name = 'alivetext'
+    readable_name = 'Apple Live Text'
+    key = 'd'
+    available = False
+
+    def __init__(self):
+        if sys.platform != 'darwin':
+            logger.warning('Apple Vision is not supported on non-macOS platforms!')
+        elif int(platform.mac_ver()[0].split('.')[0]) < 13:
+            logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
+        else:
+            self.helper_executable = os.path.join(os.path.expanduser('~'),'.cache','livetexthelper')
+            if not os.path.isfile(self.helper_executable):
+                logger.info('Downloading helper executable')
+                try:
+                    cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
+                    if not os.path.isdir(cache_folder):
+                        os.makedirs(cache_folder)
+                    urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/livetexthelper', self.helper_executable)
+                except:
+                    logger.warning('Download failed. Apple Live Text will not work!')
+                    return
+            self.available = True
+            logger.info('Apple Live Text ready')
+
+    def __call__(self, img_or_path):
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        process = Popen([self.helper_executable], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate(input=self._preprocess(img))
+        stdout = stdout.decode()
+        if stdout == '':
+            return (False, stderr.decode())
+        return (True, stdout)
+
+    def _preprocess(self, img):
+        return pil_image_to_bytes(img, 'tiff')
+
 
 class WinRTOCR:
     name = 'winrtocr'
