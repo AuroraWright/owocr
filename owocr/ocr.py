@@ -331,9 +331,9 @@ class AppleLiveText:
 
         process = Popen([self.helper_executable], stdout=PIPE, stdin=PIPE, stderr=PIPE)
         stdout, stderr = process.communicate(input=self._preprocess(img))
-        stdout = stdout.decode()
+        stdout = stdout.decode().rstrip()
         if stdout == '':
-            return (False, stderr.decode())
+            return (False, stderr.decode().rstrip())
         return (True, stdout)
 
     def _preprocess(self, img):
