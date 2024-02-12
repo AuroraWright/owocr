@@ -404,7 +404,7 @@ def run(read_from=None,
         for config_engine in config.get_general('engines').split(','):
             config_engines.append(config_engine.strip().lower())
 
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and __package__ + '.ocr' in x.__module__ and inspect.isclass(x))):
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
             if config.get_engine(engine_class.name) == None:
                 engine_instance = engine_class()

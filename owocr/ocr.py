@@ -23,7 +23,7 @@ try:
     import Vision
     import objc
     from AppKit import NSData, NSImage, NSBundle
-    from PyObjCTools.AppHelper import runConsoleEventLoop, stopEventLoop
+    from CoreFoundation import CFRunLoopRun, CFRunLoopStop, CFRunLoopGetCurrent
 except ImportError:
     pass
 
@@ -349,7 +349,8 @@ class AppleLiveText:
         req.setLocales_(['ja','en'])
         self.result = None
         self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
-        runConsoleEventLoop()
+
+        CFRunLoopRun()
 
         if not self.result:
             return (False, 'Unknown error!')
@@ -362,7 +363,7 @@ class AppleLiveText:
             for line in lines:
                 res += line.string() + '\n'
         self.result = res
-        stopEventLoop()
+        CFRunLoopStop(CFRunLoopGetCurrent())
 
     def _preprocess(self, img):
         image_bytes = pil_image_to_bytes(img, 'tiff')
