@@ -18,7 +18,7 @@ from PIL import Image
 from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
-from notifypy import Notify
+from desktop_notifier import DesktopNotifier
 
 import inspect
 from owocr.ocr import *
@@ -168,9 +168,7 @@ def pause_handler(is_combo=True):
         message = 'Paused!'
 
     if is_combo:
-        notification.title = message
-        notification.message = ''
-        notification.send(block=False)
+        notifier.send_sync(title='owocr', message=message)
     logger.info(message)
     paused = not paused
 
@@ -190,9 +188,7 @@ def engine_change_handler(user_input='s', is_combo=True):
     if engine_index != old_engine_index:
         new_engine_name = engine_instances[engine_index].readable_name
         if is_combo:
-            notification.title = f'Switched to {new_engine_name}'
-            notification.message = ''
-            notification.send(block=False)
+            notifier.send_sync(title='owocr', message=f'Switched to {new_engine_name}')
         engine_color = config.get_general('engine_color')
         logger.opt(ansi=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
 
@@ -289,6 +285,13 @@ def on_window_moved(pos):
     sct_params['top'] = pos[1]
 
 
+async def fix_windows_notifications():
+    try:
+        await notifier.request_authorisation()
+    except OSError:
+        pass
+
+
 def are_images_identical(img1, img2):
     if None in (img1, img2):
         return img1 == img2
@@ -313,9 +316,7 @@ def process_and_write_results(img_or_path, write_to, notifications, enable_filte
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if notifications:
-            notification.title = 'Text recognized:'
-            notification.message = text
-            notification.send(block=False)
+            notifier.send_sync(title='owocr', message='Text recognized: ' + text)
 
         if write_to == 'websocket':
             websocket_server_thread.send_text(text)
@@ -426,7 +427,7 @@ def run(read_from=None,
     global paused
     global just_unpaused
     global first_pressed
-    global notification
+    global notifier
     terminated = False
     paused = pause_at_startup
     just_unpaused = True
@@ -435,8 +436,7 @@ def run(read_from=None,
     engine_color = config.get_general('engine_color')
     delay_secs = config.get_general('delay_secs')
     screen_capture_on_combo = False
-    notification = Notify()
-    notification.application_name = 'owocr'
+    notifier = DesktopNotifier()
     key_combos = {}
 
     if combo_pause != '':
@@ -449,6 +449,9 @@ def run(read_from=None,
 
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
+
+    if sys.platform == 'win32':
+        asyncio.run(fix_windows_notifications())
 
     if read_from == 'websocket' or write_to == 'websocket':
         global websocket_server_thread

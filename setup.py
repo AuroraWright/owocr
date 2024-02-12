@@ -27,7 +27,7 @@ setup(
         "pyperclipfix",
         "pynput",
         "websockets",
-        "notify-py",
+        "desktop-notifier",
         "mss",
         "pywinctl",
         "pysbd",

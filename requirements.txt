@@ -6,7 +6,7 @@ Pillow>=10.0.0
 pyperclipfix
 pynput
 websockets
-notify-py
+desktop-notifier,
 mss
 pywinctl
 pysbd
