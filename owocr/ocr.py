@@ -352,7 +352,7 @@ class AppleLiveText:
 
         CFRunLoopRun()
 
-        if not self.result:
+        if self.result == None:
             return (False, 'Unknown error!')
         return (True, self.result)
 
