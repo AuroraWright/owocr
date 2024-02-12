@@ -465,7 +465,7 @@ def run(read_from=None,
         img = None
 
         if sys.platform == 'darwin':
-            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
+            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString, NSBitmapImageRep, NSBitmapImageFileTypeBMP
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
             mac_clipboard_polling = True
@@ -600,7 +600,10 @@ def run(read_from=None,
                         if NSPasteboardTypeString in pasteboard.types():
                             clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
                         if ignore_flag or clipboard_text != '*ocr_ignore*':
-                            img = Image.open(io.BytesIO(pasteboard.dataForType_(NSPasteboardTypeTIFF)))
+                            img_tiff = pasteboard.dataForType_(NSPasteboardTypeTIFF)
+                            img_representation = NSBitmapImageRep.alloc().initWithData_(img_tiff)
+                            img = img_representation.representationUsingType_properties_(NSBitmapImageFileTypeBMP, None)
+                            img = Image.open(io.BytesIO(img))
                             process_clipboard = True
             else:
                 if not paused:
