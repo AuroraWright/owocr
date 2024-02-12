@@ -303,6 +303,8 @@ class AppleLiveText:
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Live Text is not supported on macOS older than Ventura/13.0!')
         else:
+            app_info = NSBundle.mainBundle().infoDictionary()
+            app_info['LSBackgroundOnly'] = '1'
             objc.loadBundle('VisionKit', globals(), '/System/Library/Frameworks/VisionKit.framework')
             objc.registerMetaDataForSelector(
                 b'VKCImageAnalyzer',
@@ -331,8 +333,6 @@ class AppleLiveText:
                     }
                 }
             )
-            app_info = NSBundle.mainBundle().infoDictionary()
-            app_info['LSBackgroundOnly'] = '1'
             self.analyzer = VKCImageAnalyzer.alloc().init()
             self.available = True
             logger.info('Apple Live Text ready')
