@@ -488,12 +488,13 @@ class EasyOCR:
     key = 'e'
     available = False
 
-    def __init__(self):
+    def __init__(self, config={'gpu': True}):
         if 'easyocr' not in sys.modules:
             logger.warning('easyocr not available, EasyOCR will not work!')
         else:
             logger.info('Loading EasyOCR model')
-            self.model = easyocr.Reader(['ja','en'])
+            logging.getLogger('easyocr.easyocr').disabled = True
+            self.model = easyocr.Reader(['ja','en'], gpu=config['gpu'])
             self.available = True
             logger.info('EasyOCR ready')
 
