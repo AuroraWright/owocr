@@ -6,6 +6,24 @@ Command line client for several Japanese OCR providers derived from [Manga OCR](
 
 This has been tested with Python 3.11. Newer/older versions might work. It can be installed with `pip install owocr`
 
+# Usage
+
+Basic usage is comparable to Manga OCR as in, `owocr` keeps scanning for images and performing text recognition on them. Similarly, by default it will read images from the clipboard and write text back to the clipboard (or optionally, read images from a folder and/or write text to a .txt file if you specify `-r=<folder path>` or `-w=<txt file path>`).
+
+Additionally:
+- Scanning the clipboard takes basically zero system resources on macOS and Windows
+- Supports reading images and/or writing text to a websocket with the `-r=websocket` and/or `-w=websocket` parameters (the port is 7331 by default, and is configurable in the config file)
+- Supports capturing the screen directly with `-r screencapture`. It will default to the entire first screen every 3 seconds, but a different screen/screen coordinates/window/delay can be specified in the config file. Instead of using a delay between screenshots you can also specify a keyboard combo (refer to the config file or the help page)
+- You can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" inside the terminal window
+- You can switch between OCR providers pressing their corresponding keyboard key inside the terminal window (refer to the list of keys in the providers list below)
+- You can start the script paused with the `-p` option or with a specific provider with the `-e` option (refer to `owocr -h` for the list)
+- Holding ctrl or cmd at any time will pause image processing temporarily, or you can specify keyboard combos in the config file to pause/unpause and switch the OCR provider from anywhere (refer to the config file or `owocr -h`)
+- You can enable notifications in the config file or with `-n` to show the text with a native OS notification. **Important for macOS users:** if you use Python from brew, you need to enter this command in your terminal before the first notification: `codesign --deep -f -s - $(brew --cellar python)/*/Frameworks/Python.framework`. Nothing can be done about this unfortunately.
+- Optionally, you can speed up the online providers by installing fpng-py: `pip install fpng-py` (requires setting up a developer environment on most operating systems/Python versions)
+- Optionally, you can improve filtering of non-Japanese text for screen capture by installing transformers: `pip install transformers`
+- A config file (which will be automatically created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is also provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
+- For systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored (mostly useful for devs making their own sender tool)
+
 # Supported providers
 
 ## Local providers
@@ -14,28 +32,12 @@ This has been tested with Python 3.11. Newer/older versions might work. It can b
 - [RapidOCR](https://github.com/RapidAI/RapidOCR): refer to the readme for installation ("r" key)
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
 - Apple Live Text (VisionKit framework): this will work on macOS Ventura or later. It should be the same as Vision except that in Sonoma Apple added vertical text reading ("d" key)
-- WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server (`winocr_serve`), installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file (see below) ("w" key)
+- WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`), and installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
 
 ## Cloud providers
 - Google Lens: Google Vision in disguise (no need for API keys!), however it needs to download a couple megabytes of data for each request. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("l" key)
 - Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
-- Azure Image Analysis: you need to specify an api key and an endpoint in the config file (see below) and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key)
-
-# Usage
-
-It mostly functions like Manga OCR: https://github.com/kha-white/manga-ocr?tab=readme-ov-file#running-in-the-background
-However:
-- it supports reading images and/or writing text to a websocket when the -r=websocket and/or -w=websocket parameters are specified (port 7331 by default, configurable in the config file)
-- it supports capturing the screen directly with -r screencapture. It will default to the entire first screen every 3 seconds, but a different screen/coordinates/window/delay can be specified in the config file. Instead of using a delay it's also possible to specify a keyboard combo (refer to the config file or the help page)
-- you can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" in the terminal window
-- you can switch OCR provider pressing its corresponding keyboard key in the terminal window (refer to the list of keys above). You can also start the script paused with the -p option or with a specific provider with the -e option (refer to `owocr -h` for the list)
-- holding ctrl or cmd at any time will pause image processing temporarily, or you can specify keyboard combos in the config file to pause/unpause and switch the OCR provider (refer to the config file or the help page)
-- for systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored
-- optionally, notifications can be enabled in the config file to show the text with a native OS notification
-- optionally, you can speed up the online providers by installing fpng-py: `pip install fpng-py` (requires a developer environment on some operating systems/Python versions)
-- optionally, you can improve filtering of non-Japanese text for screen capture by installing transformers: `pip install transformers`
-- idle resource usage on macOS and Windows when reading from the clipboard has been eliminated using native OS polling
-- a config file (to be created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
+- Azure Image Analysis: you need to specify an api key and an endpoint in the config file and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key)
 
 # Acknowledgments
 
