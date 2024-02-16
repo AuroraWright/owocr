@@ -202,9 +202,11 @@ class GoogleLens:
 
         timestamp = int(time.time() * 1000)
         url = f'https://lens.google.com/v3/upload?stcs={timestamp}'
+        headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 13; RMX3771) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.144 Mobile Safari/537.36'}
+        cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
         files = {'encoded_image': ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
         try:
-            res = requests.post(url, files=files, timeout=20)
+            res = requests.post(url, files=files, headers=headers, cookies=cookies, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
