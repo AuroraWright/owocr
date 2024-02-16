@@ -34,6 +34,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
+except ImportError:
+    pass
+
 
 config = None
 
@@ -292,6 +297,36 @@ async def fix_windows_notifications():
         pass
 
 
+def normalize_macos_clipboard(img):
+    ns_data = NSData.dataWithBytes_length_(img, len(img))
+    ns_image = NSImage.alloc().initWithData_(ns_data)
+
+    new_image = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
+        None,  # Set to None to create a new bitmap
+        int(ns_image.size().width),
+        int(ns_image.size().height),
+        8,  # Bits per sample
+        4,  # Samples per pixel (R, G, B, A)
+        True,  # Has alpha
+        False,  # Is not planar
+        NSDeviceRGBColorSpace,
+        0,  # Automatically compute bytes per row
+        32  # Bits per pixel (8 bits per sample * 4 samples per pixel)
+    )
+
+    context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(new_image)
+    NSGraphicsContext.setCurrentContext_(context)
+
+    ns_image.drawAtPoint_fromRect_operation_fraction_(
+        NSZeroPoint,
+        NSZeroRect,
+        NSCompositingOperationCopy,
+        1.0
+    )
+
+    return new_image.TIFFRepresentation()
+
+
 def are_images_identical(img1, img2):
     if None in (img1, img2):
         return img1 == img2
@@ -468,7 +503,7 @@ def run(read_from=None,
         img = None
 
         if sys.platform == 'darwin':
-            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString, NSBitmapImageRep, NSBitmapImageFileTypeBMP
+            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
             mac_clipboard_polling = True
@@ -603,9 +638,7 @@ def run(read_from=None,
                         if NSPasteboardTypeString in pasteboard.types():
                             clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
                         if ignore_flag or clipboard_text != '*ocr_ignore*':
-                            img_tiff = pasteboard.dataForType_(NSPasteboardTypeTIFF)
-                            img_representation = NSBitmapImageRep.alloc().initWithData_(img_tiff)
-                            img = img_representation.representationUsingType_properties_(NSBitmapImageFileTypeBMP, None)
+                            img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
                             img = Image.open(io.BytesIO(img))
                             process_clipboard = True
             else:
