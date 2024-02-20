@@ -10,7 +10,6 @@ from math import sqrt
 
 import jaconv
 import numpy as np
-import json
 from PIL import Image
 from loguru import logger
 
@@ -90,8 +89,7 @@ def post_process(text):
 def pil_image_to_bytes(img, img_format='png', png_compression=6):
     if img_format == 'png' and optimized_png_encode:
         raw_data = img.convert('RGBA').tobytes()
-        width, height = img.size
-        image_bytes = fpng_py.fpng_encode_image_to_memory(raw_data, width, height)
+        image_bytes = fpng_py.fpng_encode_image_to_memory(raw_data, img.width, img.height)
     else:
         image_bytes = io.BytesIO()
         img.save(image_bytes, format=img_format, compress_level=png_compression)
@@ -234,9 +232,8 @@ class GoogleLens:
         return x
 
     def _preprocess(self, img):
-        w,h = img.size
-        if w * h > 3000000:
-            aspect_ratio = w/h
+        if img.width * img.height > 3000000:
+            aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
             img = img.resize((new_w, new_h), Image.LANCZOS)
@@ -347,7 +344,7 @@ class AppleLiveText:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1)
+        req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
         req.setLocales_(['ja','en'])
         self.result = None
         self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
@@ -422,7 +419,7 @@ class WinRTOCR:
             if res.status_code != 200:
                 return (False, 'Unknown error!')
 
-            res = json.loads(res.text)['text']
+            res = res.json()['text']
 
         x = (True, res)
         return x
@@ -476,10 +473,9 @@ class AzureImageAnalysis:
 
     def _preprocess(self, img):
         if any(x < 50 for x in img.size):
-            w,h = img.size
-            resize_factor = max(50/w, 50/h)
-            new_w = int(w * resize_factor)
-            new_h = int(h * resize_factor)
+            resize_factor = max(50 / img.width, 50 / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
             img = img.resize((new_w, new_h), Image.LANCZOS)
 
         return pil_image_to_bytes(img)
