@@ -11,6 +11,7 @@ import mss
 import pywinctl
 import asyncio
 import websockets
+import socketserver
 import queue
 import io
 
@@ -123,6 +124,29 @@ class WebsocketServerThread(threading.Thread):
         if len(pending) > 0:
             self.loop.run_until_complete(asyncio.wait(pending))
         self.loop.close()
+
+
+class RequestHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        conn = self.request
+        conn.settimeout(3)
+        data = conn.recv(4)
+        img_size = int.from_bytes(data)
+        img = bytearray()
+        try:
+            while len(img) < img_size:
+                data = conn.recv(4096)
+                if not data:
+                    break
+                img.extend(data)
+        except TimeoutError:
+            pass
+
+        if not paused:
+            unixsocket_queue.put(img)
+            conn.sendall(b'True')
+        else:
+            conn.sendall(b'False')
 
 
 class TextFiltering:
@@ -358,11 +382,7 @@ def process_and_write_results(img_or_path, write_to, notifications, enable_filte
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         else:
-            write_to = Path(write_to)
-            if write_to.suffix.lower() != '.txt':
-                raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
-
-            with write_to.open('a', encoding='utf-8') as f:
+            with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
@@ -400,7 +420,7 @@ def run(read_from=None,
     Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
     Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
 
-    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "screencapture", or a path to a directory.
+    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.
     :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
     :param delay_secs: How often to check for new images, in seconds.
     :param engine: OCR engine to use. Available: "mangaocr", "glens", "gvision", "avision", "alivetext", "azure", "winrtocr", "easyocr", "rapidocr".
@@ -496,7 +516,20 @@ def run(read_from=None,
     if read_from == 'websocket':
         global websocket_queue
         websocket_queue = queue.Queue()
-        logger.opt(ansi=True).info(f"Reading from websocket using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+        read_from_readable = 'websocket'
+    elif read_from == 'unixsocket':
+        if sys.platform == 'win32':
+            raise ValueError('"unixsocket" is not currently supported on Windows')
+
+        global unixsocket_queue
+        unixsocket_queue = queue.Queue()
+        socket_path = Path('/tmp/owocr.sock')
+        if socket_path.exists():
+            socket_path.unlink()
+        unix_socket_server = socketserver.ThreadingUnixStreamServer(str(socket_path), RequestHandler)
+        unix_socket_server_thread = threading.Thread(target=unix_socket_server.serve_forever, daemon=True)
+        unix_socket_server_thread.start()
+        read_from_readable = 'unix socket'
     elif read_from == 'clipboard':
         mac_clipboard_polling = False
         windows_clipboard_polling = False
@@ -516,7 +549,7 @@ def run(read_from=None,
         else:
             from PIL import ImageGrab
 
-        logger.opt(ansi=True).info(f"Reading from clipboard using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+        read_from_readable = 'clipboard'
     elif read_from == 'screencapture':
         if screen_capture_combo != '':
             screen_capture_on_combo = True
@@ -577,11 +610,11 @@ def run(read_from=None,
         sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
 
         filtering = TextFiltering()
-        logger.opt(ansi=True).info(f"Reading with screen capture using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+        read_from_readable = 'screen capture'
     else:
         read_from = Path(read_from)
         if not read_from.is_dir():
-            raise ValueError('read_from must be either "websocket", "clipboard", "screencapture" or a path to a directory')
+            raise ValueError('read_from must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
 
         allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
         old_paths = set()
@@ -589,13 +622,21 @@ def run(read_from=None,
             if path.suffix.lower() in allowed_extensions:
                 old_paths.add(get_path_key(path))
 
-        logger.opt(ansi=True).info(f"Reading from directory {read_from} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+        read_from_readable = f'directory {read_from}'
 
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
     else:
         key_combo_listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)
     key_combo_listener.start()
+
+    if write_to in ('clipboard', 'websocket'):
+        write_to_readable = write_to
+    else:
+        if Path(write_to).suffix.lower() != '.txt':
+            raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
+        write_to_readable = f'file {write_to}'
+    logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
     signal.signal(signal.SIGINT, signal_handler)
 
     while not terminated:
@@ -603,6 +644,16 @@ def run(read_from=None,
             while True:
                 try:
                     item = websocket_queue.get(timeout=delay_secs)
+                except queue.Empty:
+                    break
+                else:
+                    if not paused:
+                        img = Image.open(io.BytesIO(item))
+                        process_and_write_results(img, write_to, notifications, False, '', None)
+        elif read_from == 'unixsocket':
+            while True:
+                try:
+                    item = unixsocket_queue.get(timeout=delay_secs)
                 except queue.Empty:
                     break
                 else:
@@ -710,4 +761,7 @@ def run(read_from=None,
         windows_clipboard_thread.join()
     elif read_from == 'screencapture' and screencapture_window_mode:
         target_window.watchdog.stop()
+    elif read_from == 'unixsocket':
+        unix_socket_server.shutdown()
+        unix_socket_server_thread.join()
     key_combo_listener.stop()
