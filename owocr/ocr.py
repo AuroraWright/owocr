@@ -22,7 +22,7 @@ try:
     import Vision
     import objc
     from AppKit import NSData, NSImage, NSBundle
-    from CoreFoundation import CFRunLoopRun, CFRunLoopStop, CFRunLoopGetCurrent
+    from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode, CFRunLoopStop, CFRunLoopGetCurrent
 except ImportError:
     pass
 
@@ -349,7 +349,7 @@ class AppleLiveText:
         self.result = None
         self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
 
-        CFRunLoopRun()
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
 
         if self.result == None:
             return (False, 'Unknown error!')
