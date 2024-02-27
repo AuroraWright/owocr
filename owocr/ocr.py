@@ -344,16 +344,17 @@ class AppleLiveText:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
-        req.setLocales_(['ja','en'])
-        self.result = None
-        self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
+        with objc.autorelease_pool():
+            req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
+            req.setLocales_(['ja','en'])
+            self.result = None
+            self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
 
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
 
-        if self.result == None:
-            return (False, 'Unknown error!')
-        return (True, self.result)
+            if self.result == None:
+                return (False, 'Unknown error!')
+            return (True, self.result)
 
     def _process(self, analysis, error):
         res = ''

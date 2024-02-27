@@ -36,6 +36,7 @@ except ImportError:
     pass
 
 try:
+    import objc
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
 except ImportError:
     pass
@@ -682,16 +683,17 @@ def run(read_from=None,
                     win32clipboard.CloseClipboard()
             elif mac_clipboard_polling:
                 if not paused:
-                    old_count = count
-                    count = pasteboard.changeCount()
-                    if not just_unpaused and count != old_count and NSPasteboardTypeTIFF in pasteboard.types():
-                        clipboard_text = ''
-                        if NSPasteboardTypeString in pasteboard.types():
-                            clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
-                        if ignore_flag or clipboard_text != '*ocr_ignore*':
-                            img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                            img = Image.open(io.BytesIO(img))
-                            process_clipboard = True
+                    with objc.autorelease_pool():
+                        old_count = count
+                        count = pasteboard.changeCount()
+                        if not just_unpaused and count != old_count and NSPasteboardTypeTIFF in pasteboard.types():
+                            clipboard_text = ''
+                            if NSPasteboardTypeString in pasteboard.types():
+                                clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
+                            if ignore_flag or clipboard_text != '*ocr_ignore*':
+                                img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
+                                img = Image.open(io.BytesIO(img))
+                                process_clipboard = True
             else:
                 if not paused:
                     old_img = img
