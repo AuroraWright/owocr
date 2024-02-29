@@ -29,11 +29,12 @@ setup(
         "websockets",
         "desktop-notifier",
         "mss",
-        "pywinctl",
         "pysbd",
         "langid",
+        "pywinctl;platform_system!='Darwin'",
         "pywin32;platform_system=='Windows'",
         "pyobjc;platform_system=='Darwin'"
+        "psutil;platform_system=='Darwin'"
     ],
     entry_points={
         "console_scripts": [
