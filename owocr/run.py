@@ -38,14 +38,14 @@ except ImportError:
     pass
 
 try:
-    import pywinctl
+    import objc
+    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
+    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
 except ImportError:
     pass
 
 try:
-    import objc
-    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
+    import pywinctl
 except ImportError:
     pass
 
