@@ -31,10 +31,10 @@ setup(
         "mss",
         "pysbd",
         "langid",
-        "pywinctl;platform_system!='Darwin'",
+        "psutil",
+        "pywinctl;platform_system=='Linux'",
         "pywin32;platform_system=='Windows'",
         "pyobjc;platform_system=='Darwin'"
-        "psutil;platform_system=='Darwin'"
     ],
     entry_points={
         "console_scripts": [
