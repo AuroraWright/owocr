@@ -19,6 +19,7 @@ from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifier
+import psutil
 
 import inspect
 from owocr.ocr import *
@@ -26,8 +27,10 @@ from owocr.config import Config
 
 try:
     import win32gui
+    import win32ui
     import win32api 
     import win32con
+    import win32process
     import win32clipboard
     import pywintypes
     import ctypes
@@ -42,8 +45,7 @@ except ImportError:
 try:
     import objc
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
-    import psutil
+    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
 except ImportError:
     pass
 
@@ -157,18 +159,12 @@ class RequestHandler(socketserver.BaseRequestHandler):
 
 
 class MacOSWindowTracker(threading.Thread):
-    def __init__(self, only_active, window_id):
+    def __init__(self, window_id):
         super().__init__()
         self.daemon = True
         self.stop = False
-        self.only_active = only_active
         self.window_id = window_id
-        self.window_x = sct_params['left']
-        self.window_y = sct_params['top']
-        self.window_width = sct_params['width']
-        self.window_height = sct_params['height']
         self.window_active = False
-        self.window_minimized = True
 
     def run(self):
         found = True
@@ -179,36 +175,68 @@ class MacOSWindowTracker(threading.Thread):
                 for i, window in enumerate(window_list):
                     if self.window_id == window['kCGWindowNumber']:
                         found = True
-                        bounds = window['kCGWindowBounds']
-                        is_minimized = False
                         is_active = window_list[i-1].get(kCGWindowName, '') == 'Dock'
                         break
                 if not found:
                     window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
                     if len(window_list) > 0:
                         found = True
-                        bounds = window_list[0]['kCGWindowBounds']
-                        is_minimized = True
                         is_active = False
-            if bounds['X'] != self.window_x or bounds['Y'] != self.window_y:
-                on_window_moved((bounds['X'], bounds['Y']))
-                self.window_x = bounds['X']
-                self.window_y = bounds['Y']
-            if bounds['Width'] != self.window_width or bounds['Height'] != self.window_height:
-                on_window_resized((bounds['Width'], bounds['Height']))
-                self.window_width = bounds['Width']
-                self.window_height = bounds['Height']
+            if self.window_active != is_active:
+                on_window_activated(is_active)
+                self.window_active = is_active
+            time.sleep(0.2)
+        if not found:
+            on_window_closed(False)
+
+
+class WindowsWindowTracker(threading.Thread):
+    def __init__(self, window_handle, only_active):
+        super().__init__()
+        self.daemon = True
+        self.stop = False
+        self.window_handle = window_handle
+        self.only_active = only_active
+        self.window_active = False
+        self.window_minimized = False
+
+    def run(self):
+        found = True
+        while found and not self.stop:
+            found = win32gui.IsWindow(self.window_handle)
             if self.only_active:
+                is_active = self.window_handle == win32gui.GetForegroundWindow()
                 if self.window_active != is_active:
                     on_window_activated(is_active)
                     self.window_active = is_active
             else:
+                is_minimized = win32gui.IsIconic(self.window_handle)
                 if self.window_minimized != is_minimized:
                     on_window_minimized(is_minimized)
                     self.window_minimized = is_minimized
             time.sleep(0.2)
         if not found:
             on_window_closed(False)
+
+
+def get_windows_window_handle(window_title):
+    def callback(hwnd, window_title_part):
+        if window_title_part in win32gui.GetWindowText(hwnd):
+            handles.append(hwnd)
+        return True
+
+    handle = win32gui.FindWindow(None, window_title)
+    if handle:
+        return handle
+
+    handles = []
+    win32gui.EnumWindows(callback, window_title)
+    for handle in handles:
+        _, pid = win32process.GetWindowThreadProcessId(handle)
+        if psutil.Process(pid).name().lower() not in ('cmd.exe', 'powershell.exe', 'windowsterminal.exe'):
+            return handle
+
+    return 0
 
 
 class TextFiltering:
@@ -349,7 +377,7 @@ def signal_handler(sig, frame):
 
 def on_window_closed(alive):
     global terminated
-    if not alive:
+    if not (alive or terminated):
         logger.info('Window closed, terminated!')
         terminated = True
 
@@ -622,35 +650,41 @@ def run(read_from=None,
             screen_capture_coords = ','.join(map(str, screen_capture_coords))
         global screencapture_window_active
         global screencapture_window_visible
-        screencapture_window_mode = False
+        global sct_params
+        screencapture_mode = None
         screencapture_window_active = True
         screencapture_window_visible = True
         last_text = []
-        sct = mss.mss()
         if screen_capture_coords == '':
-            mon = sct.monitors
-            if len(mon) <= screen_capture_monitor:
-                msg = '"screen_capture_monitor" must be a valid monitor number'
-                raise ValueError(msg)
-            coord_left = mon[screen_capture_monitor]['left']
-            coord_top = mon[screen_capture_monitor]['top']
-            coord_width = mon[screen_capture_monitor]['width']
-            coord_height = mon[screen_capture_monitor]['height']
+            screencapture_mode = 0
         elif len(screen_capture_coords.split(',')) == 4:
+            screencapture_mode = 1
+        else:
+            screencapture_mode = 2
+
+        if screencapture_mode != 2:
+            sct = mss.mss()
             mon = sct.monitors
             if len(mon) <= screen_capture_monitor:
                 msg = '"screen_capture_monitor" must be a valid monitor number'
                 raise ValueError(msg)
-            x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
-            coord_left = mon[screen_capture_monitor]['left'] + x
-            coord_top = mon[screen_capture_monitor]['top'] + y
+
+            if screencapture_mode == 0:
+                coord_left = mon[screen_capture_monitor]['left']
+                coord_top = mon[screen_capture_monitor]['top']
+                coord_width = mon[screen_capture_monitor]['width']
+                coord_height = mon[screen_capture_monitor]['height']
+            else:
+                x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
+                coord_left = mon[screen_capture_monitor]['left'] + x
+                coord_top = mon[screen_capture_monitor]['top'] + y
+            
+            sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
         else:
-            global sct_params
-            screencapture_window_mode = True
             if sys.platform == 'darwin':
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
-                window_indexes = []
+                window_ids = []
                 window_id = 0
                 after_dock = False
                 target_index = None
@@ -658,30 +692,41 @@ def run(read_from=None,
                     window_title = window.get(kCGWindowName, '')
                     if after_dock and psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
                         window_titles.append(window_title)
-                        window_indexes.append(i)
+                        window_ids.append(window['kCGWindowNumber'])
                     if window_title == 'Dock':
                         after_dock = True
 
                 if screen_capture_coords in window_titles:
-                    target_index = window_indexes[window_titles.index(screen_capture_coords)]
+                    window_id = window_ids[window_titles.index(screen_capture_coords)]
                 else:
                     for t in window_titles:
                         if screen_capture_coords in t:
-                            target_index = window_indexes[window_titles.index(t)]
+                            window_id = window_ids[window_titles.index(t)]
                             break
 
-                if not target_index:
+                if not window_id:
                     msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
                     raise ValueError(msg)
 
-                window_id = window_list[target_index]['kCGWindowNumber']
-                bounds = window_list[target_index]['kCGWindowBounds']
                 if screen_capture_only_active_windows:
                     screencapture_window_active = False
-                sct_params = {'top': bounds['Y'], 'left': bounds['X'], 'width': bounds['Width'], 'height': bounds['Height']}
-                macos_window_tracker = MacOSWindowTracker(screen_capture_only_active_windows, window_id)
-                macos_window_tracker.start()
+                    macos_window_tracker = MacOSWindowTracker(window_id)
+                    macos_window_tracker.start()
+            elif sys.platform == 'win32':
+                window_handle = get_windows_window_handle(screen_capture_coords)
+
+                if not window_handle:
+                    msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
+                    raise ValueError(msg)
+
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+
+                if screen_capture_only_active_windows:
+                    screencapture_window_active = False
+                windows_window_tracker = WindowsWindowTracker(window_handle, screen_capture_only_active_windows)
+                windows_window_tracker.start()
             else:
+                sct = mss.mss()
                 window_title = None
                 window_titles = pywinctl.getAllTitles()
                 if screen_capture_coords in window_titles:
@@ -701,13 +746,15 @@ def run(read_from=None,
                 coord_left = target_window.left
                 coord_width = target_window.width
                 coord_height = target_window.height
-                sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
+
                 if screen_capture_only_active_windows:
                     screencapture_window_active = target_window.isActive
                     target_window.watchdog.start(isAliveCB=on_window_closed, isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
                 else:
                     screencapture_window_visible = not target_window.isMinimized
                     target_window.watchdog.start(isAliveCB=on_window_closed, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
+
+                sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
 
         filtering = TextFiltering()
         read_from_readable = 'screen capture'
@@ -822,8 +869,45 @@ def run(read_from=None,
                 take_screenshot = screencapture_window_active and not paused
 
             if take_screenshot and screencapture_window_visible:
-                sct_img = sct.grab(sct_params)
-                img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+                if screencapture_mode == 2 and sys.platform == 'darwin':
+                    with objc.autorelease_pool():
+                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
+                        if not cg_image:
+                            on_window_closed(False)
+                            break
+                        ns_imagerep = NSBitmapImageRep.alloc().initWithCGImage_(cg_image)
+                        img = ns_imagerep.TIFFRepresentation()
+                    img = Image.open(io.BytesIO(img))
+                elif screencapture_mode == 2 and sys.platform == 'win32':
+                    try:
+                        coord_left, coord_top, right, bottom = win32gui.GetWindowRect(window_handle)
+                        coord_width = right - coord_left
+                        coord_height = bottom - coord_top
+
+                        hwnd_dc = win32gui.GetWindowDC(window_handle)
+                        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                        save_dc = mfc_dc.CreateCompatibleDC()
+
+                        save_bitmap = win32ui.CreateBitmap()
+                        save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
+                        save_dc.SelectObject(save_bitmap)
+
+                        result = ctypes.windll.user32.PrintWindow(window_handle, save_dc.GetSafeHdc(), 2)
+
+                        bmpinfo = save_bitmap.GetInfo()
+                        bmpstr = save_bitmap.GetBitmapBits(True)
+                    except pywintypes.error:
+                        on_window_closed(False)
+                        break
+                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+
+                    win32gui.DeleteObject(save_bitmap.GetHandle())
+                    save_dc.DeleteDC()
+                    mfc_dc.DeleteDC()
+                    win32gui.ReleaseDC(window_handle, hwnd_dc)
+                else:
+                    sct_img = sct.grab(sct_params)
+                    img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
                 res = process_and_write_results(img, write_to, notifications, True, last_text, filtering)
                 if res != '':
                     last_text = res
@@ -860,10 +944,14 @@ def run(read_from=None,
     if read_from == 'clipboard' and windows_clipboard_polling:
         win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
         windows_clipboard_thread.join()
-    elif read_from == 'screencapture' and screencapture_window_mode:
+    elif read_from == 'screencapture' and screencapture_mode == 2:
         if sys.platform == 'darwin':
-            macos_window_tracker.stop = True
-            macos_window_tracker.join()
+            if screen_capture_only_active_windows:
+                macos_window_tracker.stop = True
+                macos_window_tracker.join()
+        elif sys.platform == 'win32':
+            windows_window_tracker.stop = True
+            windows_window_tracker.join()
         else:
             target_window.watchdog.stop()
     elif read_from == 'unixsocket':
