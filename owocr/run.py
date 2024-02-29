@@ -42,7 +42,7 @@ except ImportError:
 try:
     import objc
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionAll, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
+    from Quartz import CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
     import psutil
 except ImportError:
     pass
@@ -175,7 +175,7 @@ class MacOSWindowTracker(threading.Thread):
         while found and not self.stop:
             found = False
             with objc.autorelease_pool():
-                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID)               
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenAboveWindow | kCGWindowListOptionIncludingWindow, self.window_id)
                 for i, window in enumerate(window_list):
                     if self.window_id == window['kCGWindowNumber']:
                         found = True
@@ -184,14 +184,12 @@ class MacOSWindowTracker(threading.Thread):
                         is_active = window_list[i-1].get(kCGWindowName, '') == 'Dock'
                         break
                 if not found:
-                    window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID)               
-                    for window in window_list:
-                        if self.window_id == window['kCGWindowNumber']:
-                            found = True
-                            bounds = window['kCGWindowBounds']
-                            is_minimized = True
-                            is_active = False
-                            break
+                    window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
+                    if len(window_list) > 0:
+                        found = True
+                        bounds = window_list[0]['kCGWindowBounds']
+                        is_minimized = True
+                        is_active = False
             if bounds['X'] != self.window_x or bounds['Y'] != self.window_y:
                 on_window_moved((bounds['X'], bounds['Y']))
                 self.window_x = bounds['X']
@@ -652,39 +650,34 @@ def run(read_from=None,
             if sys.platform == 'darwin':
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
+                window_indexes = []
                 window_id = 0
                 after_dock = False
-                target_title = None
+                target_index = None
                 for i, window in enumerate(window_list):
                     window_title = window.get(kCGWindowName, '')
                     if after_dock and psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
                         window_titles.append(window_title)
+                        window_indexes.append(i)
                     if window_title == 'Dock':
                         after_dock = True
 
                 if screen_capture_coords in window_titles:
-                    target_title = screen_capture_coords
+                    target_index = window_indexes[window_titles.index(screen_capture_coords)]
                 else:
                     for t in window_titles:
                         if screen_capture_coords in t:
-                            target_title = t
+                            target_index = window_indexes[window_titles.index(t)]
                             break
 
-                if not target_title:
+                if not target_index:
                     msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
                     raise ValueError(msg)
 
-                for i, window in enumerate(window_list):
-                    window_title = window.get(kCGWindowName, '')
-                    if target_title == window_title:
-                        window_id = window['kCGWindowNumber']
-                        bounds = window['kCGWindowBounds']
-                        break
-
+                window_id = window_list[target_index]['kCGWindowNumber']
+                bounds = window_list[target_index]['kCGWindowBounds']
                 if screen_capture_only_active_windows:
                     screencapture_window_active = False
-                else:
-                    screencapture_window_visible = False
                 sct_params = {'top': bounds['Y'], 'left': bounds['X'], 'width': bounds['Width'], 'height': bounds['Height']}
                 macos_window_tracker = MacOSWindowTracker(screen_capture_only_active_windows, window_id)
                 macos_window_tracker.start()
