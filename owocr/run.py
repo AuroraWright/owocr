@@ -182,7 +182,7 @@ class MacOSWindowTracker(threading.Thread):
                     if len(window_list) > 0:
                         found = True
                         is_active = False
-            if self.window_active != is_active:
+            if found and self.window_active != is_active:
                 on_window_activated(is_active)
                 self.window_active = is_active
             time.sleep(0.2)
@@ -202,8 +202,10 @@ class WindowsWindowTracker(threading.Thread):
 
     def run(self):
         found = True
-        while found and not self.stop:
+        while not self.stop:
             found = win32gui.IsWindow(self.window_handle)
+            if not found:
+                break
             if self.only_active:
                 is_active = self.window_handle == win32gui.GetForegroundWindow()
                 if self.window_active != is_active:
