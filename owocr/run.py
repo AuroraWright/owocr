@@ -40,7 +40,10 @@ except ImportError:
 try:
     import objc
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenAboveWindow, kCGWindowListOptionIncludingWindow, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID
+    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, \
+                       kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
+                       CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow
+
 except ImportError:
     pass
 
@@ -170,18 +173,22 @@ class MacOSWindowTracker(threading.Thread):
         found = True
         while found and not self.stop:
             found = False
+            is_active = False
             with objc.autorelease_pool():
-                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenAboveWindow | kCGWindowListOptionIncludingWindow, self.window_id)
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
                 for i, window in enumerate(window_list):
+                    if found and window.get(kCGWindowName, '') == 'Fullscreen Backdrop':
+                        is_active = True
+                        break
                     if self.window_id == window['kCGWindowNumber']:
                         found = True
-                        is_active = window_list[i-1].get(kCGWindowName, '') == 'Dock'
-                        break
+                        if window_list[i-1].get(kCGWindowName, '') == 'Dock':
+                            is_active = True
+                            break
                 if not found:
                     window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
                     if len(window_list) > 0:
                         found = True
-                        is_active = False
             if found and self.window_active != is_active:
                 on_window_activated(is_active)
                 self.window_active = is_active
@@ -684,19 +691,16 @@ def run(read_from=None,
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
         else:
             if sys.platform == 'darwin':
-                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID)
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
                 window_ids = []
                 window_id = 0
-                after_dock = False
                 target_index = None
                 for i, window in enumerate(window_list):
                     window_title = window.get(kCGWindowName, '')
-                    if after_dock and psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
+                    if psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
                         window_titles.append(window_title)
                         window_ids.append(window['kCGWindowNumber'])
-                    if window_title == 'Dock':
-                        after_dock = True
 
                 if screen_capture_coords in window_titles:
                     window_id = window_ids[window_titles.index(screen_capture_coords)]
@@ -877,9 +881,11 @@ def run(read_from=None,
                         if not cg_image:
                             on_window_closed(False)
                             break
-                        ns_imagerep = NSBitmapImageRep.alloc().initWithCGImage_(cg_image)
-                        img = ns_imagerep.TIFFRepresentation()
-                    img = Image.open(io.BytesIO(img))
+                        width = CGImageGetWidth(cg_image)
+                        height = CGImageGetHeight(cg_image)
+                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                        bpr = CGImageGetBytesPerRow(cg_image)
+                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
                 elif screencapture_mode == 2 and sys.platform == 'win32':
                     try:
                         coord_left, coord_top, right, bottom = win32gui.GetWindowRect(window_handle)
