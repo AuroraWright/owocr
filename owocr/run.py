@@ -182,7 +182,7 @@ class MacOSWindowTracker(threading.Thread):
                         break
                     if self.window_id == window['kCGWindowNumber']:
                         found = True
-                        if window_list[i-1].get(kCGWindowName, '') == 'Dock':
+                        if i == 0 or window_list[i-1].get(kCGWindowName, '') in ('Dock', 'Color Enforcer Window'):
                             is_active = True
                             break
                 if not found:
