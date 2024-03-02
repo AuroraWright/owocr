@@ -695,7 +695,6 @@ def run(read_from=None,
                 window_titles = []
                 window_ids = []
                 window_id = 0
-                target_index = None
                 for i, window in enumerate(window_list):
                     window_title = window.get(kCGWindowName, '')
                     if psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
