@@ -4,7 +4,7 @@ Command line client for several Japanese OCR providers derived from [Manga OCR](
 
 # Installation
 
-This has been tested with Python 3.11. Newer/older versions might work. It can be installed with `pip install owocr`
+This has been tested with Python 3.11 and 3.12. Newer/older versions might work. It can be installed with `pip install owocr`
 
 # Usage
 
@@ -13,7 +13,8 @@ Basic usage is comparable to Manga OCR as in, `owocr` keeps scanning for images 
 Additionally:
 - Scanning the clipboard takes basically zero system resources on macOS and Windows
 - Supports reading images and/or writing text to a websocket with the `-r=websocket` and/or `-w=websocket` parameters (the port is 7331 by default, and is configurable in the config file)
-- Supports capturing the screen directly with `-r screencapture`. It will default to the entire first screen every 3 seconds, but a different screen/screen coordinates/window/delay can be specified in the config file. Instead of using a delay between screenshots you can also specify a keyboard combo (refer to the config file or the help page)
+- Supports reading images from a Unix domain socket (`/tmp/owocr.sock`) on macOS and Linux with `-r=unixsocket`
+- Supports capturing the screen directly with `-r=screencapture`. It will default to the entire first screen every 3 seconds, but a different screen/screen coordinates/window/delay can be specified in the config file. Instead of using a delay between screenshots you can also specify a keyboard combo (refer to the config file or the help page)
 - You can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" inside the terminal window
 - You can switch between OCR providers pressing their corresponding keyboard key inside the terminal window (refer to the list of keys in the providers list below)
 - You can start the script paused with the `-p` option or with a specific provider with the `-e` option (refer to `owocr -h` for the list)
