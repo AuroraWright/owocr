@@ -516,7 +516,8 @@ def run(read_from=None,
     """
     Japanese OCR client
 
-    Run OCR in the background, waiting for new images to appear either in system clipboard or a directory, or to be sent via a websocket.
+    Runs OCR in the background.
+    It can read images copied to the system clipboard or placed in a directory, images sent via a websocket or a Unix domain socket, or directly capture a screen (or a portion of it) or a window.
     Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
 
     :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.
@@ -529,7 +530,7 @@ def run(read_from=None,
     :param notifications: Show an operating system notification with the detected text.
     :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param combo_engine_switch: Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
-    :param screen_capture_monitor: Specifies monitor to target when reading with screen capture.
+    :param screen_capture_monitor: Specifies monitor to target when reading with screen capture. Will be ignored when screen_capture_coords is a window name.
     :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
     :param screen_capture_delay_secs: Specifies the delay (in seconds) between screenshots when reading with screen capture.
     :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_coords is a window name, specifies whether to only target the window while it's active.
