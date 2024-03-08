@@ -537,7 +537,7 @@ def run(read_from=None,
     :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
 
-    if read_from == 'screencapture' and sys.platform != 'darwin':
+    if read_from == 'screencapture' and sys.platform not in ('darwin', 'win32'):
         active_window_name = pywinctl.getActiveWindowTitle()
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
