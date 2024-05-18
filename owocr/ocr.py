@@ -332,7 +332,6 @@ class AppleLiveText:
                     }
                 }
             )
-            self.analyzer = VKCImageAnalyzer.alloc().init()
             self.available = True
             logger.info('Apple Live Text ready')
 
@@ -345,10 +344,11 @@ class AppleLiveText:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         with objc.autorelease_pool():
+            analyzer = VKCImageAnalyzer.alloc().init()
             req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
             req.setLocales_(['ja','en'])
             self.result = None
-            self.analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
+            analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
 
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
 
