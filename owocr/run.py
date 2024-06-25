@@ -269,7 +269,10 @@ class TextFiltering:
 
     def __call__(self, text, last_text):
         orig_text = self.segmenter.segment(text)
-        new_blocks = [block for block in orig_text if block not in last_text]
+        if last_text[1] != engine_index:
+            new_blocks = orig_text
+        else:
+            new_blocks = [block for block in orig_text if block not in last_text[0]]
         final_blocks = []
         if self.accurate_filtering:
             detection_results = self.pipe(new_blocks, top_k=2, truncation=True)
@@ -453,7 +456,7 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(img_or_path, write_to, notifications, enable_filtering, last_text, filtering):
+def process_and_write_results(img_or_path, write_to, notifications, last_text, filtering):
     engine_instance = engine_instances[engine_index]
     t0 = time.time()
     res, text = engine_instance(img_or_path)
@@ -462,7 +465,7 @@ def process_and_write_results(img_or_path, write_to, notifications, enable_filte
     orig_text = ''
     engine_color = config.get_general('engine_color')
     if res:
-        if enable_filtering:
+        if filtering:
             text, orig_text = filtering(text, last_text)
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
@@ -479,7 +482,7 @@ def process_and_write_results(img_or_path, write_to, notifications, enable_filte
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
-    return orig_text
+    return (orig_text, engine_index)
 
 
 def get_path_key(path):
@@ -654,7 +657,7 @@ def run(read_from=None,
         screencapture_mode = None
         screencapture_window_active = True
         screencapture_window_visible = True
-        last_text = []
+        last_text = ([], engine_index)
         if screen_capture_coords == '':
             screencapture_mode = 0
         elif len(screen_capture_coords.split(',')) == 4:
@@ -792,7 +795,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, False, '', None)
+                        process_and_write_results(img, write_to, notifications, '', None)
         elif read_from == 'unixsocket':
             while True:
                 try:
@@ -802,7 +805,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, False, '', None)
+                        process_and_write_results(img, write_to, notifications, '', None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -850,7 +853,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(img, write_to, notifications, False, '', None)
+                process_and_write_results(img, write_to, notifications, '', None)
 
             just_unpaused = False
 
@@ -906,8 +909,8 @@ def run(read_from=None,
                 else:
                     sct_img = sct.grab(sct_params)
                     img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-                res = process_and_write_results(img, write_to, notifications, True, last_text, filtering)
-                if res != '':
+                res = process_and_write_results(img, write_to, notifications, last_text, filtering)
+                if res[0] != '':
                     last_text = res
                 delay = screen_capture_delay_secs
             else:
@@ -929,7 +932,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(img, write_to, notifications, False, '', None)
+                                process_and_write_results(img, write_to, notifications, '', None)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
