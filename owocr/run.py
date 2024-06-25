@@ -462,7 +462,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_text, f
     res, text = engine_instance(img_or_path)
     t1 = time.time()
 
-    orig_text = ''
+    orig_text = None
     engine_color = config.get_general('engine_color')
     if res:
         if filtering:
@@ -482,7 +482,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_text, f
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
-    return (orig_text, engine_index)
+    return orig_text
 
 
 def get_path_key(path):
@@ -910,8 +910,8 @@ def run(read_from=None,
                     sct_img = sct.grab(sct_params)
                     img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
                 res = process_and_write_results(img, write_to, notifications, last_text, filtering)
-                if res[0] != '':
-                    last_text = res
+                if res:
+                    last_text = (res, engine_index)
                 delay = screen_capture_delay_secs
             else:
                 delay = delay_secs
