@@ -294,8 +294,8 @@ class TextFiltering:
         if self.accurate_filtering:
             detection_results = self.pipe(new_blocks, top_k=2, truncation=True)
             for idx, block in enumerate(new_blocks):
-                if((detection_results[idx][0]['label'] == 'ja' and detection_results[idx][0]['score'] >= 0.85) or
-                   (detection_results[idx][1]['label'] == 'ja' and detection_results[idx][1]['score'] >= 0.85)):
+                if((detection_results[idx][0]['label'] == 'ja' and detection_results[idx][0]['score'] >= 0.20) or
+                   (detection_results[idx][1]['label'] == 'ja' and detection_results[idx][1]['score'] >= 0.20)):
                     final_blocks.append(block)
         else:
             for block in new_blocks:
