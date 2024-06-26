@@ -795,7 +795,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, '', None)
+                        process_and_write_results(img, write_to, notifications, None, None)
         elif read_from == 'unixsocket':
             while True:
                 try:
@@ -805,7 +805,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, '', None)
+                        process_and_write_results(img, write_to, notifications, None, None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -853,7 +853,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(img, write_to, notifications, '', None)
+                process_and_write_results(img, write_to, notifications, None, None)
 
             just_unpaused = False
 
@@ -932,7 +932,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(img, write_to, notifications, '', None)
+                                process_and_write_results(img, write_to, notifications, None, None)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
