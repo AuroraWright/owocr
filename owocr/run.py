@@ -292,11 +292,12 @@ class TextFiltering:
 
         final_blocks = []
         if self.accurate_filtering:
-            detection_results = self.pipe(new_blocks, top_k=2, truncation=True)
+            detection_results = self.pipe(new_blocks, top_k=3, truncation=True)
             for idx, block in enumerate(new_blocks):
-                if((detection_results[idx][0]['label'] == 'ja' and detection_results[idx][0]['score'] >= 0.20) or
-                   (detection_results[idx][1]['label'] == 'ja' and detection_results[idx][1]['score'] >= 0.20)):
-                    final_blocks.append(block)
+                for result in detection_results[idx]:
+                    if result['label'] == 'ja':
+                        final_blocks.append(block)
+                        break
         else:
             for block in new_blocks:
                 if self.classify(block)[0] == 'ja':
