@@ -14,6 +14,7 @@ class Config:
         'write_to': 'clipboard',
         'engine': '',
         'pause_at_startup': False,
+        'auto_pause' : 0,
         'ignore_flag': False,
         'delete_images': False,
         'engines': [],

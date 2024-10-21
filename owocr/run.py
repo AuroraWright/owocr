@@ -307,6 +307,33 @@ class TextFiltering:
         return text, orig_text_filtered
 
 
+class AutopauseTimer:
+    def __init__(self, timeout):
+        self.stop_event = threading.Event()
+        self.timeout = timeout
+        self.timer_thread = None
+
+    def start(self):
+        self.stop()
+        self.stop_event.clear()
+        self.timer_thread = threading.Thread(target=self._countdown)
+        self.timer_thread.start()
+
+    def stop(self):
+        if not self.stop_event.is_set() and self.timer_thread and self.timer_thread.is_alive():
+            self.stop_event.set()
+            self.timer_thread.join()
+
+    def _countdown(self):
+        seconds = self.timeout
+        while seconds > 0 and not self.stop_event.is_set():
+            time.sleep(1)
+            seconds -= 1
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+            pause_handler(True)
+
+
 def pause_handler(is_combo=True):   
     global paused
     global just_unpaused
@@ -315,6 +342,9 @@ def pause_handler(is_combo=True):
         just_unpaused = True
     else:
         message = 'Paused!'
+
+    if auto_pause_handler:
+        auto_pause_handler.stop()
 
     if is_combo:
         notifier.send(title='owocr', message=message)
@@ -497,6 +527,9 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         else:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
+
+        if auto_pause_handler:
+            auto_pause_handler.start()
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
@@ -519,6 +552,7 @@ def run(read_from=None,
         ignore_flag=None,
         delete_images=None,
         notifications=None,
+        auto_pause=None,
         combo_pause=None,
         combo_engine_switch=None,
         screen_capture_monitor=None,
@@ -542,6 +576,7 @@ def run(read_from=None,
     :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
     :param delete_images: Delete image files after processing when reading from a directory.
     :param notifications: Show an operating system notification with the detected text.
+    :param auto_pause: Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.
     :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param combo_engine_switch: Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param screen_capture_monitor: Specifies monitor to target when reading with screen capture. Will be ignored when screen_capture_coords is a window name.
@@ -597,16 +632,21 @@ def run(read_from=None,
     global just_unpaused
     global first_pressed
     global notifier
+    global auto_pause_handler
     terminated = False
     paused = pause_at_startup
     just_unpaused = True
     first_pressed = None
+    auto_pause_handler = None
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
     delay_secs = config.get_general('delay_secs')
     screen_capture_on_combo = False
     notifier = DesktopNotifierSync()
     key_combos = {}
+
+    if read_from != 'screencapture' and auto_pause != 0:
+        auto_pause_handler = AutopauseTimer(auto_pause)
 
     if combo_pause != '':
         key_combos[combo_pause] = pause_handler
@@ -977,3 +1017,5 @@ def run(read_from=None,
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
     key_combo_listener.stop()
+    if auto_pause_handler:
+        auto_pause_handler.stop()
