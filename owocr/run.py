@@ -331,7 +331,8 @@ class AutopauseTimer:
             seconds -= 1
         if not self.stop_event.is_set():
             self.stop_event.set()
-            pause_handler(True)
+            if not paused:
+                pause_handler(True)
 
 
 def pause_handler(is_combo=True):   
@@ -528,7 +529,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
 
-        if auto_pause_handler:
+        if auto_pause_handler and not paused:
             auto_pause_handler.start()
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
