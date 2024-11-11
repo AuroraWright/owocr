@@ -304,7 +304,8 @@ class AppleLiveText:
         else:
             app_info = NSBundle.mainBundle().infoDictionary()
             app_info['LSBackgroundOnly'] = '1'
-            objc.loadBundle('VisionKit', globals(), '/System/Library/Frameworks/VisionKit.framework')
+            self.VKCImageAnalyzer = objc.lookUpClass('VKCImageAnalyzer')
+            self.VKCImageAnalyzerRequest = objc.lookUpClass('VKCImageAnalyzerRequest')
             objc.registerMetaDataForSelector(
                 b'VKCImageAnalyzer',
                 b'processRequest:progressHandler:completionHandler:',
@@ -344,8 +345,8 @@ class AppleLiveText:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         with objc.autorelease_pool():
-            analyzer = VKCImageAnalyzer.alloc().init()
-            req = VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
+            analyzer = self.VKCImageAnalyzer.alloc().init()
+            req = self.VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
             req.setLocales_(['ja','en'])
             self.result = None
             analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
