@@ -269,7 +269,7 @@ class TextFiltering:
             if torch.cuda.is_available():
                 device = 0
             elif torch.backends.mps.is_available():
-                device = "mps"
+                device = 'mps'
             else:
                 device = -1
             self.pipe = pipeline('text-classification', model=model_ckpt, tokenizer=tokenizer, device=device)
