@@ -112,6 +112,7 @@ class MangaOcr:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
             logger.disable('manga_ocr')
+            logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
             from manga_ocr import ocr
             ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
