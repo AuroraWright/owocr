@@ -494,7 +494,7 @@ class EasyOCR:
             logger.warning('easyocr not available, EasyOCR will not work!')
         else:
             logger.info('Loading EasyOCR model')
-            logging.getLogger('easyocr.easyocr').disabled = True
+            logging.getLogger('easyocr.easyocr').setLevel(logging.ERROR)
             self.model = easyocr.Reader(['ja','en'], gpu=config['gpu'])
             self.available = True
             logger.info('EasyOCR ready')
@@ -542,7 +542,7 @@ class RapidOCR:
 
             logger.info('Loading RapidOCR model')
             self.model = ROCR(rec_model_path=rapidocr_model_file)
-            logging.getLogger().disabled = True
+            logging.getLogger().setLevel(logging.ERROR)
             self.available = True
             logger.info('RapidOCR ready')
 
