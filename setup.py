@@ -5,7 +5,7 @@ long_description = (Path(__file__).parent / "README.md").read_text('utf-8')
 
 setup(
     name="owocr",
-    version='1.8.2',
+    version='1.8.3',
     description="Japanese OCR",
     long_description=long_description,
     long_description_content_type="text/markdown",

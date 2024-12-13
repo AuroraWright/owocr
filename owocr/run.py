@@ -515,7 +515,7 @@ def are_images_identical(img1, img2):
 
 
 def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering):
-    if auto_pause_handler and not paused:
+    if auto_pause_handler:
         auto_pause_handler.stop()
 
     engine_instance = engine_instances[engine_index]
