@@ -40,11 +40,12 @@ except ImportError:
 
 try:
     import objc
+    import platform
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, \
+    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, \
                        kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
                        CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow
-
+    from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
 except ImportError:
     pass
 
@@ -227,6 +228,51 @@ class WindowsWindowTracker(threading.Thread):
             time.sleep(0.2)
         if not found:
             on_window_closed(False)
+
+
+def capture_macos_window_screenshot(window_id):
+    def shareable_content_completion_handler(shareable_content, error):
+        if error:
+            screencapturekit_queue.put(None)
+            return
+
+        target_window = None
+        for window in shareable_content.windows():
+            if window.windowID() == window_id:
+                target_window = window
+                break
+
+        if not target_window:
+            screencapturekit_queue.put(None)
+            return
+
+        with objc.autorelease_pool():
+            content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
+
+            frame = content_filter.contentRect()
+            scale = content_filter.pointPixelScale()
+            width = frame.size.width * scale
+            height = frame.size.height * scale
+            configuration = SCStreamConfiguration.alloc().init()
+            configuration.setWidth_(width)
+            configuration.setHeight_(height)
+            configuration.setShowsCursor_(False)
+            configuration.setCaptureResolution_(SCCaptureResolutionBest)
+
+            SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
+                content_filter, configuration, capture_image_completion_handler
+            )
+
+    def capture_image_completion_handler(image, error):
+        if error:
+            screencapturekit_queue.put(None)
+            return
+
+        screencapturekit_queue.put(image)
+
+    SCShareableContent.getShareableContentWithCompletionHandler_(
+        shareable_content_completion_handler
+    )
 
 
 def get_windows_window_handle(window_title):
@@ -695,7 +741,7 @@ def run(read_from=None,
         unix_socket_server_thread.start()
         read_from_readable = 'unix socket'
     elif read_from == 'clipboard':
-        mac_clipboard_polling = False
+        macos_clipboard_polling = False
         windows_clipboard_polling = False
         img = None
 
@@ -703,7 +749,7 @@ def run(read_from=None,
             from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
             pasteboard = NSPasteboard.generalPasteboard()
             count = pasteboard.changeCount()
-            mac_clipboard_polling = True
+            macos_clipboard_polling = True
         elif sys.platform == 'win32':
             global clipboard_event
             clipboard_event = threading.Event()
@@ -756,6 +802,14 @@ def run(read_from=None,
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
         else:
             if sys.platform == 'darwin':
+                if int(platform.mac_ver()[0].split('.')[0]) < 12:
+                    old_macos_screenshot_api = True
+                else:
+                    global screencapturekit_queue
+                    screencapturekit_queue = queue.Queue()
+                    CGMainDisplayID()
+                    old_macos_screenshot_api = False
+
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
                 window_ids = []
@@ -897,7 +951,7 @@ def run(read_from=None,
                             img = Image.open(io.BytesIO(win32clipboard.GetClipboardData(win32clipboard.CF_DIB)))
                             process_clipboard = True
                     win32clipboard.CloseClipboard()
-            elif mac_clipboard_polling:
+            elif macos_clipboard_polling:
                 if not paused:
                     with objc.autorelease_pool():
                         old_count = count
@@ -941,7 +995,11 @@ def run(read_from=None,
             if take_screenshot and screencapture_window_visible:
                 if screencapture_mode == 2 and sys.platform == 'darwin':
                     with objc.autorelease_pool():
-                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
+                        if old_macos_screenshot_api:
+                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
+                        else:
+                            capture_macos_window_screenshot(window_id)
+                            cg_image = screencapturekit_queue.get()
                         if not cg_image:
                             on_window_closed(False)
                             break
