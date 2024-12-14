@@ -494,7 +494,7 @@ def signal_handler(sig, frame):
 def on_window_closed(alive):
     global terminated
     if not (alive or terminated):
-        logger.info('Window closed, terminated!')
+        logger.info('Window closed or error occurred, terminated!')
         terminated = True
 
 
@@ -999,7 +999,10 @@ def run(read_from=None,
                             cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
                         else:
                             capture_macos_window_screenshot(window_id)
-                            cg_image = screencapturekit_queue.get()
+                            try:
+                                cg_image = screencapturekit_queue.get(timeout=0.5)
+                            except queue.Empty:
+                                cg_image = None
                         if not cg_image:
                             on_window_closed(False)
                             break
