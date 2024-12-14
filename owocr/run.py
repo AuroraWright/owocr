@@ -802,7 +802,7 @@ def run(read_from=None,
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
         else:
             if sys.platform == 'darwin':
-                if int(platform.mac_ver()[0].split('.')[0]) < 12:
+                if int(platform.mac_ver()[0].split('.')[0]) < 14:
                     old_macos_screenshot_api = True
                 else:
                     global screencapturekit_queue
