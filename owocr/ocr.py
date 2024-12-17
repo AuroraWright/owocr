@@ -64,6 +64,8 @@ except ImportError:
 
 try:
     import pyjson5
+    import random
+    import string
 except ImportError:
     pass
 
@@ -200,10 +202,11 @@ class GoogleLens:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         timestamp = int(time.time() * 1000)
-        url = f'https://lens.google.com/v3/upload?stcs={timestamp}'
-        headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 13; RMX3771) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.144 Mobile Safari/537.36'}
+        random_filename = ''.join(random.choices(string.ascii_letters, k=8))
+        url = f'https://lens.google.com/v3/upload?st={timestamp}'
+        headers = {'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1 STvPlus/9e6462f14a056031e5b32ece2af7c3ca,gzip(gfe),gzip(gfe)'}
         cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
-        files = {'encoded_image': ('owo' + str(timestamp) + '.png', self._preprocess(img), 'image/png')}
+        files = {'encoded_image': (random_filename + '.png', self._preprocess(img), 'image/png')}
         try:
             res = requests.post(url, files=files, headers=headers, cookies=cookies, timeout=20)
         except requests.exceptions.Timeout:
