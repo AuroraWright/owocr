@@ -88,13 +88,15 @@ def post_process(text):
     return text
 
 
-def pil_image_to_bytes(img, img_format='png', png_compression=6):
+def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80):
     if img_format == 'png' and optimized_png_encode:
         raw_data = img.convert('RGBA').tobytes()
         image_bytes = fpng_py.fpng_encode_image_to_memory(raw_data, img.width, img.height)
     else:
         image_bytes = io.BytesIO()
-        img.save(image_bytes, format=img_format, compress_level=png_compression)
+        if img_format == 'jpeg':
+            img = img.convert('RGB')
+        img.save(image_bytes, format=img_format, compress_level=png_compression, quality=jpeg_quality)
         image_bytes = image_bytes.getvalue()
     return image_bytes
 
@@ -598,7 +600,7 @@ class OCRSpace:
             'apikey': self.api_key,
             'language': 'jpn'
         }
-        files = {'file': ('image.png', self._preprocess(img), 'image/png')}
+        files = {'file': ('image.jpg', self._preprocess(img), 'image/jpeg')}
 
         try:
             res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=20)
@@ -612,12 +614,14 @@ class OCRSpace:
 
         res = res.json()
 
-        if type(res) == str or res['IsErroredOnProcessing']:
+        if type(res) == str:
             return (False, 'Unknown error!')
+        if res['IsErroredOnProcessing']:
+            return (False, res['ErrorMessage'])
 
         res = res['ParsedResults'][0]['ParsedText']
         x = (True, res)
         return x
 
     def _preprocess(self, img):
-        return pil_image_to_bytes(img)
+        return pil_image_to_bytes(img, 'jpeg')
