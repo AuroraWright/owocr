@@ -40,6 +40,7 @@ Additionally:
 - Google Lens: Google Vision in disguise (no need for API keys!), however it needs to download a couple megabytes of data for each request. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("l" key)
 - Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
 - Azure Image Analysis: you need to specify an api key and an endpoint in the config file and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key)
+- OCRSpace: you need to specify an api key in the config file and to install requests (`pip install requests`) ("o" key)
 
 # Acknowledgments
 

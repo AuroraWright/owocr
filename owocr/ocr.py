@@ -568,3 +568,56 @@ class RapidOCR:
 
     def _preprocess(self, img):
         return pil_image_to_numpy_array(img)
+
+class OCRSpace:
+    name = 'ocrspace'
+    readable_name = 'OCRSpace'
+    key = 'o'
+    available = False
+
+    def __init__(self, config={}):
+        if 'requests' not in sys.modules:
+            logger.warning('requests not available, OCRSpace will not work!')
+        else:
+            try:
+                self.api_key = config['api_key']
+                self.available = True
+                logger.info('OCRSpace ready')
+            except:
+                logger.warning('Error reading API key from config, OCRSpace will not work!')
+
+    def __call__(self, img_or_path):
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        data = {
+            'apikey': self.api_key,
+            'language': 'jpn'
+        }
+        files = {'file': ('image.png', self._preprocess(img), 'image/png')}
+
+        try:
+            res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=20)
+        except requests.exceptions.Timeout:
+            return (False, 'Request timeout!')
+        except requests.exceptions.ConnectionError:
+            return (False, 'Connection error!')
+
+        if res.status_code != 200:
+            return (False, 'Unknown error!')
+
+        res = res.json()
+
+        if type(res) == str or res['IsErroredOnProcessing']:
+            return (False, 'Unknown error!')
+
+        res = res['ParsedResults'][0]['ParsedText']
+        x = (True, res)
+        return x
+
+    def _preprocess(self, img):
+        return pil_image_to_bytes(img)
