@@ -42,8 +42,8 @@ try:
     import objc
     import platform
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, CGWindowListCreateDescriptionFromArray, \
-                       kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
+    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
+                       CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
                        CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
 except ImportError:
@@ -254,10 +254,12 @@ def capture_macos_window_screenshot(window_id):
             width = frame.size.width * scale
             height = frame.size.height * scale
             configuration = SCStreamConfiguration.alloc().init()
+            configuration.setSourceRect_(CGRectMake(0, 0, frame.size.width, frame.size.height))
             configuration.setWidth_(width)
             configuration.setHeight_(height)
             configuration.setShowsCursor_(False)
             configuration.setCaptureResolution_(SCCaptureResolutionBest)
+            configuration.setIgnoreGlobalClipSingleWindow_(True)
 
             SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
                 content_filter, configuration, capture_image_completion_handler

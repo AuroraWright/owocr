@@ -614,7 +614,7 @@ class OCRSpace:
 
         res = res.json()
 
-        if type(res) == str:
+        if isinstance(res, str):
             return (False, 'Unknown error!')
         if res['IsErroredOnProcessing']:
             return (False, res['ErrorMessage'])
