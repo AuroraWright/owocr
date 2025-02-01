@@ -64,8 +64,6 @@ except ImportError:
 
 try:
     import pyjson5
-    import random
-    import string
 except ImportError:
     pass
 
@@ -203,14 +201,53 @@ class GoogleLens:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        timestamp = int(time.time() * 1000)
-        random_filename = ''.join(random.choices(string.ascii_letters, k=8))
-        url = f'https://lens.google.com/v3/upload?st={timestamp}'
-        headers = {'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1 STvPlus/9e6462f14a056031e5b32ece2af7c3ca,gzip(gfe),gzip(gfe)'}
+        fake_chromium_config = {
+            'viewport': (1920, 1080),
+            'major_version': '109',
+            'version': '109.0.5414.87',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.87 Safari/537.36'
+        }
+
+        url = 'https://lens.google.com/v3/upload'
+        files = {'encoded_image': ('image.png', self._preprocess(img), 'image/png')}
+        params = {
+            'ep': 'ccm', #EntryPoint
+            're': 'dcsp', #RenderingEnvironment - DesktopChromeSurfaceProto
+            's': '4', #SurfaceProtoValue - Surface.CHROMIUM
+            'st': str(int(time.time() * 1000)),
+            'sideimagesearch': '1',
+            'vpw': str(fake_chromium_config['viewport'][0]),
+            'vph': str(fake_chromium_config['viewport'][1])
+        }
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Origin': 'https://lens.google.com',
+            'Referer': 'https://lens.google.com/',
+            'Sec-Ch-Ua': f'"Not A(Brand";v="99", "Google Chrome";v="{fake_chromium_config["major_version"]}", "Chromium";v="{fake_chromium_config["major_version"]}"',
+            'Sec-Ch-Ua-Arch': '"x86"',
+            'Sec-Ch-Ua-Bitness': '"64"',
+            'Sec-Ch-Ua-Full-Version': f'"{fake_chromium_config["version"]}"',
+            'Sec-Ch-Ua-Full-Version-List': f'"Not A(Brand";v="99.0.0.0", "Google Chrome";v="{fake_chromium_config["major_version"]}", "Chromium";v="{fake_chromium_config["major_version"]}"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Model': '""',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Ch-Ua-Platform-Version': '"15.0.0"',
+            'Sec-Ch-Ua-Wow64': '?0',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': fake_chromium_config['user_agent'],
+            'X-Client-Data': 'CIW2yQEIorbJAQipncoBCIH+ygEIkqHLAQiKo8sBCPWYzQEIhaDNAQji0M4BCLPTzgEI19TOAQjy1c4BCJLYzgEIwNjOAQjM2M4BGM7VzgE='
+        }
         cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
-        files = {'encoded_image': (random_filename + '.png', self._preprocess(img), 'image/png')}
+
         try:
-            res = requests.post(url, files=files, headers=headers, cookies=cookies, timeout=20)
+            res = requests.post(url, files=files, params=params, headers=headers, cookies=cookies, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:

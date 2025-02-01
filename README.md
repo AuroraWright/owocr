@@ -46,6 +46,7 @@ Additionally:
 
 This uses code from/references these projects:
 - Viola for working on the Google Lens implementation and helping with the pyobjc VisionKit code!
+- [google-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr) for additional Lens reverse engineering and the headers/URL parameters I currently use
 - @ronaldoussoren for helping with the pyobjc VisionKit code
 - [Manga OCR](https://github.com/kha-white/manga-ocr)
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
