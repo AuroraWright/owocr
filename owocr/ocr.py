@@ -251,7 +251,7 @@ class GoogleLens:
         }
 
         try:
-            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers)
+            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
