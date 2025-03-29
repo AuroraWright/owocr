@@ -68,6 +68,16 @@ except ImportError:
     pass
 
 try:
+    from google.protobuf.json_format import MessageToDict
+    from .py_lens.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
+    from .py_lens.lens_overlay_platform_pb2 import PLATFORM_WEB
+    from .py_lens.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
+    from .py_lens.lens_overlay_filters_pb2 import AUTO_FILTER
+    import random
+except ImportError:
+    pass
+
+try:
     import fpng_py
     optimized_png_encode = True
 except:
@@ -184,12 +194,11 @@ class GoogleLens:
     available = False
 
     def __init__(self):
-        if 'pyjson5' not in sys.modules:
-            logger.warning('pyjson5 not available, Google Lens will not work!')
+        if 'google.protobuf' not in sys.modules:
+            logger.warning('protobuf not available, Google Lens will not work!')
         elif 'requests' not in sys.modules:
             logger.warning('requests not available, Google Lens will not work!')
         else:
-            self.regex = re.compile(r">AF_initDataCallback\(({key: 'ds:1'.*?)\);</script>")
             self.available = True
             logger.info('Google Lens ready')
 
@@ -201,53 +210,48 @@ class GoogleLens:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
-        fake_chromium_config = {
-            'viewport': (1920, 1080),
-            'major_version': '109',
-            'version': '109.0.5414.87',
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.87 Safari/537.36'
-        }
+        request = LensOverlayServerRequest()
 
-        url = 'https://lens.google.com/v3/upload'
-        files = {'encoded_image': ('image.png', self._preprocess(img), 'image/png')}
-        params = {
-            'ep': 'ccm', #EntryPoint
-            're': 'dcsp', #RenderingEnvironment - DesktopChromeSurfaceProto
-            's': '4', #SurfaceProtoValue - Surface.CHROMIUM
-            'st': str(int(time.time() * 1000)),
-            'sideimagesearch': '1',
-            'vpw': str(fake_chromium_config['viewport'][0]),
-            'vph': str(fake_chromium_config['viewport'][1])
-        }
+        request.objects_request.request_context.request_id.uuid = random.randint(0, 2**64 - 1)
+        request.objects_request.request_context.request_id.sequence_id = 0
+        request.objects_request.request_context.request_id.image_sequence_id = 0
+        request.objects_request.request_context.request_id.analytics_id = random.randbytes(16)
+        request.objects_request.request_context.request_id.routing_info.Clear()
+
+        request.objects_request.request_context.client_context.platform = PLATFORM_WEB
+        request.objects_request.request_context.client_context.surface = SURFACE_CHROMIUM
+
+        request.objects_request.request_context.client_context.locale_context.language = 'ja'
+        request.objects_request.request_context.client_context.locale_context.region = 'Asia/Tokyo'
+        request.objects_request.request_context.client_context.locale_context.time_zone = '' # not set by chromium
+
+        request.objects_request.request_context.client_context.app_id = '' # not set by chromium
+
+        filter = request.objects_request.request_context.client_context.client_filters.filter.add()
+        filter.filter_type = AUTO_FILTER
+
+        image_data = self._preprocess(img)
+        request.objects_request.image_data.payload.image_bytes = image_data[0]
+        request.objects_request.image_data.image_metadata.width = image_data[1]
+        request.objects_request.image_data.image_metadata.height = image_data[2] 
+
+        payload = request.SerializeToString()
+
         headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'max-age=0',
-            'Origin': 'https://lens.google.com',
-            'Referer': 'https://lens.google.com/',
-            'Sec-Ch-Ua': f'"Not A(Brand";v="99", "Google Chrome";v="{fake_chromium_config["major_version"]}", "Chromium";v="{fake_chromium_config["major_version"]}"',
-            'Sec-Ch-Ua-Arch': '"x86"',
-            'Sec-Ch-Ua-Bitness': '"64"',
-            'Sec-Ch-Ua-Full-Version': f'"{fake_chromium_config["version"]}"',
-            'Sec-Ch-Ua-Full-Version-List': f'"Not A(Brand";v="99.0.0.0", "Google Chrome";v="{fake_chromium_config["major_version"]}", "Chromium";v="{fake_chromium_config["major_version"]}"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Model': '""',
-            'Sec-Ch-Ua-Platform': '"Windows"',
-            'Sec-Ch-Ua-Platform-Version': '"15.0.0"',
-            'Sec-Ch-Ua-Wow64': '?0',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Upgrade-Insecure-Requests': '1',
-            'User-Agent': fake_chromium_config['user_agent'],
-            'X-Client-Data': 'CIW2yQEIorbJAQipncoBCIH+ygEIkqHLAQiKo8sBCPWYzQEIhaDNAQji0M4BCLPTzgEI19TOAQjy1c4BCJLYzgEIwNjOAQjM2M4BGM7VzgE='
+            'Host': 'lensfrontend-pa.googleapis.com',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/x-protobuf',
+            'X-Goog-Api-Key': 'AIzaSyDr2UxVnv_U85AbhhY8XSHSIavUW0DC-sY',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-Mode': 'no-cors',
+            'Sec-Fetch-Dest': 'empty',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Accept-Language': 'ja-JP;q=0.6,ja;q=0.5'
         }
-        cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
 
         try:
-            res = requests.post(url, files=files, params=params, headers=headers, cookies=cookies, timeout=20)
+            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -256,20 +260,110 @@ class GoogleLens:
         if res.status_code != 200:
             return (False, 'Unknown error!')
 
-        match = self.regex.search(res.text)
-        if match == None:
-            return (False, 'Regex error!')
-
-        lens_object = pyjson5.loads(match.group(1))
-        if 'errorHasStatus' in lens_object:
-            return (False, 'Unknown Lens error!')
+        response_proto = LensOverlayServerResponse()
+        response_proto.ParseFromString(res.content)
+        response_dict = MessageToDict(response_proto, preserving_proto_field_name=True)
 
         res = ''
-        text = lens_object['data'][3][4][0]
-        if len(text) > 0:
-            lines = text[0]
-            for line in lines:
-                res += line + '\n'
+        text = response_dict['objects_response']['text']['text_layout']['paragraphs']
+        for paragraph in text:
+            for line in paragraph['lines']:
+                for word in line['words']:
+                    res += word['plain_text'] + word['text_separator']
+            res += '\n'
+
+        x = (True, res)
+        return x
+
+    def _preprocess(self, img):
+        if img.width * img.height > 3000000:
+            aspect_ratio = img.width / img.height
+            new_w = int(sqrt(3000000 * aspect_ratio))
+            new_h = int(new_w / aspect_ratio)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        return (pil_image_to_bytes(img), img.width, img.height)
+
+class GoogleLensWeb:
+    name = 'glensweb'
+    readable_name = 'Google Lens (web)'
+    key = 'k'
+    available = False
+
+    def __init__(self):
+        if 'pyjson5' not in sys.modules:
+            logger.warning('pyjson5 not available, Google Lens (web) will not work!')
+        elif 'requests' not in sys.modules:
+            logger.warning('requests not available, Google Lens (web) will not work!')
+        else:
+            self.regex = re.compile(r'(\w+)=([^&]+)')
+            self.requests_session = requests.Session()
+            self.available = True
+            logger.info('Google Lens (web) ready')
+
+    def __call__(self, img_or_path):
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        url = 'https://lens.google.com/v3/upload'
+        files = {'encoded_image': ('image.png', self._preprocess(img), 'image/png')}
+        headers = {
+            'Host': 'lens.google.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ja-JP;q=0.6,ja;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Referer': 'https://www.google.com/',
+            'Origin': 'https://www.google.com',
+            'Alt-Used': 'lens.google.com',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-site',
+            'Priority': 'u=0, i',
+            'TE': 'trailers'
+        }
+        cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
+
+        try:
+            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
+        except requests.exceptions.Timeout:
+            return (False, 'Request timeout!')
+        except requests.exceptions.ConnectionError:
+            return (False, 'Connection error!')
+
+        if res.status_code != 303:
+            return (False, 'Unknown error!')
+
+        location_params = dict(self.regex.findall(res.headers['Location']))
+
+        if ('vsrid' not in location_params) or ('gsessionid' not in location_params):
+            return (False, 'Unknown error!')
+
+        try:
+            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={location_params['vsrid']}&gsessionid={location_params['gsessionid']}", timeout=20)
+        except requests.exceptions.Timeout:
+            return (False, 'Request timeout!')
+        except requests.exceptions.ConnectionError:
+            return (False, 'Connection error!')
+
+        if (len(res.text.splitlines()) != 3):
+            return (False, 'Unknown error!')
+
+        lens_object = pyjson5.loads(res.text.splitlines()[2])
+
+        res = ''
+        text = lens_object[0][2][0][0]
+        for paragraph in text:
+            for line in paragraph[1]:
+                for word in line[0]:
+                    res += word[1] + word[2]
+            res += '\n'
 
         x = (True, res)
         return x

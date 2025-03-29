@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "owocr"
+version = "1.10"
+description = "Japanese OCR"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "AuroraWright", email = "fallingluma@gmail.com"}
+]
+license = "Apache-2.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "fire",
+    "jaconv",
+    "loguru",
+    "numpy",
+    "Pillow>=10.0.0",
+    "pyperclipfix",
+    "pynput",
+    "websockets",
+    "desktop-notifier>=5.0.0",
+    "mss",
+    "pysbd",
+    "langid",
+    "psutil",
+    "pywinctl;platform_system=='Linux'",
+    "winrt-windows.applicationmodel.core==2.3.0;platform_system=='Windows'",
+    "pywin32;platform_system=='Windows'",
+    "pyobjc;platform_system=='Darwin'"
+]
+
+[project.urls]
+Homepage = "https://github.com/AuroraWright/owocr"
+
+[project.scripts]
+owocr = "owocr.__main__:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["owocr", "owocr.*"]
