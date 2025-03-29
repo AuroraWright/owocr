@@ -2,7 +2,6 @@ import re
 import os
 import io
 from pathlib import Path
-import time
 import sys
 import platform
 import logging
