@@ -648,7 +648,12 @@ def run(read_from=None,
     """
 
     if read_from == 'screencapture' and sys.platform not in ('darwin', 'win32'):
-        active_window_name = pywinctl.getActiveWindowTitle()
+        window_capture_available = False
+        try:
+            active_window_name = pywinctl.getActiveWindowTitle()
+            window_capture_available = True
+        except Exception:
+            pass
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
@@ -876,6 +881,9 @@ def run(read_from=None,
                 windows_window_tracker.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
+                if not window_capture_available:
+                    raise ValueError('Window capture is not available on your setup')
+
                 sct = mss.mss()
                 window_title = None
                 window_titles = pywinctl.getAllTitles()
