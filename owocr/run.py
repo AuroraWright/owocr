@@ -23,13 +23,14 @@ from desktop_notifier import DesktopNotifierSync
 import psutil
 
 import inspect
-from owocr.ocr import *
-from owocr.config import Config
+from .ocr import *
+from .config import Config
+from .screen_coordinate_picker import get_screen_selection
 
 try:
     import win32gui
     import win32ui
-    import win32api 
+    import win32api
     import win32con
     import win32process
     import win32clipboard
@@ -279,22 +280,23 @@ def capture_macos_window_screenshot(window_id):
 
 def get_windows_window_handle(window_title):
     def callback(hwnd, window_title_part):
-        if window_title_part in win32gui.GetWindowText(hwnd):
-            handles.append(hwnd)
+        window_title = win32gui.GetWindowText(hwnd)
+        if window_title_part in window_title:
+            handles.append((hwnd, window_title))
         return True
 
     handle = win32gui.FindWindow(None, window_title)
     if handle:
-        return handle
+        return (handle, window_title)
 
     handles = []
     win32gui.EnumWindows(callback, window_title)
     for handle in handles:
-        _, pid = win32process.GetWindowThreadProcessId(handle)
+        _, pid = win32process.GetWindowThreadProcessId(handle[0])
         if psutil.Process(pid).name().lower() not in ('cmd.exe', 'powershell.exe', 'windowsterminal.exe'):
             return handle
 
-    return 0
+    return (None, None)
 
 
 class TextFiltering:
@@ -616,8 +618,7 @@ def run(read_from=None,
         auto_pause=None,
         combo_pause=None,
         combo_engine_switch=None,
-        screen_capture_monitor=None,
-        screen_capture_coords=None,
+        screen_capture_area=None,
         screen_capture_delay_secs=None,
         screen_capture_only_active_windows=None,
         screen_capture_combo=None
@@ -640,10 +641,9 @@ def run(read_from=None,
     :param auto_pause: Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.
     :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     :param combo_engine_switch: Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
-    :param screen_capture_monitor: Specifies monitor to target when reading with screen capture. Will be ignored when screen_capture_coords is a window name.
-    :param screen_capture_coords: Specifies area to target when reading with screen capture. Can be either empty (whole screen), a set of coordinates (x,y,width,height) or a window name (the first matching window title will be used).
+    :param screen_capture_area: Specifies area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).
     :param screen_capture_delay_secs: Specifies the delay (in seconds) between screenshots when reading with screen capture.
-    :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_coords is a window name, specifies whether to only target the window while it's active.
+    :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_area is a window name, specifies whether to only target the window while it's active.
     :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
 
@@ -768,8 +768,8 @@ def run(read_from=None,
             global screenshot_event
             screenshot_event = threading.Event()
             key_combos[screen_capture_combo] = on_screenshot_combo
-        if type(screen_capture_coords) == tuple:
-            screen_capture_coords = ','.join(map(str, screen_capture_coords))
+        if type(screen_capture_area) == tuple:
+            screen_capture_area = ','.join(map(str, screen_capture_area))
         global screencapture_window_active
         global screencapture_window_visible
         global sct_params
@@ -777,32 +777,53 @@ def run(read_from=None,
         screencapture_window_active = True
         screencapture_window_visible = True
         last_result = ([], engine_index)
-        if screen_capture_coords == '':
+        if screen_capture_area == '':
             screencapture_mode = 0
-        elif len(screen_capture_coords.split(',')) == 4:
+        elif screen_capture_area.startswith('screen_'):
+            parts = screen_capture_area.split('_')
+            if len(parts) != 2 or not parts[1].isdigit():
+                raise ValueError('Invalid screen_capture_area')  
+            screen_capture_monitor = int(parts[1])
             screencapture_mode = 1
+        elif len(screen_capture_area.split(',')) == 4:
+            screencapture_mode = 3
         else:
             screencapture_mode = 2
 
         if screencapture_mode != 2:
             sct = mss.mss()
-            mon = sct.monitors
-            if len(mon) <= screen_capture_monitor:
-                msg = '"screen_capture_monitor" must be a valid monitor number'
-                raise ValueError(msg)
 
-            if screencapture_mode == 0:
+            if screencapture_mode == 1:
+                mon = sct.monitors
+                if len(mon) <= screen_capture_monitor:
+                    raise ValueError('Invalid monitor number in screen_capture_area')
                 coord_left = mon[screen_capture_monitor]['left']
                 coord_top = mon[screen_capture_monitor]['top']
                 coord_width = mon[screen_capture_monitor]['width']
                 coord_height = mon[screen_capture_monitor]['height']
+            elif screencapture_mode == 3:
+                coord_left, coord_top, coord_width, coord_height = [int(c.strip()) for c in screen_capture_area.split(',')]
             else:
-                x, y, coord_width, coord_height = [int(c.strip()) for c in screen_capture_coords.split(',')]
-                coord_left = mon[screen_capture_monitor]['left'] + x
-                coord_top = mon[screen_capture_monitor]['top'] + y
-            
-            sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height, 'mon': screen_capture_monitor}
+                logger.opt(ansi=True).info('Launching screen coordinate picker')
+                screen_selection = get_screen_selection()
+                if not screen_selection:
+                    raise ValueError('Picker window was closed or an error occurred')
+                screen_capture_monitor = screen_selection['monitor']
+                x, y, coord_width, coord_height = screen_selection['coordinates']
+                if coord_width > 0 and coord_height > 0:
+                    coord_top = screen_capture_monitor['top'] + y
+                    coord_left = screen_capture_monitor['left'] + x
+                else:
+                    logger.opt(ansi=True).info('Selection is empty, selecting whole screen')
+                    coord_left = screen_capture_monitor['left']
+                    coord_top = screen_capture_monitor['top']
+                    coord_width = screen_capture_monitor['width']
+                    coord_height = screen_capture_monitor['height']
+
+            sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
+            logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
+            area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
                 if int(platform.mac_ver()[0].split('.')[0]) < 14:
                     old_macos_screenshot_api = True
@@ -815,35 +836,37 @@ def run(read_from=None,
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
                 window_ids = []
-                window_id = 0
+                window_index = None
                 for i, window in enumerate(window_list):
                     window_title = window.get(kCGWindowName, '')
                     if psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
                         window_titles.append(window_title)
                         window_ids.append(window['kCGWindowNumber'])
 
-                if screen_capture_coords in window_titles:
-                    window_id = window_ids[window_titles.index(screen_capture_coords)]
+                if screen_capture_area in window_titles:
+                    window_index = window_titles.index(screen_capture_area)
                 else:
                     for t in window_titles:
-                        if screen_capture_coords in t:
-                            window_id = window_ids[window_titles.index(t)]
+                        if screen_capture_area in t:
+                            window_index = window_titles.index(t)
                             break
 
-                if not window_id:
-                    msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
-                    raise ValueError(msg)
+                if not window_index:
+                    raise ValueError(area_invalid_error)
+
+                window_id = window_ids[window_index]
+                window_title = window_titles[window_index]
 
                 if screen_capture_only_active_windows:
                     screencapture_window_active = False
                     macos_window_tracker = MacOSWindowTracker(window_id)
                     macos_window_tracker.start()
+                logger.opt(ansi=True).info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
-                window_handle = get_windows_window_handle(screen_capture_coords)
+                window_handle, window_title = get_windows_window_handle(screen_capture_area)
 
                 if not window_handle:
-                    msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
-                    raise ValueError(msg)
+                    raise ValueError(area_invalid_error)
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
@@ -851,21 +874,21 @@ def run(read_from=None,
                     screencapture_window_active = False
                 windows_window_tracker = WindowsWindowTracker(window_handle, screen_capture_only_active_windows)
                 windows_window_tracker.start()
+                logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
                 sct = mss.mss()
                 window_title = None
                 window_titles = pywinctl.getAllTitles()
-                if screen_capture_coords in window_titles:
-                    window_title = screen_capture_coords
+                if screen_capture_area in window_titles:
+                    window_title = screen_capture_area
                 else:
                     for t in window_titles:
-                        if screen_capture_coords in t and t != active_window_name:
+                        if screen_capture_area in t and t != active_window_name:
                             window_title = t
                             break
 
                 if not window_title:
-                    msg = '"screen_capture_coords" must be empty (for the whole screen), a valid set of coordinates, or a valid window name'
-                    raise ValueError(msg)
+                    raise ValueError(area_invalid_error)
 
                 target_window = pywinctl.getWindowsWithTitle(window_title)[0]
                 coord_top = target_window.top
@@ -881,6 +904,7 @@ def run(read_from=None,
                     target_window.watchdog.start(isAliveCB=on_window_closed, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
 
                 sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
+                logger.opt(ansi=True).info(f'Selected window: {window_title}')
 
         filtering = TextFiltering()
         read_from_readable = 'screen capture'
