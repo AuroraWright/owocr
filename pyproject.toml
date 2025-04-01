@@ -35,6 +35,29 @@ dependencies = [
     "pyobjc;platform_system=='Darwin'"
 ]
 
+[project.optional-dependencies]
+lens = [
+    "protobuf",
+    "requests",
+]
+
+lens-web = [
+    "pyjson5",
+    "requests",
+]
+
+vision = [
+    "google-cloud-vision",
+]
+
+azure = [
+    "azure-ai-vision-imageanalysis",
+]
+
+ocrspace = [
+    "requests",
+]
+
 [project.urls]
 Homepage = "https://github.com/AuroraWright/owocr"
 

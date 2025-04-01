@@ -37,11 +37,11 @@ Additionally:
 - WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`), and installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
 
 ## Cloud providers
-- Google Lens: Google Vision in disguise (no need for API keys!), you need to install protobuf and requests (`pip install protobuf requests`) ("l" key)
-- Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("k" key)
-- Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key)
-- Azure Image Analysis: you need to specify an api key and an endpoint in the config file and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key)
-- OCRSpace: you need to specify an api key in the config file and to install requests (`pip install requests`) ("o" key)
+- Google Lens: Google Vision in disguise (no need for API keys!), you need to install protobuf and requests (`pip install protobuf requests`) ("l" key) `pip install owocr[lens]`
+- Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("k" key) `pip install owocr[lens_web]`
+- Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key) `pip install owocr[vision]`
+- Azure Image Analysis: you need to specify an api key and an endpoint in the config file and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key) `pip install owocr[azure]`
+- OCRSpace: you need to specify an api key in the config file and to install requests (`pip install requests`) ("o" key) `pip install owocr[ocrspace]`
 
 # Acknowledgments
 
