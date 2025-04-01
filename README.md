@@ -21,27 +21,27 @@ Additionally:
 - Holding ctrl or cmd at any time will pause image processing temporarily, or you can specify keyboard combos in the config file to pause/unpause and switch the OCR provider from anywhere (refer to the config file or `owocr -h`)
 - You can auto pause the script after a successful text recognition with the `-a=seconds` option if you're not using screen capture. 0 (the default) disables it.
 - You can enable notifications in the config file or with `-n` to show the text with a native OS notification. **Important for macOS users:** if you use Python from brew, you need to enter this command in your terminal before the first notification: `codesign -f -s - $(brew --cellar python)/3.*/Frameworks/Python.framework` (works on Ventura/Sonoma). Older macOS versions might require Python to be installed from the [official website](https://www.python.org/downloads/). Nothing can be done about this unfortunately.
-- Optionally, you can speed up the online providers by installing fpng-py: `pip install fpng-py` (requires setting up a developer environment on most operating systems/Python versions)
-- Optionally, you can improve filtering of non-Japanese text for screen capture by installing transformers and sentencepiece: `pip install transformers sentencepiece`
+- Optionally, you can speed up the online providers by installing fpng-py: `pip install owocr[faster-png]` (requires setting up a developer environment on most operating systems/Python versions)
+- Optionally, you can improve filtering of non-Japanese text for screen capture by installing transformers and sentencepiece: `pip install owocr[accurate-filtering]`
 - A config file (which will be automatically created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is also provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 - For systems where text can be copied to the clipboard at the same time as images, if `*ocr_ignore*` is copied with an image, the image will be ignored (mostly useful for devs making their own sender tool)
 
 # Supported providers
 
 ## Local providers
-- [Manga OCR](https://github.com/kha-white/manga-ocr): refer to the readme for installation ("m" key)
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR): refer to the readme for installation ("e" key)
-- [RapidOCR](https://github.com/RapidAI/RapidOCR): refer to the readme for installation ("r" key)
+- [Manga OCR](https://github.com/kha-white/manga-ocr): install with `pip install owocr[manga-ocr]` ("m" key)
+- [EasyOCR](https://github.com/JaidedAI/EasyOCR): install with `pip install owocr[easyocr]` ("e" key)
+- [RapidOCR](https://github.com/RapidAI/RapidOCR): install with `pip install owocr[rapidocr]` ("r" key)
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
 - Apple Live Text (VisionKit framework): this will work on macOS Ventura or later. It should be the same as Vision except that in Sonoma Apple added vertical text reading ("d" key)
-- WinRT OCR: this will work on Windows 10 or later if winocr (`pip install winocr`) is installed. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`), and installing requests (`pip install requests`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
+- WinRT OCR: install with `pip install owocr[winocr]` on Windows 10 and later. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
 
 ## Cloud providers
-- Google Lens: Google Vision in disguise (no need for API keys!), you need to install protobuf and requests (`pip install protobuf requests`) ("l" key) `pip install owocr[lens]`
-- Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. You need to install pyjson5 and requests (`pip install pyjson5 requests`) ("k" key) `pip install owocr[lens_web]`
-- Google Vision: you need a service account .json file named google_vision.json in `user directory/.config/` and installing google-cloud-vision (`pip install google-cloud-vision`) ("g" key) `pip install owocr[vision]`
-- Azure Image Analysis: you need to specify an api key and an endpoint in the config file and to install azure-ai-vision-imageanalysis (`pip install azure-ai-vision-imageanalysis`) ("v" key) `pip install owocr[azure]`
-- OCRSpace: you need to specify an api key in the config file and to install requests (`pip install requests`) ("o" key) `pip install owocr[ocrspace]`
+- Google Lens: Google Vision in disguise (no need for API keys!), install with `pip install owocr[lens]` ("l" key)
+- Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. Install with `pip install owocr[lensweb]` ("k" key)
+- Google Vision: install with `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` ("g" key)
+- Azure Image Analysis: install with `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file ("v" key)
+- OCRSpace: you need to specify an api key in the config file ("o" key)
 
 # Acknowledgments
 

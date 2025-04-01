@@ -29,6 +29,7 @@ dependencies = [
     "pysbd",
     "langid",
     "psutil",
+    "requests",
     "pywinctl;platform_system=='Linux'",
     "winrt-windows.applicationmodel.core==2.3.0;platform_system=='Windows'",
     "pywin32;platform_system=='Windows'",
@@ -36,26 +37,45 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+faster-png = [
+    "fpng-py",
+]
+
+accurate-filtering = [
+    "transformers",
+    "sentencepiece",
+]
+
+easyocr = [
+    "easyocr",
+]
+
+rapidocr = [
+    "rapidocr",
+]
+
+mangaocr = [
+    "manga-ocr",
+]
+
+winrt = [
+    "winocr",
+]
+
 lens = [
     "protobuf",
-    "requests",
 ]
 
-lens-web = [
+lensweb = [
     "pyjson5",
-    "requests",
 ]
 
-vision = [
+gvision = [
     "google-cloud-vision",
 ]
 
 azure = [
     "azure-ai-vision-imageanalysis",
-]
-
-ocrspace = [
-    "requests",
 ]
 
 [project.urls]
