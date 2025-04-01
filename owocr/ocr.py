@@ -11,6 +11,7 @@ import jaconv
 import numpy as np
 from PIL import Image
 from loguru import logger
+import requests
 
 try:
     from manga_ocr import MangaOcr as MOCR
@@ -48,11 +49,6 @@ except ImportError:
 try:
     from rapidocr_onnxruntime import RapidOCR as ROCR
     import urllib.request
-except ImportError:
-    pass
-
-try:
-    import requests
 except ImportError:
     pass
 
