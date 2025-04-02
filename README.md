@@ -29,7 +29,7 @@ Additionally:
 # Supported providers
 
 ## Local providers
-- [Manga OCR](https://github.com/kha-white/manga-ocr): install with `pip install owocr[manga-ocr]` ("m" key)
+- [Manga OCR](https://github.com/kha-white/manga-ocr): install with `pip install owocr[mangaocr]` ("m" key)
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR): install with `pip install owocr[easyocr]` ("e" key)
 - [RapidOCR](https://github.com/RapidAI/RapidOCR): install with `pip install owocr[rapidocr]` ("r" key)
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
