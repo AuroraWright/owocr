@@ -7,6 +7,7 @@ fi
 
 PROTO_PATH="$1"
 
-mkdir -p owocr/py_lens
-protoc "--proto_path=$PROTO_PATH" --python_out=owocr/py_lens $PROTO_PATH/*.proto
-sed -i '' "s/import lens_overlay/import owocr.py_lens.lens_overlay/" py_lens/*
+mkdir tmp
+protoc "--proto_path=$PROTO_PATH" --python_betterproto_out=tmp $PROTO_PATH/*.proto
+mv tmp/lens/__init__.py owocr/lens_betterproto.py
+rm -rf tmp
