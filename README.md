@@ -39,6 +39,7 @@ Additionally:
 ## Cloud providers
 - Google Lens: Google Vision in disguise (no need for API keys!), install with `pip install owocr[lens]` ("l" key)
 - Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. Install with `pip install owocr[lensweb]` ("k" key)
+- Bing: Azure in disguise (no need for API keys!) ("b" key)
 - Google Vision: install with `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` ("g" key)
 - Azure Image Analysis: install with `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file ("v" key)
 - OCRSpace: you need to specify an api key in the config file ("o" key)
@@ -49,6 +50,7 @@ This uses code from/references these projects:
 - Viola for working on the Google Lens implementation (twice!) and helping with the pyobjc VisionKit code!
 - [google-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr) for additional Lens reverse engineering and the headers/URL parameters I currently use
 - @ronaldoussoren for helping with the pyobjc VisionKit code
+- @bropines for the Bing code ([Github issue](https://github.com/AuroraWright/owocr/issues/10))
 - [Manga OCR](https://github.com/kha-white/manga-ocr)
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
