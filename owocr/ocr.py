@@ -6,6 +6,7 @@ import sys
 import platform
 import logging
 from math import sqrt
+import json
 import base64
 from urllib.parse import urlparse, parse_qs
 
@@ -90,21 +91,51 @@ def post_process(text):
     return text
 
 
-def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80):
-    if img_format == 'png' and optimized_png_encode:
+def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80, optimize=False):
+    if img_format == 'png' and optimized_png_encode and not optimize:
         raw_data = img.convert('RGBA').tobytes()
         image_bytes = fpng_py.fpng_encode_image_to_memory(raw_data, img.width, img.height)
     else:
         image_bytes = io.BytesIO()
         if img_format == 'jpeg':
             img = img.convert('RGB')
-        img.save(image_bytes, format=img_format, compress_level=png_compression, quality=jpeg_quality)
+        img.save(image_bytes, format=img_format, compress_level=png_compression, quality=jpeg_quality, optimize=optimize, subsampling=0)
         image_bytes = image_bytes.getvalue()
     return image_bytes
 
 
 def pil_image_to_numpy_array(img):
     return np.array(img.convert('RGBA'))
+
+
+def limit_image_size(img, max_size):
+    img_bytes = pil_image_to_bytes(img)
+    if len(img_bytes) <= max_size:
+        return img_bytes, 'png'
+
+    scaling_factor = 0.60 if any(x > 2000 for x in img.size) else 0.75
+    new_w = int(img.width * scaling_factor)
+    new_h = int(img.height * scaling_factor)
+    resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    resized_img_bytes = pil_image_to_bytes(resized_img)
+    if len(resized_img_bytes) <= max_size:
+        return resized_img_bytes, 'png'
+
+    jpeg_quality = 80
+    while jpeg_quality >= 60:
+        jpeg_buffer = pil_image_to_bytes(img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
+        if len(jpeg_buffer) <= max_size:
+            return jpeg_buffer, 'jpeg'
+        jpeg_quality -= 5
+
+    jpeg_quality = 80
+    while jpeg_quality >= 60:
+        jpeg_buffer = pil_image_to_bytes(resized_img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
+        if len(jpeg_buffer) <= max_size:
+            return jpeg_buffer, 'jpeg'
+        jpeg_quality -= 5
+
+    return False, ''
 
 
 class MangaOcr:
@@ -386,6 +417,10 @@ class Bing:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
+        img_bytes = self._preprocess(img)
+        if not img_bytes:
+            return (False, 'Image is too big!')
+
         upload_url = 'https://www.bing.com/images/search?view=detailv2&iss=sbiupload'
         upload_headers = {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -397,22 +432,27 @@ class Bing:
         files = {
             'imgurl': (None, ''),
             'cbir': (None, 'sbi'),
-            'imageBin': (None, self._preprocess(img))
+            'imageBin': (None, img_bytes)
         }
 
-        try:
-            res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
-        except requests.exceptions.Timeout:
-            return (False, 'Request timeout!')
-        except requests.exceptions.ConnectionError:
-            return (False, 'Connection error!')
+        for _ in range(2):
+            api_host = urlparse(upload_url).netloc
+            try:
+                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
+            except requests.exceptions.Timeout:
+                return (False, 'Request timeout!')
+            except requests.exceptions.ConnectionError:
+                return (False, 'Connection error!')
 
-        if res.status_code != 302:
-            return (False, 'Unknown error!')
+            if res.status_code != 302:
+                return (False, 'Unknown error!')
 
-        redirect_url = res.headers.get('Location')
-        if not redirect_url:
-            return (False, 'Error getting redirect URL!')
+            redirect_url = res.headers.get('Location')
+            if not redirect_url:
+                return (False, 'Error getting redirect URL!')
+            if not redirect_url.startswith('https://'):
+                break
+            upload_url = redirect_url
 
         parsed_url = urlparse(redirect_url)
         query_params = parse_qs(parsed_url.query)
@@ -422,7 +462,7 @@ class Bing:
             return (False, 'Error getting token!')
         image_insights_token = image_insights_token[0]
 
-        api_url = 'https://www.bing.com/images/api/custom/knowledge'
+        api_url = f'https://{api_host}/images/api/custom/knowledge'
         api_headers = {
             'accept': '*/*',
             'accept-language': 'ja-JP;q=0.6,ja;q=0.5',
@@ -450,35 +490,44 @@ class Bing:
 
         data = res.json()
 
+        res = ''
         text_tag = None
         for tag in data['tags']:
             if tag.get('displayName') == '##TextRecognition':
                 text_tag = tag
                 break
-        if not text_tag:
-            return (False, 'No ##TextRecognition tag in response!')
-
-        text_action = None
-        for action in text_tag['actions']:
-            if action.get('_type') == 'ImageKnowledge/TextRecognitionAction':
-                text_action = action
-                break
-        if not text_action:
-            return (False, 'No TextRecognitionAction action in response!')
-
-        regions = text_action['data'].get('regions', [])
-
-        res = ''
-        for region in regions:
-            for line in region.get('lines', []):
-                res += line['text'] + '\n'
+        if text_tag:
+            text_action = None
+            for action in text_tag['actions']:
+                if action.get('_type') == 'ImageKnowledge/TextRecognitionAction':
+                    text_action = action
+                    break
+            if text_action:
+                regions = text_action['data'].get('regions', [])
+                for region in regions:
+                    for line in region.get('lines', []):
+                        res += line['text'] + '\n'
         
         x = (True, res)
         return x
 
     def _preprocess(self, img):
-        img_bytes = pil_image_to_bytes(img)
-        return base64.b64encode(img_bytes).decode('utf-8')
+        max_pixel_size = 4000
+        max_byte_size = 767772
+        res = None
+
+        if any(x > max_pixel_size for x in img.size):
+            resize_factor = max(max_pixel_size / img.width, max_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        img_bytes, _ = limit_image_size(img, max_byte_size)
+
+        if img_bytes:
+            res = base64.b64encode(img_bytes).decode('utf-8')
+
+        return res
 
 class AppleVision:
     name = 'avision'
@@ -811,6 +860,7 @@ class OCRSpace:
     def __init__(self, config={}):
         try:
             self.api_key = config['api_key']
+            self.max_byte_size = config.get('file_size_limit', 1000000)
             self.available = True
             logger.info('OCRSpace ready')
         except:
@@ -824,11 +874,15 @@ class OCRSpace:
         else:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
+        img_bytes, img_extension = self._preprocess(img)
+        if not img_bytes:
+            return (False, 'Image is too big!')
+
         data = {
             'apikey': self.api_key,
             'language': 'jpn'
         }
-        files = {'file': ('image.jpg', self._preprocess(img), 'image/jpeg')}
+        files = {'file': ('image.' + img_extension, img_bytes, 'image/' + img_extension)}
 
         try:
             res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=20)
@@ -851,5 +905,5 @@ class OCRSpace:
         x = (True, res)
         return x
 
-    def _preprocess(self, img):
-        return pil_image_to_bytes(img, 'jpeg')
+    def _preprocess(self, img):       
+        return limit_image_size(img, self.max_byte_size)
