@@ -121,19 +121,14 @@ def limit_image_size(img, max_size):
     if len(resized_img_bytes) <= max_size:
         return resized_img_bytes, 'png'
 
-    jpeg_quality = 80
-    while jpeg_quality >= 60:
-        jpeg_buffer = pil_image_to_bytes(img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
-        if len(jpeg_buffer) <= max_size:
-            return jpeg_buffer, 'jpeg'
-        jpeg_quality -= 5
-
-    jpeg_quality = 80
-    while jpeg_quality >= 60:
-        jpeg_buffer = pil_image_to_bytes(resized_img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
-        if len(jpeg_buffer) <= max_size:
-            return jpeg_buffer, 'jpeg'
-        jpeg_quality -= 5
+    for _ in range(2):
+        jpeg_quality = 80
+        while jpeg_quality >= 60:
+            img_bytes = pil_image_to_bytes(img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
+            if len(img_bytes) <= max_size:
+                return img_bytes, 'jpeg'
+            jpeg_quality -= 5
+        img = resized_img
 
     return False, ''
 
@@ -303,7 +298,7 @@ class GoogleLens:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return (pil_image_to_bytes(img), img.width, img.height)
 
@@ -394,7 +389,7 @@ class GoogleLensWeb:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
@@ -520,7 +515,7 @@ class Bing:
             resize_factor = max(max_pixel_size / img.width, max_pixel_size / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         img_bytes, _ = limit_image_size(img, max_byte_size)
 
@@ -764,7 +759,7 @@ class AzureImageAnalysis:
             resize_factor = max(50 / img.width, 50 / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
