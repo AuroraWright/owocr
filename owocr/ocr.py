@@ -61,6 +61,11 @@ except ImportError:
     pass
 
 try:
+    import oneocr
+except ImportError:
+    pass
+
+try:
     import pyjson5
 except ImportError:
     pass
@@ -694,6 +699,59 @@ class WinRTOCR:
             params = {'lang': 'ja'}
             try:
                 res = requests.post(self.url, params=params, data=self._preprocess(img), timeout=3)
+            except requests.exceptions.Timeout:
+                return (False, 'Request timeout!')
+            except requests.exceptions.ConnectionError:
+                return (False, 'Connection error!')
+
+            if res.status_code != 200:
+                return (False, 'Unknown error!')
+
+            res = res.json()['text']
+
+        x = (True, res)
+        return x
+
+    def _preprocess(self, img):
+        return pil_image_to_bytes(img, png_compression=1)
+
+class OneOCR:
+    name = 'oneocr'
+    readable_name = 'OneOCR'
+    key = 'z'
+    available = False
+
+    def __init__(self, config={}):
+        if sys.platform == 'win32':
+            if int(platform.release()) < 10:
+                logger.warning('OneOCR is not supported on Windows older than 10!')
+            elif 'oneocr' not in sys.modules:
+                logger.warning('oneocr not available, OneOCR will not work!')
+            else:
+                self.model = oneocr.OcrEngine()
+                self.available = True
+                logger.info('OneOCR ready')
+        else:
+            try:
+                self.url = config['url']
+                self.available = True
+                logger.info('OneOCR ready')
+            except:
+                logger.warning('Error reading URL from config, OneOCR will not work!')
+
+    def __call__(self, img_or_path):
+        if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+            img = Image.open(img_or_path)
+        elif isinstance(img_or_path, Image.Image):
+            img = img_or_path
+        else:
+            raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+        if sys.platform == 'win32':
+            res = self.model.recognize_pil(img)['text']
+        else:
+            try:
+                res = requests.post(self.url, data=self._preprocess(img), timeout=3)
             except requests.exceptions.Timeout:
                 return (False, 'Request timeout!')
             except requests.exceptions.ConnectionError:

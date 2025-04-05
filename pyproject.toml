@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.12.2"
+version = "1.13"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -32,6 +32,9 @@ dependencies = [
     "requests",
     "pywinctl;platform_system=='Linux'",
     "winrt-windows.applicationmodel.core==2.3.0;platform_system=='Windows'",
+    "winrt-windows-globalization==2.3.0;platform_system=='Windows'",
+    "winrt-Windows.Media.Ocr==2.3.0;platform_system=='Windows'",
+    "winrt-Windows.Storage.Streams==2.3.0;platform_system=='Windows'",
     "pywin32;platform_system=='Windows'",
     "pyobjc;platform_system=='Darwin'"
 ]
@@ -58,8 +61,12 @@ mangaocr = [
     "manga-ocr",
 ]
 
-winrt = [
+winocr = [
     "winocr",
+]
+
+oneocr = [
+    "oneocr",
 ]
 
 lens = [
