@@ -288,12 +288,14 @@ class GoogleLens:
         response_dict = response_proto.to_dict(betterproto.Casing.SNAKE)
 
         res = ''
-        text = response_dict['objects_response']['text']['text_layout']['paragraphs']
-        for paragraph in text:
-            for line in paragraph['lines']:
-                for word in line['words']:
-                    res += word['plain_text'] + word['text_separator']
-            res += '\n'
+        text = response_dict['objects_response']['text']
+        if 'text_layout' in text:
+            paragraphs = text['text_layout']['paragraphs']
+            for paragraph in paragraphs:
+                for line in paragraph['lines']:
+                    for word in line['words']:
+                        res += word['plain_text'] + word['text_separator']
+                res += '\n'
 
         x = (True, res)
         return x
