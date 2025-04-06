@@ -730,9 +730,13 @@ class OneOCR:
             elif 'oneocr' not in sys.modules:
                 logger.warning('oneocr not available, OneOCR will not work!')
             else:
-                self.model = oneocr.OcrEngine()
-                self.available = True
-                logger.info('OneOCR ready')
+                try:
+                    self.model = oneocr.OcrEngine()
+                except RuntimeError as e:
+                    logger.warning(e + ' , OneOCR will not work!')
+                else:
+                    self.available = True
+                    logger.info('OneOCR ready')
         else:
             try:
                 self.url = config['url']
@@ -750,7 +754,10 @@ class OneOCR:
             raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
         if sys.platform == 'win32':
-            res = self.model.recognize_pil(img)['text']
+            try:
+                res = self.model.recognize_pil(img)['text']
+            except RuntimeError as e:
+                return (False, e)
         else:
             try:
                 res = requests.post(self.url, data=self._preprocess(img), timeout=3)
