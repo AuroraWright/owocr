@@ -733,7 +733,7 @@ class OneOCR:
                 try:
                     self.model = oneocr.OcrEngine()
                 except RuntimeError as e:
-                    logger.warning(e + ' , OneOCR will not work!')
+                    logger.warning(e + ', OneOCR will not work!')
                 else:
                     self.available = True
                     logger.info('OneOCR ready')
