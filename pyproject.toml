@@ -37,48 +37,50 @@ dependencies = [
 
 [project.optional-dependencies]
 faster-png = [
-    "fpng-py",
+    "fpng-py"
 ]
 
 accurate-filtering = [
     "transformers",
-    "sentencepiece",
+    "sentencepiece"
 ]
 
 easyocr = [
-    "easyocr",
+    "easyocr"
 ]
 
 rapidocr = [
     "rapidocr",
+    "onnxruntime",
+    "rapidocr_onnxruntime"
 ]
 
 mangaocr = [
-    "manga-ocr",
+    "manga-ocr"
 ]
 
 winocr = [
-    "winocr",
+    "winocr"
 ]
 
 oneocr = [
-    "oneocr",
+    "oneocr"
 ]
 
 lens = [
-    "betterproto==2.0.0b7",
+    "betterproto==2.0.0b7"
 ]
 
 lensweb = [
-    "pyjson5",
+    "pyjson5"
 ]
 
 gvision = [
-    "google-cloud-vision",
+    "google-cloud-vision"
 ]
 
 azure = [
-    "azure-ai-vision-imageanalysis",
+    "azure-ai-vision-imageanalysis"
 ]
 
 [project.urls]
