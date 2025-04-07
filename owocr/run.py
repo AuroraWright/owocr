@@ -722,9 +722,6 @@ def run(read_from=None,
         else:
             raise ValueError('combo_pause must also be specified')
 
-    user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
-    user_input_thread.start()
-
     if read_from == 'websocket' or write_to == 'websocket':
         global websocket_server_thread
         websocket_server_thread = WebsocketServerThread(read_from == 'websocket')
@@ -941,8 +938,11 @@ def run(read_from=None,
         if Path(write_to).suffix.lower() != '.txt':
             raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
-    logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+
     signal.signal(signal.SIGINT, signal_handler)
+    user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
+    user_input_thread.start()
+    logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated:
         if read_from == 'websocket':
