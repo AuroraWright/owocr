@@ -4,7 +4,7 @@ Command line client for several Japanese OCR providers derived from [Manga OCR](
 
 # Installation
 
-This has been tested with Python 3.11 and 3.12. Newer/older versions might work. It can be installed with `pip install owocr`
+This has been tested with Python 3.11, 3.12 and 3.13. It can be installed with `pip install owocr`.
 
 # Usage
 
@@ -35,7 +35,7 @@ Additionally:
 - Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
 - Apple Live Text (VisionKit framework): this will work on macOS Ventura or later. It should be the same as Vision except that in Sonoma Apple added vertical text reading ("d" key)
 - WinRT OCR: install with `pip install owocr[winocr]` on Windows 10 and later. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
-- OneOCR: install with `pip install owocr[oneocr]` on Windows 10 and later. In my experience it's pretty good, though not as much as the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr) ("z" key)
+- OneOCR: install with `pip install owocr[oneocr]` on Windows 10 and later. In my experience it's pretty good, though not as much as the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file ("z" key)
 
 ## Cloud providers
 - Google Lens: Google Vision in disguise (no need for API keys!), install with `pip install owocr[lens]` ("l" key)
