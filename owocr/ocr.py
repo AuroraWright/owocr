@@ -319,7 +319,6 @@ class GoogleLensWeb:
         if 'pyjson5' not in sys.modules:
             logger.warning('pyjson5 not available, Google Lens (web) will not work!')
         else:
-            self.regex = re.compile(r'(\w+)=([^&]+)')
             self.requests_session = requests.Session()
             self.available = True
             logger.info('Google Lens (web) ready')
@@ -363,13 +362,18 @@ class GoogleLensWeb:
         if res.status_code != 303:
             return (False, 'Unknown error!')
 
-        location_params = dict(self.regex.findall(res.headers['Location']))
+        redirect_url = res.headers.get('Location')
+        if not redirect_url:
+            return (False, 'Error getting redirect URL!')
 
-        if ('vsrid' not in location_params) or ('gsessionid' not in location_params):
+        parsed_url = urlparse(redirect_url)
+        query_params = parse_qs(parsed_url.query)
+
+        if ('vsrid' not in query_params) or ('gsessionid' not in query_params):
             return (False, 'Unknown error!')
 
         try:
-            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={location_params['vsrid']}&gsessionid={location_params['gsessionid']}", timeout=20)
+            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
