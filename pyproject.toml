@@ -30,7 +30,6 @@ dependencies = [
     "langid",
     "psutil",
     "requests",
-    "pywinctl;platform_system=='Linux'",
     "pywin32;platform_system=='Windows'",
     "pyobjc;platform_system=='Darwin'"
 ]

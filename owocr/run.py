@@ -50,11 +50,6 @@ try:
 except ImportError:
     pass
 
-try:
-    import pywinctl
-except ImportError:
-    pass
-
 
 config = None
 
@@ -512,18 +507,6 @@ def on_window_minimized(minimized):
     screencapture_window_visible = not minimized
 
 
-def on_window_resized(size):
-    global sct_params
-    sct_params['width'] = size[0]
-    sct_params['height'] = size[1]
-
-
-def on_window_moved(pos):
-    global sct_params
-    sct_params['left'] = pos[0]
-    sct_params['top'] = pos[1]
-
-
 def normalize_macos_clipboard(img):
     ns_data = NSData.dataWithBytes_length_(img, len(img))
     ns_image = NSImage.alloc().initWithData_(ns_data)
@@ -646,14 +629,6 @@ def run(read_from=None,
     :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_area is a window name, specifies whether to only target the window while it's active.
     :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
-
-    if read_from == 'screencapture' and sys.platform not in ('darwin', 'win32'):
-        window_capture_available = False
-        try:
-            active_window_name = pywinctl.getActiveWindowTitle()
-            window_capture_available = True
-        except Exception:
-            pass
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
@@ -878,38 +853,7 @@ def run(read_from=None,
                 windows_window_tracker.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
-                if not window_capture_available:
-                    raise ValueError('Window capture is not available on your setup')
-
-                sct = mss.mss()
-                window_title = None
-                window_titles = pywinctl.getAllTitles()
-                if screen_capture_area in window_titles:
-                    window_title = screen_capture_area
-                else:
-                    for t in window_titles:
-                        if screen_capture_area in t and t != active_window_name:
-                            window_title = t
-                            break
-
-                if not window_title:
-                    raise ValueError(area_invalid_error)
-
-                target_window = pywinctl.getWindowsWithTitle(window_title)[0]
-                coord_top = target_window.top
-                coord_left = target_window.left
-                coord_width = target_window.width
-                coord_height = target_window.height
-
-                if screen_capture_only_active_windows:
-                    screencapture_window_active = target_window.isActive
-                    target_window.watchdog.start(isAliveCB=on_window_closed, isActiveCB=on_window_activated, resizedCB=on_window_resized, movedCB=on_window_moved)
-                else:
-                    screencapture_window_visible = not target_window.isMinimized
-                    target_window.watchdog.start(isAliveCB=on_window_closed, isMinimizedCB=on_window_minimized, resizedCB=on_window_resized, movedCB=on_window_moved)
-
-                sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-                logger.opt(ansi=True).info(f'Selected window: {window_title}')
+                raise ValueError('Window capture is only currently supported on Windows and macOS')
 
         filtering = TextFiltering()
         read_from_readable = 'screen capture'
@@ -1027,51 +971,52 @@ def run(read_from=None,
                 take_screenshot = screencapture_window_active and not paused
 
             if take_screenshot and screencapture_window_visible:
-                if screencapture_mode == 2 and sys.platform == 'darwin':
-                    with objc.autorelease_pool():
-                        if old_macos_screenshot_api:
-                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
-                        else:
-                            capture_macos_window_screenshot(window_id)
-                            try:
-                                cg_image = screencapturekit_queue.get(timeout=0.5)
-                            except queue.Empty:
-                                cg_image = None
-                        if not cg_image:
+                if screencapture_mode == 2:
+                    if sys.platform == 'darwin':
+                        with objc.autorelease_pool():
+                            if old_macos_screenshot_api:
+                                cg_image = CGWindowListCreateImageFromArray(CGRectNull, [window_id], kCGWindowImageBoundsIgnoreFraming)
+                            else:
+                                capture_macos_window_screenshot(window_id)
+                                try:
+                                    cg_image = screencapturekit_queue.get(timeout=0.5)
+                                except queue.Empty:
+                                    cg_image = None
+                            if not cg_image:
+                                on_window_closed(False)
+                                break
+                            width = CGImageGetWidth(cg_image)
+                            height = CGImageGetHeight(cg_image)
+                            raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                            bpr = CGImageGetBytesPerRow(cg_image)
+                        img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
+                    else:
+                        try:
+                            coord_left, coord_top, right, bottom = win32gui.GetWindowRect(window_handle)
+                            coord_width = right - coord_left
+                            coord_height = bottom - coord_top
+
+                            hwnd_dc = win32gui.GetWindowDC(window_handle)
+                            mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                            save_dc = mfc_dc.CreateCompatibleDC()
+
+                            save_bitmap = win32ui.CreateBitmap()
+                            save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
+                            save_dc.SelectObject(save_bitmap)
+
+                            result = ctypes.windll.user32.PrintWindow(window_handle, save_dc.GetSafeHdc(), 2)
+
+                            bmpinfo = save_bitmap.GetInfo()
+                            bmpstr = save_bitmap.GetBitmapBits(True)
+                        except pywintypes.error:
                             on_window_closed(False)
                             break
-                        width = CGImageGetWidth(cg_image)
-                        height = CGImageGetHeight(cg_image)
-                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                        bpr = CGImageGetBytesPerRow(cg_image)
-                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
-                elif screencapture_mode == 2 and sys.platform == 'win32':
-                    try:
-                        coord_left, coord_top, right, bottom = win32gui.GetWindowRect(window_handle)
-                        coord_width = right - coord_left
-                        coord_height = bottom - coord_top
+                        img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
 
-                        hwnd_dc = win32gui.GetWindowDC(window_handle)
-                        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                        save_dc = mfc_dc.CreateCompatibleDC()
-
-                        save_bitmap = win32ui.CreateBitmap()
-                        save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
-                        save_dc.SelectObject(save_bitmap)
-
-                        result = ctypes.windll.user32.PrintWindow(window_handle, save_dc.GetSafeHdc(), 2)
-
-                        bmpinfo = save_bitmap.GetInfo()
-                        bmpstr = save_bitmap.GetBitmapBits(True)
-                    except pywintypes.error:
-                        on_window_closed(False)
-                        break
-                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-
-                    win32gui.DeleteObject(save_bitmap.GetHandle())
-                    save_dc.DeleteDC()
-                    mfc_dc.DeleteDC()
-                    win32gui.ReleaseDC(window_handle, hwnd_dc)
+                        win32gui.DeleteObject(save_bitmap.GetHandle())
+                        save_dc.DeleteDC()
+                        mfc_dc.DeleteDC()
+                        win32gui.ReleaseDC(window_handle, hwnd_dc)
                 else:
                     sct_img = sct.grab(sct_params)
                     img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
@@ -1116,11 +1061,9 @@ def run(read_from=None,
             if screen_capture_only_active_windows:
                 macos_window_tracker.stop = True
                 macos_window_tracker.join()
-        elif sys.platform == 'win32':
+        else:
             windows_window_tracker.stop = True
             windows_window_tracker.join()
-        else:
-            target_window.watchdog.stop()
     elif read_from == 'unixsocket':
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
