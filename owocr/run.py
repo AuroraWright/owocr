@@ -465,20 +465,6 @@ def user_input_thread_run():
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def on_key_press(key):
-    global first_pressed
-    if first_pressed == None and key in (keyboard.Key.cmd_l, keyboard.Key.cmd_r, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-        first_pressed = key
-        pause_handler(False)
-
-
-def on_key_release(key):
-    global first_pressed
-    if key == first_pressed:
-        pause_handler(False)
-        first_pressed = None
-
-
 def on_screenshot_combo():
     if not paused:
         screenshot_event.set()
@@ -872,9 +858,7 @@ def run(read_from=None,
 
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
-    else:
-        key_combo_listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)
-    key_combo_listener.start()
+        key_combo_listener.start()
 
     if write_to in ('clipboard', 'websocket'):
         write_to_readable = write_to
@@ -1067,6 +1051,7 @@ def run(read_from=None,
     elif read_from == 'unixsocket':
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
-    key_combo_listener.stop()
+    if len(key_combos) > 0:
+        key_combo_listener.stop()
     if auto_pause_handler:
         auto_pause_handler.stop()

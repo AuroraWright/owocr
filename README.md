@@ -18,7 +18,7 @@ Additionally:
 - You can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" inside the terminal window
 - You can switch between OCR providers pressing their corresponding keyboard key inside the terminal window (refer to the list of keys in the providers list below)
 - You can start the script paused with the `-p` option or with a specific provider with the `-e` option (refer to `owocr -h` for the list)
-- Holding ctrl or cmd at any time will pause image processing temporarily, or you can specify keyboard combos in the config file to pause/unpause and switch the OCR provider from anywhere (refer to the config file or `owocr -h`)
+- You can specify keyboard combos in the config file to pause/unpause and switch the OCR provider from anywhere (refer to the config file or `owocr -h`)
 - You can auto pause the script after a successful text recognition with the `-a=seconds` option if you're not using screen capture. 0 (the default) disables it.
 - You can enable notifications in the config file or with `-n` to show the text with a native OS notification. **Important for macOS users:** if you use Python from brew, you need to enter this command in your terminal before the first notification: `codesign -f -s - $(brew --cellar python)/3.*/Frameworks/Python.framework` (works on Ventura/Sonoma). Older macOS versions might require Python to be installed from the [official website](https://www.python.org/downloads/). Nothing can be done about this unfortunately.
 - Optionally, you can speed up the online providers by installing fpng-py: `pip install owocr[faster-png]` (requires setting up a developer environment on most operating systems/Python versions)
