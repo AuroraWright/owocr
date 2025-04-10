@@ -697,7 +697,6 @@ def run():
             screen_capture_area = ','.join(map(str, screen_capture_area))
         global screencapture_window_active
         global screencapture_window_visible
-        global sct_params
         screencapture_mode = None
         screencapture_window_active = True
         screencapture_window_visible = True
