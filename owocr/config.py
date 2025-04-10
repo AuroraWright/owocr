@@ -1,7 +1,43 @@
 import os
 import configparser
+import argparse
+import textwrap
 import urllib.request
 
+parser = argparse.ArgumentParser(prog='owocr', description=textwrap.dedent('''\
+    Runs OCR in the background.
+    It can read images copied to the system clipboard or placed in a directory, images sent via a websocket or a Unix domain socket, or directly capture a screen (or a portion of it) or a window.
+    Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
+'''))
+
+parser.add_argument('-r', '--read_from', type=str, default=argparse.SUPPRESS,
+                    help='Specifies where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.')
+parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
+                    help='Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
+parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
+                    help='OCR engine to use. Available: "mangaocr", "glens", "glensweb", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
+parser.add_argument('-p', '--pause_at_startup', action='store_true', default=argparse.SUPPRESS,
+                    help='Pause at startup.')
+parser.add_argument('-i', '--ignore_flag', action='store_true', default=argparse.SUPPRESS,
+                    help='Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).')
+parser.add_argument('-d', '--delete_images', action='store_true', default=argparse.SUPPRESS,
+                    help='Delete image files after processing when reading from a directory.')
+parser.add_argument('-n', '--notifications', action='store_true', default=argparse.SUPPRESS,
+                    help='Show an operating system notification with the detected text.')
+parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
+                    help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.')
+parser.add_argument('-cp', '--combo_pause', type=str, default=argparse.SUPPRESS,
+                    help='Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+parser.add_argument('-cs', '--combo_engine_switch', type=str, default=argparse.SUPPRESS,
+                    help='Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.SUPPRESS,
+                    help='Specifies area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
+parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
+                    help='Specifies the delay (in seconds) between screenshots when reading with screen capture.')
+parser.add_argument('-sw', '--screen_capture_only_active_windows', action='store_true', default=argparse.SUPPRESS,
+                    help="When reading with screen capture and screen_capture_area is a window name, specifies whether to only target the window while it's active.")
+parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
+                    help='When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 
 class Config:
     has_config = False
@@ -50,6 +86,8 @@ class Config:
         return value
 
     def __init__(self):
+        args = parser.parse_args()
+        self.__provided_cli_args = vars(args)
         config = configparser.ConfigParser()
         res = config.read(self.config_path)
 
@@ -74,6 +112,8 @@ class Config:
                     self.__engine_config[key.lower()][sub_key.lower()] = self.__parse(config[key][sub_key])
 
     def get_general(self, value):
+        if self.__provided_cli_args.get(value, None) is not None:
+            return self.__provided_cli_args[value]
         try:
             return self.__general_config[value]
         except KeyError:
@@ -87,3 +127,5 @@ class Config:
             return self.__engine_config[value]
         except KeyError:
             return None
+
+config = Config()
