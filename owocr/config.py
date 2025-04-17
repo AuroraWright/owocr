@@ -85,9 +85,12 @@ class Config:
             pass
         return value
 
-    def __init__(self):
-        args = parser.parse_args()
-        self.__provided_cli_args = vars(args)
+    def __init__(self, parse_args=True):
+        if parse_args:
+            args = parser.parse_args()
+            self.__provided_cli_args = vars(args)
+        else:
+            self.__provided_cli_args = {}
         config = configparser.ConfigParser()
         res = config.read(self.config_path)
 
@@ -128,4 +131,4 @@ class Config:
         except KeyError:
             return None
 
-config = Config()
+config = Config(False)

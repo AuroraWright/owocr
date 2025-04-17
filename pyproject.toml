@@ -3,13 +3,13 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "owocr"
-version = "1.13.11"
-description = "Japanese OCR"
+name = "owocr_gsm"
+version = "1.13.12"
+description = "Japanese OCR - With GSM Specific Edits"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    {name = "AuroraWright", email = "fallingluma@gmail.com"}
+    { name = "Beangate", email = "bpwhelan95@gmail.com"}
 ]
 license = "Apache-2.0"
 classifiers = [
@@ -82,7 +82,7 @@ azure = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AuroraWright/owocr"
+Homepage = "https://github.com/bpwhelan/owocr"
 
 [project.scripts]
 owocr = "owocr.__main__:main"

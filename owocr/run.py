@@ -3,28 +3,30 @@ import signal
 import time
 import threading
 from pathlib import Path
-import queue
-import io
-import re
-import inspect
 
+import fire
 import numpy as np
 import pyperclipfix
 import mss
-import psutil
 import asyncio
 import websockets
 import socketserver
+import queue
+import io
+import re
 
-from PIL import Image
+from PIL import Image, ImageDraw
 from PIL import UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifierSync
+import psutil
 
+import inspect
 from .ocr import *
-from .config import config
+from .config import Config
 from .screen_coordinate_picker import get_screen_selection
+from ...configuration import get_temporary_directory
 
 try:
     import win32gui
@@ -48,6 +50,9 @@ try:
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
 except ImportError:
     pass
+
+
+config = None
 
 
 class WindowsClipboardThread(threading.Thread):
@@ -385,7 +390,7 @@ class AutopauseTimer:
                 pause_handler(True)
 
 
-def pause_handler(is_combo=True):   
+def pause_handler(is_combo=True):
     global paused
     global just_unpaused
     if paused:
@@ -465,6 +470,10 @@ def on_screenshot_combo():
     if not paused:
         screenshot_event.set()
 
+def on_screenshot_bus():
+    if not paused:
+        screenshot_event.set()
+
 
 def signal_handler(sig, frame):
     global terminated
@@ -529,11 +538,19 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(img_or_path, last_result, filtering):
+def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering, engine=None, rectangle=None):
+    global engine_index
     if auto_pause_handler:
         auto_pause_handler.stop()
+    if engine:
+        for i, instance in enumerate(engine_instances):
+            if instance.name.lower() in engine.lower():
+                engine_instance = instance
+                last_result = (last_result[0], i)
+                break
+    else:
+        engine_instance = engine_instances[engine_index]
 
-    engine_instance = engine_instances[engine_index]
     t0 = time.time()
     res, text = engine_instance(img_or_path)
     t1 = time.time()
@@ -545,15 +562,16 @@ def process_and_write_results(img_or_path, last_result, filtering):
             text, orig_text = filtering(text, last_result)
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
-        if config.get_general('notifications'):
+        if notifications:
             notifier.send(title='owocr', message='Text recognized: ' + text)
 
-        write_to = config.get_general('write_to')
         if write_to == 'websocket':
             websocket_server_thread.send_text(text)
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
-        else:
+        elif write_to == "callback":
+            txt_callback(text, rectangle)
+        elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
 
@@ -562,14 +580,63 @@ def process_and_write_results(img_or_path, last_result, filtering):
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
 
-    return orig_text
+    return orig_text, text
 
 
 def get_path_key(path):
     return path, path.lstat().st_mtime
 
 
-def run():
+def init_config(parse_args=True):
+    global config
+    config = Config(parse_args)
+
+
+def run(read_from=None,
+        write_to=None,
+        engine=None,
+        pause_at_startup=None,
+        ignore_flag=None,
+        delete_images=None,
+        notifications=None,
+        auto_pause=None,
+        combo_pause=None,
+        combo_engine_switch=None,
+        screen_capture_area=None,
+        screen_capture_exclusions=None,
+        screen_capture_window=None,
+        screen_capture_delay_secs=None,
+        screen_capture_only_active_windows=None,
+        screen_capture_combo=None,
+        stop_running_flag=None,
+        screen_capture_event_bus=None,
+        rectangle=None,
+        text_callback=None,
+        ):
+    """
+    Japanese OCR client
+
+    Runs OCR in the background.
+    It can read images copied to the system clipboard or placed in a directory, images sent via a websocket or a Unix domain socket, or directly capture a screen (or a portion of it) or a window.
+    Recognized texts can be either saved to system clipboard, appended to a text file or sent via a websocket.
+
+    :param read_from: Specifies where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.
+    :param write_to: Specifies where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.
+    :param delay_secs: How often to check for new images, in seconds.
+    :param engine: OCR engine to use. Available: "mangaocr", "glens", "glensweb", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".
+    :param pause_at_startup: Pause at startup.
+    :param ignore_flag: Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).
+    :param delete_images: Delete image files after processing when reading from a directory.
+    :param notifications: Show an operating system notification with the detected text.
+    :param auto_pause: Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.
+    :param combo_pause: Specifies a combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
+    :param combo_engine_switch: Specifies a combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
+    :param screen_capture_area: Specifies area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).
+    :param screen_capture_delay_secs: Specifies the delay (in seconds) between screenshots when reading with screen capture.
+    :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_area is a window name, specifies whether to only target the window while it's active.
+    :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
+    """
+
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
     if config.has_config:
@@ -600,7 +667,7 @@ def run():
             if engine_instance.available:
                 engine_instances.append(engine_instance)
                 engine_keys.append(engine_class.key)
-                if config.get_general('engine') == engine_class.name:
+                if engine == engine_class.name:
                     default_engine = engine_class.key
 
     if len(engine_keys) == 0:
@@ -611,30 +678,29 @@ def run():
     global terminated
     global paused
     global just_unpaused
+    global first_pressed
     global notifier
     global auto_pause_handler
-    read_from = config.get_general('read_from')
-    write_to = config.get_general('write_to')
     terminated = False
-    paused = config.get_general('pause_at_startup')
+    paused = pause_at_startup
     just_unpaused = True
-    auto_pause = config.get_general('auto_pause')
+    first_pressed = None
     auto_pause_handler = None
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
+    prefix_to_use = ""
     delay_secs = config.get_general('delay_secs')
-    combo_pause = config.get_general('combo_pause')
-    combo_engine_switch = config.get_general('combo_engine_switch')
+    screen_capture_on_combo = False
     notifier = DesktopNotifierSync()
     key_combos = {}
 
     if read_from != 'screencapture' and auto_pause != 0:
         auto_pause_handler = AutopauseTimer(auto_pause)
 
-    if combo_pause != '':
+    if combo_pause:
         key_combos[combo_pause] = pause_handler
-    if combo_engine_switch != '':
-        if combo_pause != '':
+    if combo_engine_switch:
+        if combo_pause:
             key_combos[combo_engine_switch] = engine_change_handler
         else:
             raise ValueError('combo_pause must also be specified')
@@ -643,6 +709,10 @@ def run():
         global websocket_server_thread
         websocket_server_thread = WebsocketServerThread(read_from == 'websocket')
         websocket_server_thread.start()
+
+    if write_to == "callback" and text_callback:
+        global txt_callback
+        txt_callback = text_callback
 
     if read_from == 'websocket':
         global websocket_queue
@@ -662,7 +732,6 @@ def run():
         unix_socket_server_thread.start()
         read_from_readable = 'unix socket'
     elif read_from == 'clipboard':
-        ignore_flag = config.get_general('ignore_flag')
         macos_clipboard_polling = False
         windows_clipboard_polling = False
         img = None
@@ -683,16 +752,15 @@ def run():
 
         read_from_readable = 'clipboard'
     elif read_from == 'screencapture':
-        screen_capture_area = config.get_general('screen_capture_area')
-        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
-        screen_capture_combo = config.get_general('screen_capture_combo')
-        if screen_capture_combo != '':
+        if screen_capture_combo:
             screen_capture_on_combo = True
             global screenshot_event
             screenshot_event = threading.Event()
             key_combos[screen_capture_combo] = on_screenshot_combo
-        else:
-            screen_capture_on_combo = False
+        if screen_capture_event_bus:
+            screen_capture_on_combo = True
+            screenshot_event = threading.Event()
+            screen_capture_event_bus = on_screenshot_bus
         if type(screen_capture_area) == tuple:
             screen_capture_area = ','.join(map(str, screen_capture_area))
         global screencapture_window_active
@@ -706,13 +774,14 @@ def run():
         elif screen_capture_area.startswith('screen_'):
             parts = screen_capture_area.split('_')
             if len(parts) != 2 or not parts[1].isdigit():
-                raise ValueError('Invalid screen_capture_area')  
+                raise ValueError('Invalid screen_capture_area')
             screen_capture_monitor = int(parts[1])
             screencapture_mode = 1
         elif len(screen_capture_area.split(',')) == 4:
             screencapture_mode = 3
         else:
             screencapture_mode = 2
+            screen_capture_window = screen_capture_area
 
         if screencapture_mode != 2:
             sct = mss.mss()
@@ -746,8 +815,7 @@ def run():
 
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
-        else:
-            screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
+        if screencapture_mode == 2 or screen_capture_window:
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
                 if int(platform.mac_ver()[0].split('.')[0]) < 14:
@@ -769,7 +837,7 @@ def run():
                         window_ids.append(window['kCGWindowNumber'])
 
                 if screen_capture_area in window_titles:
-                    window_index = window_titles.index(screen_capture_area)
+                    window_index = window_titles.index(screen_capture_window)
                 else:
                     for t in window_titles:
                         if screen_capture_area in t:
@@ -788,7 +856,7 @@ def run():
                     macos_window_tracker.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
-                window_handle, window_title = get_windows_window_handle(screen_capture_area)
+                window_handle, window_title = get_windows_window_handle(screen_capture_window)
 
                 if not window_handle:
                     raise ValueError(area_invalid_error)
@@ -806,8 +874,6 @@ def run():
         filtering = TextFiltering()
         read_from_readable = 'screen capture'
     else:
-        delete_images = config.get_general('delete_images')
-
         read_from = Path(read_from)
         if not read_from.is_dir():
             raise ValueError('read_from must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
@@ -824,19 +890,19 @@ def run():
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
         key_combo_listener.start()
 
-    if write_to in ('clipboard', 'websocket'):
+    if write_to in ('clipboard', 'websocket', 'callback'):
         write_to_readable = write_to
     else:
         if Path(write_to).suffix.lower() != '.txt':
             raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
 
-    signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGINT, signal_handler)
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
     logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
-    while not terminated:
+    while not terminated and not stop_running_flag:
         if read_from == 'websocket':
             while True:
                 try:
@@ -846,7 +912,7 @@ def run():
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, None, None)
+                        process_and_write_results(img, write_to, notifications, None, None)
         elif read_from == 'unixsocket':
             while True:
                 try:
@@ -856,7 +922,7 @@ def run():
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, None, None)
+                        process_and_write_results(img, write_to, notifications, None, None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -904,7 +970,7 @@ def run():
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(img, None, None)
+                process_and_write_results(img, write_to, notifications, None, None)
 
             just_unpaused = False
 
@@ -968,14 +1034,23 @@ def run():
                 else:
                     sct_img = sct.grab(sct_params)
                     img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-                res = process_and_write_results(img, last_result, filtering)
+                # img.save(os.path.join(get_temporary_directory(), 'screencapture_before.png'), 'png')
+                if screen_capture_exclusions:
+                    img = img.convert("RGBA")
+                    draw = ImageDraw.Draw(img)
+                    for exclusion in screen_capture_exclusions:
+                        left, top, right, bottom = exclusion
+                        draw.rectangle((left, top, right, bottom), fill=(0, 0, 0, 0))
+                        # draw.rectangle((left, top, right, bottom), fill=(0, 0, 0))
+                # img.save(os.path.join(get_temporary_directory(), 'screencapture.png'), 'png')
+                res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle)
                 if res:
                     last_result = (res, engine_index)
                 delay = screen_capture_delay_secs
             else:
                 delay = delay_secs
 
-            if not screen_capture_on_combo:
+            if not screen_capture_on_combo and delay:
                 time.sleep(delay)
         else:
             for path in read_from.iterdir():
@@ -991,7 +1066,7 @@ def run():
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(img, None, None)
+                                process_and_write_results(img, write_to, notifications, None, None)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
