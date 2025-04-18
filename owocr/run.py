@@ -1,3 +1,4 @@
+import datetime
 import sys
 import signal
 import time
@@ -538,7 +539,7 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering, engine=None, rectangle=None):
+def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering, engine=None, rectangle=None, time=None):
     global engine_index
     if auto_pause_handler:
         auto_pause_handler.stop()
@@ -570,7 +571,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, rectangle)
+            txt_callback(text, rectangle, time)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -906,6 +907,7 @@ def run(read_from=None,
     logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated and not stop_running_flag:
+        time = datetime.datetime.now()
         if read_from == 'websocket':
             while True:
                 try:
@@ -915,7 +917,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, None, None)
+                        process_and_write_results(img, write_to, notifications, None, None, time=time)
         elif read_from == 'unixsocket':
             while True:
                 try:
@@ -925,7 +927,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, None, None)
+                        process_and_write_results(img, write_to, notifications, None, None, time=time)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -973,7 +975,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(img, write_to, notifications, None, None)
+                process_and_write_results(img, write_to, notifications, None, None, time=time)
 
             just_unpaused = False
 
@@ -1052,7 +1054,7 @@ def run(read_from=None,
                         draw.rectangle((left, top, right, bottom), fill=(0, 0, 0, 0))
                         # draw.rectangle((left, top, right, bottom), fill=(0, 0, 0))
                 # img.save(os.path.join(get_temporary_directory(), 'screencapture.png'), 'png')
-                res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle)
+                res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle, time=time)
                 if res:
                     last_result = (res, engine_index)
                 delay = screen_capture_delay_secs
@@ -1075,7 +1077,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(img, write_to, notifications, None, None)
+                                process_and_write_results(img, write_to, notifications, None, None, time=time)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
