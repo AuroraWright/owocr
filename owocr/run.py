@@ -782,6 +782,8 @@ def run(read_from=None,
         else:
             screencapture_mode = 2
             screen_capture_window = screen_capture_area
+        if screen_capture_window:
+            screencapture_mode = 2
 
         if screencapture_mode != 2:
             sct = mss.mss()
@@ -815,6 +817,7 @@ def run(read_from=None,
 
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+        custom_left, custom_top, custom_width, custom_height = [int(c.strip()) for c in screen_capture_area.split(',')]
         if screencapture_mode == 2 or screen_capture_window:
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
@@ -1025,7 +1028,13 @@ def run(read_from=None,
                         except pywintypes.error:
                             on_window_closed(False)
                             break
+
+                        rand = random.randint(1, 10)
+
                         img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+
+                        if custom_left:
+                            img = img.crop((custom_left, custom_top, custom_width, custom_height))
 
                         win32gui.DeleteObject(save_bitmap.GetHandle())
                         save_dc.DeleteDC()
