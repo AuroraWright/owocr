@@ -381,7 +381,7 @@ class AutopauseTimer:
             self.timer_thread.join()
 
     def _countdown(self):
-        seconds = self.timeout
+        seconds = self.timeout if self.timeout else 1
         while seconds > 0 and not self.stop_event.is_set():
             time.sleep(1)
             seconds -= 1
@@ -539,7 +539,7 @@ def are_images_identical(img1, img2):
     return (img1.shape == img2.shape) and (img1 == img2).all()
 
 
-def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering, engine=None, rectangle=None, time=None):
+def process_and_write_results(img_or_path, write_to, notifications, last_result, filtering, engine=None, rectangle=None, start_time=None):
     global engine_index
     if auto_pause_handler:
         auto_pause_handler.stop()
@@ -571,7 +571,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, rectangle, time)
+            txt_callback(text, rectangle, start_time)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -600,7 +600,7 @@ def run(read_from=None,
         ignore_flag=None,
         delete_images=None,
         notifications=None,
-        auto_pause=None,
+        auto_pause=0,
         combo_pause=None,
         combo_engine_switch=None,
         screen_capture_area=None,
@@ -637,6 +637,18 @@ def run(read_from=None,
     :param screen_capture_only_active_windows: When reading with screen capture and screen_capture_area is a window name, specifies whether to only target the window while it's active.
     :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
+
+    if not read_from:
+        read_from = config.get_general('read_from')
+
+    if not screen_capture_area:
+        screen_capture_area = config.get_general('screen_capture_area')
+
+    if not screen_capture_only_active_windows:
+        screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
+
+    if not write_to:
+        write_to = config.get_general('write_to')
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
@@ -682,6 +694,7 @@ def run(read_from=None,
     global first_pressed
     global notifier
     global auto_pause_handler
+    custom_left = None
     terminated = False
     paused = pause_at_startup
     just_unpaused = True
@@ -818,7 +831,8 @@ def run(read_from=None,
 
             sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
-        custom_left, custom_top, custom_width, custom_height = [int(c.strip()) for c in screen_capture_area.split(',')]
+        if len(screen_capture_area.split(',')) == 4:
+            custom_left, custom_top, custom_width, custom_height = [int(c.strip()) for c in screen_capture_area.split(',')]
         if screencapture_mode == 2 or screen_capture_window:
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
@@ -907,7 +921,7 @@ def run(read_from=None,
     logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated and not stop_running_flag:
-        time = datetime.datetime.now()
+        start_time = datetime.datetime.now()
         if read_from == 'websocket':
             while True:
                 try:
@@ -917,7 +931,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, None, None, time=time)
+                        process_and_write_results(img, write_to, notifications, None, None, start_time=start_time)
         elif read_from == 'unixsocket':
             while True:
                 try:
@@ -927,7 +941,7 @@ def run(read_from=None,
                 else:
                     if not paused:
                         img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, write_to, notifications, None, None, time=time)
+                        process_and_write_results(img, write_to, notifications, None, None, start_time=start_time)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
@@ -975,7 +989,7 @@ def run(read_from=None,
                             process_clipboard = True
 
             if process_clipboard:
-                process_and_write_results(img, write_to, notifications, None, None, time=time)
+                process_and_write_results(img, write_to, notifications, None, None, start_time=start_time)
 
             just_unpaused = False
 
@@ -1054,7 +1068,7 @@ def run(read_from=None,
                         draw.rectangle((left, top, right, bottom), fill=(0, 0, 0, 0))
                         # draw.rectangle((left, top, right, bottom), fill=(0, 0, 0))
                 # img.save(os.path.join(get_temporary_directory(), 'screencapture.png'), 'png')
-                res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle, time=time)
+                res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle, start_time=start_time)
                 if res:
                     last_result = (res, engine_index)
                 delay = screen_capture_delay_secs
@@ -1077,7 +1091,7 @@ def run(read_from=None,
                             except (UnidentifiedImageError, OSError) as e:
                                 logger.warning(f'Error while reading file {path}: {e}')
                             else:
-                                process_and_write_results(img, write_to, notifications, None, None, time=time)
+                                process_and_write_results(img, write_to, notifications, None, None, start_time=start_time)
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)

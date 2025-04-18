@@ -973,3 +973,82 @@ class OCRSpace:
 
     def _preprocess(self, img):       
         return limit_image_size(img, self.max_byte_size)
+
+
+class GeminiOCR:
+    name = 'gemini'
+    readable_name = 'Gemini'
+    key = 'm'
+    available = False
+
+    def __init__(self, config={'api_key': None}):
+        # if "google-generativeai" not in sys.modules:
+        #     logger.warning('google-generativeai not available, GeminiOCR will not work!')
+        # else:
+        import google.generativeai as genai
+        try:
+            self.api_key = config['api_key']
+            if not self.api_key:
+                logger.warning('Gemini API key not provided, GeminiOCR will not work!')
+            else:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(config['model'])
+                self.available = True
+                logger.info('Gemini (using google-generativeai) ready')
+        except KeyError:
+            logger.warning('Gemini API key not found in config, GeminiOCR will not work!')
+        except Exception as e:
+            logger.error(f'Error configuring google-generativeai: {e}')
+
+    def __call__(self, img_or_path):
+        if not self.available:
+            return (False, 'GeminiOCR is not available due to missing API key or configuration error.')
+
+        try:
+            import google.generativeai as genai
+            if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+                img = Image.open(img_or_path).convert("RGB")
+            elif isinstance(img_or_path, Image.Image):
+                img = img_or_path.convert("RGB")
+            else:
+                raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+            img_bytes = self._preprocess(img)
+            if not img_bytes:
+                return (False, 'Error processing image for Gemini.')
+
+            contents = [
+                {
+                    'parts': [
+                        {
+                            'inline_data': {
+                                'mime_type': 'image/png',
+                                'data': base64.b64encode(img_bytes).decode('utf-8')
+                            }
+                        },
+                        {
+                            'text': 'As Quick as Possible, Give me the text from this image, no other output. If there is no text, return nothing.'
+                        }
+                    ]
+                }
+            ]
+
+            response = self.model.generate_content(contents)
+            text_output = response.text.strip()
+
+            return (True, text_output)
+
+        except FileNotFoundError:
+            return (False, f'File not found: {img_or_path}')
+        except Exception as e:
+            return (False, f'Gemini API request failed: {e}')
+
+    def _preprocess(self, img):
+        try:
+            from io import BytesIO
+            img_io = BytesIO()
+            img.save(img_io, 'PNG')  # Save as PNG
+            return img_io.getvalue()
+        except Exception as e:
+            logger.error(f'Error preprocessing image for Gemini: {e}')
+            return None
