@@ -571,7 +571,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, rectangle, start_time)
+            txt_callback(text, rectangle, start_time, img_or_path)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -1026,6 +1026,7 @@ def run(read_from=None,
                     else:
                         try:
                             coord_left, coord_top, right, bottom = win32gui.GetWindowRect(window_handle)
+
                             coord_width = right - coord_left
                             coord_height = bottom - coord_top
 
@@ -1045,12 +1046,18 @@ def run(read_from=None,
                             on_window_closed(False)
                             break
 
-                        rand = random.randint(1, 10)
+                        # rand = random.randint(1, 10)
 
                         img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
 
+                        # if rand == 1:
+                        #     img.show()
+
                         if custom_left:
-                            img = img.crop((custom_left, custom_top, custom_width, custom_height))
+                            img = img.crop((custom_left, custom_top, custom_left + custom_width, custom_top + custom_height))
+
+                        # if rand == 1:
+                        #     img.show()
 
                         win32gui.DeleteObject(save_bitmap.GetHandle())
                         save_dc.DeleteDC()
@@ -1064,8 +1071,8 @@ def run(read_from=None,
                     img = img.convert("RGBA")
                     draw = ImageDraw.Draw(img)
                     for exclusion in screen_capture_exclusions:
-                        left, top, right, bottom = exclusion
-                        draw.rectangle((left, top, right, bottom), fill=(0, 0, 0, 0))
+                        left, top, width, height = exclusion
+                        draw.rectangle((left, top, left + width, top + height), fill=(0, 0, 0, 0))
                         # draw.rectangle((left, top, right, bottom), fill=(0, 0, 0))
                 # img.save(os.path.join(get_temporary_directory(), 'screencapture.png'), 'png')
                 res, _ = process_and_write_results(img, write_to, notifications, last_result, filtering, rectangle=rectangle, start_time=start_time)

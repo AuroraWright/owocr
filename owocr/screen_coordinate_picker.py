@@ -55,12 +55,12 @@ class ScreenSelector:
         def on_release(event):
             nonlocal start_x, start_y
             end_x, end_y = event.x, event.y
-            
-            x1 = min(start_x, end_x) 
-            y1 = min(start_y, end_y) 
-            x2 = max(start_x, end_x) 
-            y2 = max(start_y, end_y) 
-            
+
+            x1 = min(start_x, end_x)
+            y1 = min(start_y, end_y)
+            x2 = max(start_x, end_x)
+            y2 = max(start_y, end_y)
+
             self.on_select(monitor, (x1, y1, x2 - x1, y2 - y1))
 
         canvas.bind('<ButtonPress-1>', on_click)
@@ -90,11 +90,19 @@ def get_screen_selection():
     with Manager() as manager:
         res = manager.dict()
         process = Process(target=run_screen_selector, args=(res,))
-        
-        process.start()    
+
+        process.start()
         process.join()
 
         if 'monitor' in res and 'coordinates' in res:
             return res.copy()
         else:
             return False
+
+if __name__ == "__main__":
+    selection = get_screen_selection()
+    if selection:
+        print(f"Selected monitor: {selection['monitor']}")
+        print(f"Selected coordinates: {selection['coordinates']}")
+    else:
+        print("No selection made or process was interrupted.")
