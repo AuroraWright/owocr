@@ -16,8 +16,7 @@ import asyncio
 import websockets
 import socketserver
 
-from PIL import Image
-from PIL import UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifierSync
@@ -882,14 +881,17 @@ def run():
                     with objc.autorelease_pool():
                         old_count = count
                         count = pasteboard.changeCount()
-                        if not just_unpaused and count != old_count and NSPasteboardTypeTIFF in pasteboard.types():
-                            clipboard_text = ''
-                            if NSPasteboardTypeString in pasteboard.types():
-                                clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
-                            if ignore_flag or clipboard_text != '*ocr_ignore*':
-                                img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                                img = Image.open(io.BytesIO(img))
-                                process_clipboard = True
+                        if not just_unpaused and count != old_count:
+                            while len(pasteboard.types()) == 0:
+                                time.sleep(0.1)
+                            if NSPasteboardTypeTIFF in pasteboard.types():
+                                clipboard_text = ''
+                                if NSPasteboardTypeString in pasteboard.types():
+                                    clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
+                                if ignore_flag or clipboard_text != '*ocr_ignore*':
+                                    img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
+                                    img = Image.open(io.BytesIO(img))
+                                    process_clipboard = True
             else:
                 if not paused:
                     old_img = img
