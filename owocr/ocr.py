@@ -759,7 +759,9 @@ class OneOCR:
 
         if sys.platform == 'win32':
             try:
-                res = self.model.recognize_pil(img)['text']
+                ocr_resp = self.model.recognize_pil(img)
+                # print(json.dumps(ocr_resp))
+                res = ocr_resp['text']
             except RuntimeError as e:
                 return (False, e)
         else:
@@ -772,6 +774,7 @@ class OneOCR:
 
             if res.status_code != 200:
                 return (False, 'Unknown error!')
+
 
             res = res.json()['text']
 
@@ -1007,9 +1010,9 @@ class GeminiOCR:
         try:
             import google.generativeai as genai
             if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
-                img = Image.open(img_or_path).convert("RGB")
+                img = Image.open(img_or_path)
             elif isinstance(img_or_path, Image.Image):
-                img = img_or_path.convert("RGB")
+                img = img_or_path
             else:
                 raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
 
@@ -1023,11 +1026,11 @@ class GeminiOCR:
                         {
                             'inline_data': {
                                 'mime_type': 'image/png',
-                                'data': base64.b64encode(img_bytes).decode('utf-8')
+                                'data': img_bytes
                             }
                         },
                         {
-                            'text': 'As Quick as Possible, Give me the text from this image, no other output. If there is no text, return nothing.'
+                            'text': 'Analyze the image. Extract text *only* from within dialogue boxes (speech bubbles or panels containing character dialogue). From the extracted dialogue text, filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. If no text is found within dialogue boxes after applying filters, return nothing. Do not include any other output, formatting markers, or commentary.'
                         }
                     ]
                 }
@@ -1044,11 +1047,4 @@ class GeminiOCR:
             return (False, f'Gemini API request failed: {e}')
 
     def _preprocess(self, img):
-        try:
-            from io import BytesIO
-            img_io = BytesIO()
-            img.save(img_io, 'PNG')  # Save as PNG
-            return img_io.getvalue()
-        except Exception as e:
-            logger.error(f'Error preprocessing image for Gemini: {e}')
-            return None
+        return pil_image_to_bytes(img, png_compression=1)
