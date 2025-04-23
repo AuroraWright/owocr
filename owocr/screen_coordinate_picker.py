@@ -1,8 +1,9 @@
 from multiprocessing import Process, Manager
 import mss
-from PIL import Image, ImageTk
+from PIL import Image
 
 try:
+    from PIL import ImageTk
     import tkinter as tk
     selector_available = True
 except:
@@ -85,7 +86,7 @@ def run_screen_selector(result):
 
 def get_screen_selection():
     if not selector_available:
-        raise ValueError('tkinter is not installed, unable to open picker')
+        raise ValueError('tkinter or PIL with tkinter support are not installed, unable to open picker')
 
     with Manager() as manager:
         res = manager.dict()
