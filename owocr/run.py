@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import io
 import re
+import logging
 import inspect
 
 import numpy as np
@@ -299,6 +300,7 @@ class TextFiltering:
         try:
             from transformers import pipeline, AutoTokenizer
             import torch
+            logging.getLogger('transformers').setLevel(logging.ERROR)
 
             model_ckpt = 'papluca/xlm-roberta-base-language-detection'
             tokenizer = AutoTokenizer.from_pretrained(
