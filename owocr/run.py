@@ -575,7 +575,7 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, rectangle, start_time, img_or_path)
+            txt_callback(text, orig_text, rectangle, start_time, img_or_path)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -928,7 +928,7 @@ def run(read_from=None,
     logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated and not stop_running_flag:
-        start_time = datetime.datetime.now()
+        start_time = datetime.now()
         if read_from == 'websocket':
             while True:
                 try:
