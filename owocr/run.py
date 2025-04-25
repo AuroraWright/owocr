@@ -222,9 +222,6 @@ class WindowsWindowTracker(threading.Thread):
                 if self.window_active != is_active:
                     on_window_activated(is_active)
                     self.window_active = is_active
-            elif ignore_window_visiblity:
-                on_window_minimized(False)
-                self.window_minimized = False
             else:
                 is_minimized = win32gui.IsIconic(self.window_handle)
                 if self.window_minimized != is_minimized:
@@ -646,16 +643,16 @@ def run(read_from=None,
     :param screen_capture_combo: When reading with screen capture, specifies a combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key
     """
 
-    if not read_from:
+    if read_from is None:
         read_from = config.get_general('read_from')
 
-    if not screen_capture_area:
+    if screen_capture_area is None:
         screen_capture_area = config.get_general('screen_capture_area')
 
-    if not screen_capture_only_active_windows:
+    if screen_capture_only_active_windows is None:
         screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
 
-    if not write_to:
+    if write_to is None:
         write_to = config.get_general('write_to')
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
@@ -669,8 +666,6 @@ def run(read_from=None,
 
     global engine_instances
     global engine_keys
-    global ignore_window_visiblity
-    ignore_window_visiblity = ignore_window_visible
     engine_instances = []
     config_engines = []
     engine_keys = []
