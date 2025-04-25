@@ -222,6 +222,9 @@ class WindowsWindowTracker(threading.Thread):
                 if self.window_active != is_active:
                     on_window_activated(is_active)
                     self.window_active = is_active
+            elif ignore_window_visiblity:
+                on_window_minimized(False)
+                self.window_minimized = False
             else:
                 is_minimized = win32gui.IsIconic(self.window_handle)
                 if self.window_minimized != is_minimized:
@@ -617,6 +620,7 @@ def run(read_from=None,
         screen_capture_event_bus=None,
         rectangle=None,
         text_callback=None,
+        ignore_window_visible=False,
         ):
     """
     Japanese OCR client
@@ -665,6 +669,8 @@ def run(read_from=None,
 
     global engine_instances
     global engine_keys
+    global ignore_window_visiblity
+    ignore_window_visiblity = ignore_window_visible
     engine_instances = []
     config_engines = []
     engine_keys = []
