@@ -114,12 +114,14 @@ class Config:
                 for sub_key in config[key]:
                     self.__engine_config[key.lower()][sub_key.lower()] = self.__parse(config[key][sub_key])
 
-    def get_general(self, value):
+    def get_general(self, value, default_value=None):
         if self.__provided_cli_args.get(value, None) is not None:
             return self.__provided_cli_args[value]
         try:
             return self.__general_config[value]
         except KeyError:
+            if default_value:
+                return default_value
             if value in self.__default_config:
                 return self.__default_config[value]
             else:

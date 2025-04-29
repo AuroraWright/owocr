@@ -305,8 +305,21 @@ class TextFiltering:
 
     def __init__(self):
         from pysbd import Segmenter
-        self.segmenter = Segmenter(language='ja', clean=True)
+        self.segmenter = Segmenter(language=lang, clean=True)
         self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
+        self.chinese_common_regex = re.compile(r'[\u4E00-\u9FFF]')
+        self.english_regex = re.compile(r'[a-zA-Z0-9.,!?;:"\'()\[\]{}]')
+        self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
+        self.chinese_common_regex = re.compile(r'[\u4E00-\u9FFF]')
+        self.english_regex = re.compile(r'[a-zA-Z0-9.,!?;:"\'()\[\]{}]')
+        self.korean_regex = re.compile(r'[\uAC00-\uD7AF]')
+        self.arabic_regex = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
+        self.russian_regex = re.compile(r'[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F\u1C80-\u1C8F]')
+        self.greek_regex = re.compile(r'[\u0370-\u03FF\u1F00-\u1FFF]')
+        self.hebrew_regex = re.compile(r'[\u0590-\u05FF\uFB1D-\uFB4F]')
+        self.thai_regex = re.compile(r'[\u0E00-\u0E7F]')
+        self.latin_extended_regex = re.compile(
+            r'[a-zA-Z\u00C0-\u00FF\u0100-\u017F\u0180-\u024F\u0250-\u02AF\u1D00-\u1D7F\u1D80-\u1DBF\u1E00-\u1EFF\u2C60-\u2C7F\uA720-\uA7FF\uAB30-\uAB6F]')
         try:
             from transformers import pipeline, AutoTokenizer
             import torch
@@ -334,7 +347,28 @@ class TextFiltering:
 
         orig_text_filtered = []
         for block in orig_text:
-            block_filtered = self.kana_kanji_regex.findall(block)
+            if lang == "ja":
+                block_filtered = self.kana_kanji_regex.findall(block)
+            elif lang == "zh":
+                block_filtered = self.chinese_common_regex.findall(block)
+            elif lang == "ko":
+                block_filtered = self.korean_regex.findall(block)
+            elif lang == "ar":
+                block_filtered = self.arabic_regex.findall(block)
+            elif lang == "ru":
+                block_filtered = self.russian_regex.findall(block)
+            elif lang == "el":
+                block_filtered = self.greek_regex.findall(block)
+            elif lang == "he":
+                block_filtered = self.hebrew_regex.findall(block)
+            elif lang == "th":
+                block_filtered = self.thai_regex.findall(block)
+            elif lang in ["en", "fr", "de", "es", "it", "pt", "nl", "sv", "da", "no",
+                          "fi"]:  # Many European languages use extended Latin
+                block_filtered = self.latin_extended_regex.findall(block)
+            else:
+                block_filtered = self.english_regex.findall(block)
+
             if block_filtered:
                 orig_text_filtered.append(''.join(block_filtered))
             else:
@@ -355,12 +389,12 @@ class TextFiltering:
             detection_results = self.pipe(new_blocks, top_k=3, truncation=True)
             for idx, block in enumerate(new_blocks):
                 for result in detection_results[idx]:
-                    if result['label'] == 'ja':
+                    if result['label'] == lang:
                         final_blocks.append(block)
                         break
         else:
             for block in new_blocks:
-                if self.classify(block)[0] == 'ja':
+                if self.classify(block)[0] == lang:
                     final_blocks.append(block)
 
         text = '\n'.join(final_blocks)
@@ -562,10 +596,16 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
 
     orig_text = []
     engine_color = config.get_general('engine_color')
+    # print(filtering)
+    #
+    #
+    # print(lang)
+
     if res:
         if filtering:
             text, orig_text = filtering(text, last_result)
-        text = post_process(text)
+        if lang == "ja" or lang == "zh":
+            text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if notifications:
             notifier.send(title='owocr', message='Text recognized: ' + text)
@@ -584,6 +624,9 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
             auto_pause_handler.start()
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
+
+    # print(orig_text)
+    # print(text)
 
     return orig_text, text
 
@@ -617,7 +660,7 @@ def run(read_from=None,
         screen_capture_event_bus=None,
         rectangle=None,
         text_callback=None,
-        ignore_window_visible=False,
+        language=None,
         ):
     """
     Japanese OCR client
@@ -652,8 +695,35 @@ def run(read_from=None,
     if screen_capture_only_active_windows is None:
         screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
 
+    if screen_capture_exclusions is None:
+        screen_capture_exclusions = config.get_general('screen_capture_exclusions')
+
+    if screen_capture_window is None:
+        screen_capture_window = config.get_general('screen_capture_window')
+
+    if screen_capture_delay_secs is None:
+        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
+
+    if screen_capture_combo is None:
+        screen_capture_combo = config.get_general('screen_capture_combo')
+
+    if stop_running_flag is None:
+        stop_running_flag = config.get_general('stop_running_flag')
+
+    if screen_capture_event_bus is None:
+        screen_capture_event_bus = config.get_general('screen_capture_event_bus')
+
+    if rectangle is None:
+        rectangle = config.get_general('rectangle')
+
+    if text_callback is None:
+        text_callback = config.get_general('text_callback')
+
     if write_to is None:
         write_to = config.get_general('write_to')
+
+    if language is None:
+        language = config.get_general('language', "ja")
 
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
 
@@ -666,6 +736,8 @@ def run(read_from=None,
 
     global engine_instances
     global engine_keys
+    global lang
+    lang = language
     engine_instances = []
     config_engines = []
     engine_keys = []
