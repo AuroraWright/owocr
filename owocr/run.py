@@ -870,14 +870,17 @@ def run():
                         except pywintypes.error:
                             pass
                         time.sleep(0.1)
-                    if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
-                        clipboard_text = ''
-                        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
-                            clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
-                        if ignore_flag or clipboard_text != '*ocr_ignore*':
-                            img = Image.open(io.BytesIO(win32clipboard.GetClipboardData(win32clipboard.CF_DIB)))
-                            process_clipboard = True
-                    win32clipboard.CloseClipboard()
+                    try:
+                        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
+                            clipboard_text = ''
+                            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+                                clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                            if ignore_flag or clipboard_text != '*ocr_ignore*':
+                                img = Image.open(io.BytesIO(win32clipboard.GetClipboardData(win32clipboard.CF_DIB)))
+                                process_clipboard = True
+                        win32clipboard.CloseClipboard()
+                    except pywintypes.error:
+                        pass
             elif macos_clipboard_polling:
                 if not paused:
                     with objc.autorelease_pool():
