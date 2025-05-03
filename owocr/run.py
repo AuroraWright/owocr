@@ -50,11 +50,50 @@ except ImportError:
     pass
 
 
-class WindowsClipboardThread(threading.Thread):
+class ClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.ignore_flag = config.get_general('ignore_flag')
+        self.delay_secs = config.get_general('delay_secs')
         self.last_update = time.time()
+
+    def are_images_identical(self, img1, img2):
+        if None in (img1, img2):
+            return img1 == img2
+
+        img1 = np.array(img1)
+        img2 = np.array(img2)
+
+        return (img1.shape == img2.shape) and (img1 == img2).all()
+
+    def normalize_macos_clipboard(self, img):
+        ns_data = NSData.dataWithBytes_length_(img, len(img))
+        ns_image = NSImage.alloc().initWithData_(ns_data)
+
+        new_image = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
+            None,  # Set to None to create a new bitmap
+            int(ns_image.size().width),
+            int(ns_image.size().height),
+            8,  # Bits per sample
+            4,  # Samples per pixel (R, G, B, A)
+            True,  # Has alpha
+            False,  # Is not planar
+            NSDeviceRGBColorSpace,
+            0,  # Automatically compute bytes per row
+            32  # Bits per pixel (8 bits per sample * 4 samples per pixel)
+        )
+
+        context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(new_image)
+        NSGraphicsContext.setCurrentContext_(context)
+
+        ns_image.drawAtPoint_fromRect_operation_fraction_(
+            NSZeroPoint,
+            NSZeroRect,
+            NSCompositingOperationCopy,
+            1.0
+        )
+
+        return new_image.TIFFRepresentation()
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
@@ -91,10 +130,58 @@ class WindowsClipboardThread(threading.Thread):
         return win32gui.CreateWindow(class_atom, className, 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
 
     def run(self):
-        hwnd = self.create_window()
-        self.thread_id = win32api.GetCurrentThreadId()
-        ctypes.windll.user32.AddClipboardFormatListener(hwnd)
-        win32gui.PumpMessages()
+        if sys.platform == 'win32':
+            hwnd = self.create_window()
+            self.thread_id = win32api.GetCurrentThreadId()
+            ctypes.windll.user32.AddClipboardFormatListener(hwnd)
+            win32gui.PumpMessages()
+        else:
+            is_macos = sys.platform == 'darwin'
+            if is_macos:
+                from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
+                pasteboard = NSPasteboard.generalPasteboard()
+                count = pasteboard.changeCount()
+            else:
+                from PIL import ImageGrab
+            global just_unpaused
+            just_unpaused = True
+            img = None
+
+            while not terminated:
+                if paused:
+                    sleep_time = 0.5
+                else:
+                    sleep_time = self.delay_secs
+                    if is_macos:
+                        with objc.autorelease_pool():
+                            old_count = count
+                            count = pasteboard.changeCount()
+                            if not just_unpaused and count != old_count:
+                                while len(pasteboard.types()) == 0:
+                                    time.sleep(0.1)
+                                if NSPasteboardTypeTIFF in pasteboard.types():
+                                    clipboard_text = ''
+                                    if NSPasteboardTypeString in pasteboard.types():
+                                        clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
+                                    if self.ignore_flag or clipboard_text != '*ocr_ignore*':
+                                        img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
+                                        clipboard_queue.put(img)
+                    else:
+                        old_img = img
+                        try:
+                            img = ImageGrab.grabclipboard()
+                        except Exception:
+                            pass
+                        else:
+                            if ((not just_unpaused) and isinstance(img, Image.Image) and \
+                                (self.ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
+                                (not self.are_images_identical(img, old_img))):
+                                clipboard_queue.put(img)
+
+                    just_unpaused = False
+
+                if not terminated:
+                    time.sleep(sleep_time)
 
 
 class WebsocketServerThread(threading.Thread):
@@ -507,46 +594,6 @@ def on_window_minimized(minimized):
     screencapture_window_visible = not minimized
 
 
-def normalize_macos_clipboard(img):
-    ns_data = NSData.dataWithBytes_length_(img, len(img))
-    ns_image = NSImage.alloc().initWithData_(ns_data)
-
-    new_image = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
-        None,  # Set to None to create a new bitmap
-        int(ns_image.size().width),
-        int(ns_image.size().height),
-        8,  # Bits per sample
-        4,  # Samples per pixel (R, G, B, A)
-        True,  # Has alpha
-        False,  # Is not planar
-        NSDeviceRGBColorSpace,
-        0,  # Automatically compute bytes per row
-        32  # Bits per pixel (8 bits per sample * 4 samples per pixel)
-    )
-
-    context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(new_image)
-    NSGraphicsContext.setCurrentContext_(context)
-
-    ns_image.drawAtPoint_fromRect_operation_fraction_(
-        NSZeroPoint,
-        NSZeroRect,
-        NSCompositingOperationCopy,
-        1.0
-    )
-
-    return new_image.TIFFRepresentation()
-
-
-def are_images_identical(img1, img2):
-    if None in (img1, img2):
-        return img1 == img2
-
-    img1 = np.array(img1)
-    img2 = np.array(img2)
-
-    return (img1.shape == img2.shape) and (img1 == img2).all()
-
-
 def process_and_write_results(img_or_path, last_result, filtering):
     if auto_pause_handler:
         auto_pause_handler.stop()
@@ -628,19 +675,16 @@ def run():
     global engine_index
     global terminated
     global paused
-    global just_unpaused
     global notifier
     global auto_pause_handler
     read_from = config.get_general('read_from')
     write_to = config.get_general('write_to')
     terminated = False
     paused = config.get_general('pause_at_startup')
-    just_unpaused = True
     auto_pause = config.get_general('auto_pause')
     auto_pause_handler = None
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
-    delay_secs = config.get_general('delay_secs')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
     notifier = DesktopNotifierSync()
@@ -680,25 +724,10 @@ def run():
         unix_socket_server_thread.start()
         read_from_readable = 'unix socket'
     elif read_from == 'clipboard':
-        ignore_flag = config.get_general('ignore_flag')
-        macos_clipboard_polling = False
-        windows_clipboard_polling = False
-        img = None
-
-        if sys.platform == 'darwin':
-            from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
-            pasteboard = NSPasteboard.generalPasteboard()
-            count = pasteboard.changeCount()
-            macos_clipboard_polling = True
-        elif sys.platform == 'win32':
-            global clipboard_queue
-            clipboard_queue = queue.Queue()
-            windows_clipboard_thread = WindowsClipboardThread()
-            windows_clipboard_thread.start()
-            windows_clipboard_polling = True
-        else:
-            from PIL import ImageGrab
-
+        global clipboard_queue
+        clipboard_queue = queue.Queue()
+        clipboard_thread = ClipboardThread()
+        clipboard_thread.start()
         read_from_readable = 'clipboard'
     elif read_from == 'screencapture':
         screen_capture_area = config.get_general('screen_capture_area')
@@ -824,6 +853,7 @@ def run():
         filtering = TextFiltering()
         read_from_readable = 'screen capture'
     else:
+        delay_secs = config.get_general('delay_secs')
         delete_images = config.get_general('delete_images')
 
         read_from = Path(read_from)
@@ -855,6 +885,7 @@ def run():
     logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated:
+        sleep_time = 0
         if read_from == 'websocket':
             while True:
                 try:
@@ -875,59 +906,22 @@ def run():
                     img = Image.open(io.BytesIO(item))
                     process_and_write_results(img, None, None)
         elif read_from == 'clipboard':
-            process_clipboard = False
-            if windows_clipboard_polling:
-                while True:
-                    try:
-                        item = clipboard_queue.get(timeout=0.5)
-                    except queue.Empty:
-                        break
-                    else:
-                        img = Image.open(io.BytesIO(item))
-                        process_clipboard = True
-            elif macos_clipboard_polling:
-                if not paused:
-                    with objc.autorelease_pool():
-                        old_count = count
-                        count = pasteboard.changeCount()
-                        if not just_unpaused and count != old_count:
-                            while len(pasteboard.types()) == 0:
-                                time.sleep(0.1)
-                            if NSPasteboardTypeTIFF in pasteboard.types():
-                                clipboard_text = ''
-                                if NSPasteboardTypeString in pasteboard.types():
-                                    clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
-                                if ignore_flag or clipboard_text != '*ocr_ignore*':
-                                    img = normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                                    img = Image.open(io.BytesIO(img))
-                                    process_clipboard = True
-            else:
-                if not paused:
-                    old_img = img
-                    try:
-                        img = ImageGrab.grabclipboard()
-                    except Exception:
-                        pass
-                    else:
-                        if ((not just_unpaused) and isinstance(img, Image.Image) and \
-                            (ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
-                            (not are_images_identical(img, old_img))):
-                            process_clipboard = True
-
-            if process_clipboard:
-                process_and_write_results(img, None, None)
-
-            just_unpaused = False
-
-            if not windows_clipboard_polling:
-                time.sleep(delay_secs)
+            while True:
+                try:
+                    item = clipboard_queue.get(timeout=0.5)
+                except queue.Empty:
+                    break
+                else:
+                    img = item if isinstance(item, Image.Image) else Image.open(io.BytesIO(item))
+                    process_and_write_results(img, None, None)               
         elif read_from == 'screencapture':
             if screen_capture_on_combo:
-                take_screenshot = screenshot_event.wait(delay_secs)
+                take_screenshot = screenshot_event.wait(0.5)
                 if take_screenshot:
                     screenshot_event.clear()
             else:
                 take_screenshot = screencapture_window_active and not paused
+                sleep_time = 0.5
 
             if take_screenshot and screencapture_window_visible:
                 if screencapture_mode == 2:
@@ -982,13 +976,9 @@ def run():
                 res = process_and_write_results(img, last_result, filtering)
                 if res:
                     last_result = (res, engine_index)
-                delay = screen_capture_delay_secs
-            else:
-                delay = delay_secs
-
-            if not screen_capture_on_combo:
-                time.sleep(delay)
+                sleep_time = screen_capture_delay_secs
         else:
+            sleep_time = delay_secs
             for path in read_from.iterdir():
                 if path.suffix.lower() in allowed_extensions:
                     path_key = get_path_key(path)
@@ -1006,15 +996,16 @@ def run():
                                 img.close()
                                 if delete_images:
                                     Path.unlink(path)
-
-            time.sleep(delay_secs)
+        if not terminated:
+            time.sleep(sleep_time)
 
     if read_from == 'websocket' or write_to == 'websocket':
         websocket_server_thread.stop_server()
         websocket_server_thread.join()
-    if read_from == 'clipboard' and windows_clipboard_polling:
-        win32api.PostThreadMessage(windows_clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
-        windows_clipboard_thread.join()
+    if read_from == 'clipboard':
+        if sys.platform == 'win32':
+            win32api.PostThreadMessage(clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
+        clipboard_thread.join()
     elif read_from == 'screencapture' and screencapture_mode == 2:
         if sys.platform == 'darwin':
             if screen_capture_only_active_windows:
