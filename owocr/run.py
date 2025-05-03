@@ -53,15 +53,32 @@ except ImportError:
 class WindowsClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
+        self.ignore_flag = config.get_general('ignore_flag')
         self.last_update = time.time()
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
         timestamp = time.time()
         if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused:
-            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP):
-                clipboard_event.set()
-                self.last_update = timestamp
+            self.last_update = timestamp
+            while True:
+                try:
+                    win32clipboard.OpenClipboard()
+                    break
+                except pywintypes.error:
+                    pass
+                time.sleep(0.1)
+            try:
+                if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP) and win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
+                    clipboard_text = ''
+                    if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+                        clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+                    if self.ignore_flag or clipboard_text != '*ocr_ignore*':
+                        img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
+                        clipboard_queue.put(img)
+                win32clipboard.CloseClipboard()
+            except pywintypes.error:
+                pass
         return 0
 
     def create_window(self):
@@ -674,8 +691,8 @@ def run():
             count = pasteboard.changeCount()
             macos_clipboard_polling = True
         elif sys.platform == 'win32':
-            global clipboard_event
-            clipboard_event = threading.Event()
+            global clipboard_queue
+            clipboard_queue = queue.Queue()
             windows_clipboard_thread = WindowsClipboardThread()
             windows_clipboard_thread.start()
             windows_clipboard_polling = True
@@ -841,7 +858,7 @@ def run():
         if read_from == 'websocket':
             while True:
                 try:
-                    item = websocket_queue.get(timeout=delay_secs)
+                    item = websocket_queue.get(timeout=0.5)
                 except queue.Empty:
                     break
                 else:
@@ -851,36 +868,23 @@ def run():
         elif read_from == 'unixsocket':
             while True:
                 try:
-                    item = unixsocket_queue.get(timeout=delay_secs)
+                    item = unixsocket_queue.get(timeout=0.5)
                 except queue.Empty:
                     break
                 else:
-                    if not paused:
-                        img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, None, None)
+                    img = Image.open(io.BytesIO(item))
+                    process_and_write_results(img, None, None)
         elif read_from == 'clipboard':
             process_clipboard = False
             if windows_clipboard_polling:
-                if clipboard_event.wait(delay_secs):
-                    clipboard_event.clear()
-                    while True:
-                        try:
-                            win32clipboard.OpenClipboard()
-                            break
-                        except pywintypes.error:
-                            pass
-                        time.sleep(0.1)
+                while True:
                     try:
-                        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
-                            clipboard_text = ''
-                            if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
-                                clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
-                            if ignore_flag or clipboard_text != '*ocr_ignore*':
-                                img = Image.open(io.BytesIO(win32clipboard.GetClipboardData(win32clipboard.CF_DIB)))
-                                process_clipboard = True
-                        win32clipboard.CloseClipboard()
-                    except pywintypes.error:
-                        pass
+                        item = clipboard_queue.get(timeout=0.5)
+                    except queue.Empty:
+                        break
+                    else:
+                        img = Image.open(io.BytesIO(item))
+                        process_clipboard = True
             elif macos_clipboard_polling:
                 if not paused:
                     with objc.autorelease_pool():
