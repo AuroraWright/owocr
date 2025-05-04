@@ -143,20 +143,20 @@ class ClipboardThread(threading.Thread):
                 count = pasteboard.changeCount()
             else:
                 from PIL import ImageGrab
-            global just_unpaused
-            just_unpaused = True
+            process_clipboard = False
             img = None
 
             while not terminated:
                 if paused:
                     sleep_time = 0.5
+                    process_clipboard = False
                 else:
                     sleep_time = self.delay_secs
                     if is_macos:
                         with objc.autorelease_pool():
                             old_count = count
                             count = pasteboard.changeCount()
-                            if not just_unpaused and count != old_count:
+                            if process_clipboard and count != old_count:
                                 while len(pasteboard.types()) == 0:
                                     time.sleep(0.1)
                                 if NSPasteboardTypeTIFF in pasteboard.types():
@@ -173,12 +173,12 @@ class ClipboardThread(threading.Thread):
                         except Exception:
                             pass
                         else:
-                            if ((not just_unpaused) and isinstance(img, Image.Image) and \
+                            if (process_clipboard and isinstance(img, Image.Image) and \
                                 (self.ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
                                 (not self.are_images_identical(img, old_img))):
                                 image_queue.put((img, False))
 
-                    just_unpaused = False
+                    process_clipboard = True
 
                 if not terminated:
                     time.sleep(sleep_time)
@@ -704,16 +704,10 @@ class AutopauseTimer:
 
 def pause_handler(is_combo=True):   
     global paused
-    global just_unpaused
-    if paused:
-        message = 'Unpaused!'
-        just_unpaused = True
-    else:
-        message = 'Paused!'
+    message = 'Unpaused!' if paused else 'Paused!'
 
     if auto_pause_handler:
         auto_pause_handler.stop()
-
     if is_combo:
         notifier.send(title='owocr', message=message)
     logger.info(message)
@@ -731,7 +725,6 @@ def engine_change_handler(user_input='s', is_combo=True):
             engine_index += 1
     elif user_input.lower() != '' and user_input.lower() in engine_keys:
         engine_index = engine_keys.index(user_input.lower())
-
     if engine_index != old_engine_index:
         new_engine_name = engine_instances[engine_index].readable_name
         if is_combo:
