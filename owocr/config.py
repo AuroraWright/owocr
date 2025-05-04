@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser(prog='owocr', description=textwrap.dedent('''\
 parser.add_argument('-r', '--read_from', type=str, default=argparse.SUPPRESS,
                     help='Where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.')
 parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.SUPPRESS,
-                    help='Where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.')
+                    help="Optional secondary source to read input images from. Same options as read_from, but they can't both be directory paths.")
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
@@ -49,7 +49,7 @@ class Config:
     __engine_config = {}
     __default_config = {
         'read_from': 'clipboard',
-        'read_from_secondary': None,
+        'read_from_secondary': '',
         'write_to': 'clipboard',
         'engine': '',
         'pause_at_startup': False,

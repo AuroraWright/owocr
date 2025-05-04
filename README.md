@@ -15,6 +15,7 @@ Additionally:
 - Supports reading images and/or writing text to a websocket with the `-r=websocket` and/or `-w=websocket` parameters (the port is 7331 by default, and is configurable in the config file)
 - On macOS and Linux, supports reading images from a Unix domain socket (`/tmp/owocr.sock`) with `-r=unixsocket`
 - On Windows and macOS, supports capturing from the screen directly or from a specific window with `-r=screencapture`. By default it will open a coordinate picker so you can select an area of the screen and then read from it every 3 seconds, but you can change it to screenshot the whole screen, a manual set of coordinates `x,y,width,height` or just a specific window (with the window title). You can also change the delay between screenshots or specify a keyboard combo if you don't want screenshots to be taken periodically. Refer to the config file or to `owocr --help` for more details about the screen capture settings
+- You can read images from another source at the same time with `-rs=`, the arguments are the same as `-r`
 - You can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" inside the terminal window
 - You can switch between OCR providers pressing their corresponding keyboard key inside the terminal window (refer to the list of keys in the providers list below)
 - You can start the script paused with the `-p` option or with a specific provider with the `-e` option (refer to `owocr -h` for the list)

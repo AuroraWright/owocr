@@ -320,8 +320,9 @@ class GoogleLens:
             new_h = int(new_w / aspect_ratio)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             img.close()
+            img = img_resized
 
-        return (pil_image_to_bytes(img_resized), img_resized.width, img_resized.height)
+        return (pil_image_to_bytes(img), img.width, img.height)
 
 class GoogleLensWeb:
     name = 'glensweb'
@@ -415,8 +416,9 @@ class GoogleLensWeb:
             new_h = int(new_w / aspect_ratio)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             img.close()
+            img = img_resized
 
-        return pil_image_to_bytes(img_resized)
+        return pil_image_to_bytes(img)
 
 class Bing:
     name = 'bing'
@@ -541,8 +543,9 @@ class Bing:
             new_h = int(img.height * resize_factor)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             img.close()
+            img = img_resized
 
-        img_bytes, _ = limit_image_size(img_resized, max_byte_size)
+        img_bytes, _ = limit_image_size(img, max_byte_size)
 
         if img_bytes:
             res = base64.b64encode(img_bytes).decode('utf-8')
@@ -838,8 +841,9 @@ class AzureImageAnalysis:
             new_h = int(img.height * resize_factor)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
             img.close()
+            img = img_resized
 
-        return pil_image_to_bytes(img_resized)
+        return pil_image_to_bytes(img)
 
 class EasyOCR:
     name = 'easyocr'
