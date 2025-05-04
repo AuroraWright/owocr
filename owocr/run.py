@@ -93,7 +93,7 @@ class ClipboardThread(threading.Thread):
             1.0
         )
 
-        return new_image.TIFFRepresentation()
+        return bytes(new_image.TIFFRepresentation())
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
@@ -114,7 +114,7 @@ class ClipboardThread(threading.Thread):
                         clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
                     if self.ignore_flag or clipboard_text != '*ocr_ignore*':
                         img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
-                        clipboard_queue.put(img)
+                        image_queue.put((img, False))
                 win32clipboard.CloseClipboard()
             except pywintypes.error:
                 pass
@@ -165,7 +165,7 @@ class ClipboardThread(threading.Thread):
                                         clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
                                     if self.ignore_flag or clipboard_text != '*ocr_ignore*':
                                         img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                                        clipboard_queue.put(img)
+                                        image_queue.put((img, False))
                     else:
                         old_img = img
                         try:
@@ -176,12 +176,47 @@ class ClipboardThread(threading.Thread):
                             if ((not just_unpaused) and isinstance(img, Image.Image) and \
                                 (self.ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
                                 (not self.are_images_identical(img, old_img))):
-                                clipboard_queue.put(img)
+                                image_queue.put((img, False))
 
                     just_unpaused = False
 
                 if not terminated:
                     time.sleep(sleep_time)
+
+
+class DirectoryWatcher(threading.Thread):
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path = path
+        self.delay_secs = config.get_general('delay_secs')
+        self.last_update = time.time()
+        self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
+
+    def get_path_key(self, path):
+        return path, path.lstat().st_mtime
+
+    def run(self):
+        old_paths = set()
+        for path in self.path.iterdir():
+            if path.suffix.lower() in self.allowed_extensions:
+                old_paths.add(get_path_key(path))
+
+        while not terminated:
+            if paused:
+                sleep_time = 0.5
+            else:
+                sleep_time = self.delay_secs
+                for path in self.path.iterdir():
+                    if path.suffix.lower() in self.allowed_extensions:
+                        path_key = self.get_path_key(path)
+                        if path_key not in old_paths:
+                            old_paths.add(path_key)
+
+                            if not paused:
+                                image_queue.put((path, False))
+
+            if not terminated:
+                time.sleep(sleep_time)
 
 
 class WebsocketServerThread(threading.Thread):
@@ -206,7 +241,7 @@ class WebsocketServerThread(threading.Thread):
         try:
             async for message in websocket:
                 if self.read and not paused:
-                    websocket_queue.put(message)
+                    image_queue.put((message, False))
                     try:
                         await websocket.send('True')
                     except websockets.exceptions.ConnectionClosedOK:
@@ -255,7 +290,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
             pass
 
         if not paused:
-            unixsocket_queue.put(img)
+            image_queue.put((img, False))
             conn.sendall(b'True')
         else:
             conn.sendall(b'False')
@@ -266,7 +301,7 @@ class MacOSWindowTracker(threading.Thread):
         super().__init__(daemon=True)
         self.stop = False
         self.window_id = window_id
-        self.window_active = False
+        self.window_active = screencapture_window_active
 
     def run(self):
         found = True
@@ -302,8 +337,8 @@ class WindowsWindowTracker(threading.Thread):
         self.stop = False
         self.window_handle = window_handle
         self.only_active = only_active
-        self.window_active = False
-        self.window_minimized = False
+        self.window_active = screencapture_window_active
+        self.window_minimized = not screencapture_window_visible
 
     def run(self):
         found = True
@@ -463,14 +498,8 @@ class TextFiltering:
 
 
 class ScreenshotClass:
-    def __init__(self, screen_capture_on_combo):
+    def __init__(self):
         screen_capture_area = config.get_general('screen_capture_area')
-        if type(screen_capture_area) == tuple:
-            screen_capture_area = ','.join(map(str, screen_capture_area))
-        global screencapture_window_active
-        global screencapture_window_visible
-        screencapture_window_active = True
-        screencapture_window_visible = True
         self.macos_window_tracker = None
         self.windows_window_tracker = None
         if screen_capture_area == '':
@@ -519,7 +548,7 @@ class ScreenshotClass:
             self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
-            screen_capture_only_active_windows = (not screen_capture_on_combo) and config.get_general('screen_capture_only_active_windows')
+            screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
                 if int(platform.mac_ver()[0].split('.')[0]) < 14:
@@ -554,7 +583,6 @@ class ScreenshotClass:
                 window_title = window_titles[window_index]
 
                 if screen_capture_only_active_windows:
-                    screencapture_window_active = False
                     self.macos_window_tracker = MacOSWindowTracker(self.window_id)
                     self.macos_window_tracker.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
@@ -566,8 +594,6 @@ class ScreenshotClass:
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
-                if screen_capture_only_active_windows:
-                    screencapture_window_active = False
                 self.windows_window_tracker = WindowsWindowTracker(self.window_handle, screen_capture_only_active_windows)
                 self.windows_window_tracker.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
@@ -595,7 +621,7 @@ class ScreenshotClass:
                         except queue.Empty:
                             cg_image = None
                     if not cg_image:
-                        return None
+                        return 0
                     width = CGImageGetWidth(cg_image)
                     height = CGImageGetHeight(cg_image)
                     raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
@@ -620,7 +646,7 @@ class ScreenshotClass:
                     bmpinfo = save_bitmap.GetInfo()
                     bmpstr = save_bitmap.GetBitmapBits(True)
                 except pywintypes.error:
-                    return None
+                    return 0
                 img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
                 try:
                     win32gui.DeleteObject(save_bitmap.GetHandle())
@@ -651,6 +677,9 @@ class AutopauseTimer:
         self.timeout = timeout
         self.timer_thread = None
 
+    def __del__(self):
+        self.stop()
+
     def start(self):
         self.stop()
         self.stop_event.clear()
@@ -664,12 +693,12 @@ class AutopauseTimer:
 
     def _countdown(self):
         seconds = self.timeout
-        while seconds > 0 and not self.stop_event.is_set():
+        while seconds > 0 and not self.stop_event.is_set() and not terminated:
             time.sleep(1)
             seconds -= 1
         if not self.stop_event.is_set():
             self.stop_event.set()
-            if not paused:
+            if not (paused or terminated):
                 pause_handler(True)
 
 
@@ -775,7 +804,7 @@ def on_window_minimized(minimized):
 def on_screenshot_combo():
     if not paused:
         img = take_screenshot()
-        screenshot_queue.put(img)
+        image_queue.put((img, True))
 
 
 def process_and_write_results(img_or_path, last_result, filtering):
@@ -783,9 +812,9 @@ def process_and_write_results(img_or_path, last_result, filtering):
         auto_pause_handler.stop()
 
     engine_instance = engine_instances[engine_index]
-    t0 = time.time()
+    start_time = time.time()
     res, text = engine_instance(img_or_path)
-    t1 = time.time()
+    end_time = time.time()
 
     orig_text = []
     engine_color = config.get_general('engine_color')
@@ -793,7 +822,7 @@ def process_and_write_results(img_or_path, last_result, filtering):
         if filtering:
             text, orig_text = filtering(text, last_result)
         text = post_process(text)
-        logger.opt(ansi=True).info(f'Text recognized in {t1 - t0:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
+        logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if config.get_general('notifications'):
             notifier.send(title='owocr', message='Text recognized: ' + text)
 
@@ -809,13 +838,9 @@ def process_and_write_results(img_or_path, last_result, filtering):
         if auto_pause_handler and not paused:
             auto_pause_handler.start()
     else:
-        logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {t1 - t0:0.03f}s: {text}')
+        logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {text}')
 
     return orig_text
-
-
-def get_path_key(path):
-    return path, path.lstat().st_mtime
 
 
 def run():
@@ -861,21 +886,32 @@ def run():
     global paused
     global notifier
     global auto_pause_handler
+    global websocket_server_thread
+    global image_queue
+    non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
     read_from = config.get_general('read_from')
+    read_from_secondary = config.get_general('read_from_secondary')
+    read_from_path = None
+    read_from_readable = []
     write_to = config.get_general('write_to')
     terminated = False
     paused = config.get_general('pause_at_startup')
     auto_pause = config.get_general('auto_pause')
+    clipboard_thread = None
+    websocket_server_thread = None
+    directory_watcher_thread = None
+    unix_socket_server = None
+    key_combo_listener = None
+    filtering = None
     auto_pause_handler = None
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_color = config.get_general('engine_color')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
+    screen_capture_on_combo = False
     notifier = DesktopNotifierSync()
+    image_queue = queue.Queue()
     key_combos = {}
-
-    if read_from != 'screencapture' and auto_pause != 0:
-        auto_pause_handler = AutopauseTimer(auto_pause)
 
     if combo_pause != '':
         key_combos[combo_pause] = pause_handler
@@ -885,64 +921,51 @@ def run():
         else:
             raise ValueError('combo_pause must also be specified')
 
-    if read_from == 'websocket' or write_to == 'websocket':
-        global websocket_server_thread
-        websocket_server_thread = WebsocketServerThread(read_from == 'websocket')
+    if 'websocket' in (read_from, read_from_secondary) or write_to == 'websocket':
+        websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
-
-    if read_from == 'websocket':
-        global websocket_queue
-        websocket_queue = queue.Queue()
-        read_from_readable = 'websocket'
-    elif read_from == 'unixsocket':
+    if 'screencapture' in (read_from, read_from_secondary):
+        global screencapture_window_active
+        global screencapture_window_visible
+        global take_screenshot
+        screencapture_window_active = False
+        screencapture_window_visible = True
+        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
+        screen_capture_combo = config.get_general('screen_capture_combo')
+        last_screenshot_time = 0
+        last_result = ([], engine_index)
+        if screen_capture_combo != '':
+            screen_capture_on_combo = True
+            key_combos[screen_capture_combo] = on_screenshot_combo
+        take_screenshot = ScreenshotClass()
+        filtering = TextFiltering()
+        read_from_readable.append('screen capture')
+    if 'websocket' in (read_from, read_from_secondary):
+        read_from_readable.append('websocket')
+    if 'unixsocket' in (read_from, read_from_secondary):
         if sys.platform == 'win32':
             raise ValueError('"unixsocket" is not currently supported on Windows')
-
-        global unixsocket_queue
-        unixsocket_queue = queue.Queue()
         socket_path = Path('/tmp/owocr.sock')
         if socket_path.exists():
             socket_path.unlink()
         unix_socket_server = socketserver.ThreadingUnixStreamServer(str(socket_path), RequestHandler)
         unix_socket_server_thread = threading.Thread(target=unix_socket_server.serve_forever, daemon=True)
         unix_socket_server_thread.start()
-        read_from_readable = 'unix socket'
-    elif read_from == 'clipboard':
-        global clipboard_queue
-        clipboard_queue = queue.Queue()
+        read_from_readable.append('unix socket')
+    if 'clipboard' in (read_from, read_from_secondary):
         clipboard_thread = ClipboardThread()
         clipboard_thread.start()
-        read_from_readable = 'clipboard'
-    elif read_from == 'screencapture':
-        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
-        screen_capture_combo = config.get_general('screen_capture_combo')
-        last_result = ([], engine_index)
-        if screen_capture_combo != '':
-            screen_capture_on_combo = True
-            global screenshot_queue
-            screenshot_queue = queue.Queue()
-            key_combos[screen_capture_combo] = on_screenshot_combo
-        else:
-            screen_capture_on_combo = False
-        global take_screenshot
-        take_screenshot = ScreenshotClass(screen_capture_on_combo)
-        filtering = TextFiltering()
-        read_from_readable = 'screen capture'
-    else:
-        delay_secs = config.get_general('delay_secs')
+        read_from_readable.append('clipboard')
+    if any(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
+        if all(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
+            raise ValueError("read_from and read_from_secondary can't both be directory paths")
         delete_images = config.get_general('delete_images')
-
-        read_from = Path(read_from)
-        if not read_from.is_dir():
-            raise ValueError('read_from must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
-
-        allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
-        old_paths = set()
-        for path in read_from.iterdir():
-            if path.suffix.lower() in allowed_extensions:
-                old_paths.add(get_path_key(path))
-
-        read_from_readable = f'directory {read_from}'
+        read_from_path = Path(read_from) if read_from not in non_path_inputs else Path(read_from_secondary)
+        if not read_from_path.is_dir():
+            raise ValueError('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
+        directory_watcher_thread = DirectoryWatcher(read_from_path)
+        directory_watcher_thread.start()
+        read_from_readable.append(f'directory {read_from_path}')
 
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
@@ -955,99 +978,62 @@ def run():
             raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
 
+    process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
+    process_screenshots = 'screencapture' in (read_from, read_from_secondary) and not screen_capture_on_combo
     signal.signal(signal.SIGINT, signal_handler)
+    if (not process_screenshots) and auto_pause != 0:
+        auto_pause_handler = AutopauseTimer(auto_pause)
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
-    logger.opt(ansi=True).info(f"Reading from {read_from_readable}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+    logger.opt(ansi=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated:
-        sleep_time = 0
-        if read_from == 'websocket':
-            while True:
-                try:
-                    item = websocket_queue.get(timeout=0.5)
-                except queue.Empty:
-                    break
-                else:
-                    if not paused:
-                        img = Image.open(io.BytesIO(item))
-                        process_and_write_results(img, None, None)
-        elif read_from == 'unixsocket':
-            while True:
-                try:
-                    item = unixsocket_queue.get(timeout=0.5)
-                except queue.Empty:
-                    break
-                else:
-                    img = Image.open(io.BytesIO(item))
-                    process_and_write_results(img, None, None)
-        elif read_from == 'clipboard':
-            while True:
-                try:
-                    item = clipboard_queue.get(timeout=0.5)
-                except queue.Empty:
-                    break
-                else:
-                    img = item if isinstance(item, Image.Image) else Image.open(io.BytesIO(item))
-                    process_and_write_results(img, None, None)               
-        elif read_from == 'screencapture':
-            img = None
-            if screen_capture_on_combo:
-                try:
-                    img = screenshot_queue.get(timeout=0.5)
-                except queue.Empty:
-                    pass
-                else:
-                    if not img:
-                        on_window_closed(False)
-                        terminated = True
-                        break
-            else:
-                sleep_time = 0.5
-                if (not paused) and screencapture_window_active and screencapture_window_visible:
-                    img = take_screenshot()
-                    if not img:
-                        on_window_closed(False)
-                        terminated = True
-                        break
-                    sleep_time = screen_capture_delay_secs
-            if img:
+        start_time = time.time()
+        img = None
+        filter_img = False
+
+        if process_queue:
+            try:
+                img, filter_img = image_queue.get(timeout=0.1)
+            except queue.Empty:
+                pass
+
+        if (not img) and process_screenshots:
+            if (not paused) and screencapture_window_active and screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+                img = take_screenshot()
+                filter_img = True
+                last_screenshot_time = time.time()
+
+        if img == 0:
+            on_window_closed(False)
+            terminated = True
+            break
+        elif img:
+            if filter_img:
                 res = process_and_write_results(img, last_result, filtering)
                 if res:
                     last_result = (res, engine_index)
-        else:
-            sleep_time = delay_secs
-            for path in read_from.iterdir():
-                if path.suffix.lower() in allowed_extensions:
-                    path_key = get_path_key(path)
-                    if path_key not in old_paths:
-                        old_paths.add(path_key)
+            else:
+                process_and_write_results(img, None, None)
+            if isinstance(img, Path):
+                if delete_images:
+                    Path.unlink(img)
 
-                        if not paused:
-                            try:
-                                img = Image.open(path)
-                                img.load()
-                            except (UnidentifiedImageError, OSError) as e:
-                                logger.warning(f'Error while reading file {path}: {e}')
-                            else:
-                                process_and_write_results(img, None, None)
-                                img.close()
-                                if delete_images:
-                                    Path.unlink(path)
-        if not terminated:
-            time.sleep(sleep_time)
+        elapsed_time = time.time() - start_time
+        if (not terminated) and elapsed_time < 0.1:
+            time.sleep(0.1 - elapsed_time)
 
-    if read_from == 'websocket' or write_to == 'websocket':
+    if websocket_server_thread:
         websocket_server_thread.stop_server()
         websocket_server_thread.join()
-    if read_from == 'clipboard':
+    if clipboard_thread:
         if sys.platform == 'win32':
             win32api.PostThreadMessage(clipboard_thread.thread_id, win32con.WM_QUIT, 0, 0)
         clipboard_thread.join()
-    elif read_from == 'unixsocket':
+    if directory_watcher_thread:
+        directory_watcher_thread.join()
+    if unix_socket_server:
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
-    if len(key_combos) > 0:
+    if key_combo_listener:
         key_combo_listener.stop()
-    if auto_pause_handler:
-        auto_pause_handler.stop()
