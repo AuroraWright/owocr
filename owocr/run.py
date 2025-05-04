@@ -800,7 +800,7 @@ def on_screenshot_combo():
         image_queue.put((img, True))
 
 
-def process_and_write_results(img_or_path, last_result, filtering):
+def process_and_write_results(img_or_path, last_result, filtering, notify):
     if auto_pause_handler:
         auto_pause_handler.stop()
 
@@ -816,7 +816,7 @@ def process_and_write_results(img_or_path, last_result, filtering):
             text, orig_text = filtering(text, last_result)
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
-        if config.get_general('notifications'):
+        if notify and config.get_general('notifications'):
             notifier.send(title='owocr', message='Text recognized: ' + text)
 
         write_to = config.get_general('write_to')
@@ -988,6 +988,7 @@ def run():
         if process_queue:
             try:
                 img, filter_img = image_queue.get(timeout=0.1)
+                notify = True
             except queue.Empty:
                 pass
 
@@ -995,6 +996,7 @@ def run():
             if (not paused) and screencapture_window_active and screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
                 img = take_screenshot()
                 filter_img = True
+                notify = False
                 last_screenshot_time = time.time()
 
         if img == 0:
@@ -1003,11 +1005,11 @@ def run():
             break
         elif img:
             if filter_img:
-                res = process_and_write_results(img, last_result, filtering)
+                res = process_and_write_results(img, last_result, filtering, notify)
                 if res:
                     last_result = (res, engine_index)
             else:
-                process_and_write_results(img, None, None)
+                process_and_write_results(img, None, None, notify)
             if isinstance(img, Path):
                 if delete_images:
                     Path.unlink(img)

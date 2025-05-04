@@ -25,9 +25,9 @@ parser.add_argument('-i', '--ignore_flag', action='store_true', default=argparse
 parser.add_argument('-d', '--delete_images', action='store_true', default=argparse.SUPPRESS,
                     help='Delete image files after processing when reading from a directory.')
 parser.add_argument('-n', '--notifications', action='store_true', default=argparse.SUPPRESS,
-                    help='Show an operating system notification with the detected text.')
+                    help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture, unless screen_capture_combo is set.')
 parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
-                    help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.')
+                    help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture, unless screen_capture_combo is set. 0 to disable.')
 parser.add_argument('-cp', '--combo_pause', type=str, default=argparse.SUPPRESS,
                     help='Combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-cs', '--combo_engine_switch', type=str, default=argparse.SUPPRESS,
