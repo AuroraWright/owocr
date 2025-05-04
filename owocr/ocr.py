@@ -1048,3 +1048,79 @@ class GeminiOCR:
 
     def _preprocess(self, img):
         return pil_image_to_bytes(img, png_compression=1)
+
+
+class GroqOCR:
+    name = 'groq'
+    readable_name = 'Groq OCR'
+    key = 'j'
+    available = False
+
+    def __init__(self, config={'api_key': None}):
+        try:
+            import groq
+            self.api_key = config['api_key']
+            if not self.api_key:
+                logger.warning('Groq API key not provided, GroqOCR will not work!')
+            else:
+                self.client = groq.Groq(api_key=self.api_key)
+                self.available = True
+                logger.info('Groq OCR ready')
+        except ImportError:
+            logger.warning('groq module not available, GroqOCR will not work!')
+        except Exception as e:
+            logger.error(f'Error initializing Groq client: {e}')
+
+    def __call__(self, img_or_path):
+        if not self.available:
+            return (False, 'GroqOCR is not available due to missing API key or configuration error.')
+
+        try:
+            if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
+                img = Image.open(img_or_path).convert("RGB")
+            elif isinstance(img_or_path, Image.Image):
+                img = img_or_path.convert("RGB")
+            else:
+                raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+
+            img_base64 = self._preprocess(img)
+            if not img_base64:
+                return (False, 'Error processing image for Groq.')
+
+            prompt = (
+                "Analyze this image and extract text from it"
+                # "(speech bubbles or panels containing character dialogue). From the extracted dialogue text, "
+                # "filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, "
+                # "including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. "
+                # "If no text is found within dialogue boxes after applying filters, return an empty string. "
+                # "OR, if there are no text bubbles or dialogue boxes found, return everything."
+                "Do not include any other output, formatting markers, or commentary, only the text from the image."
+            )
+
+            response = self.client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_base64}"}},
+                        ],
+                    }
+                ],
+                max_tokens=300
+            )
+
+            if response.choices and response.choices[0].message.content:
+                text_output = response.choices[0].message.content.strip()
+                return (True, text_output)
+            else:
+                return (True, "")
+
+        except FileNotFoundError:
+            return (False, f'File not found: {img_or_path}')
+        except Exception as e:
+            return (False, f'Groq API request failed: {e}')
+
+    def _preprocess(self, img):
+        return base64.b64encode(pil_image_to_bytes(img, png_compression=1)).decode('utf-8')

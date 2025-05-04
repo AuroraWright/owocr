@@ -585,7 +585,8 @@ def process_and_write_results(img_or_path, write_to, notifications, last_result,
         for i, instance in enumerate(engine_instances):
             if instance.name.lower() in engine.lower():
                 engine_instance = instance
-                last_result = (last_result[0], i)
+                if last_result:
+                    last_result = (last_result[0], i)
                 break
     else:
         engine_instance = engine_instances[engine_index]
