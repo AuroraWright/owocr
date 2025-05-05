@@ -1,28 +1,9 @@
-import threading
-
-import pyperclipfix
-import mss
-import asyncio
-import websockets
-import socketserver
-import queue
-
-from datetime import datetime
-from PIL import Image, ImageDraw
-from PIL import UnidentifiedImageError
-from pynput import keyboard
-from desktop_notifier import DesktopNotifierSync
-import psutil
-
-import inspect
-from .ocr import *
 try:
     from .secret import *
 except ImportError:
     pass
 from .config import Config
 from .screen_coordinate_picker import get_screen_selection
-from ...configuration import get_temporary_directory
 
 try:
     import win32gui
@@ -46,6 +27,26 @@ try:
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
 except ImportError:
     pass
+
+
+import threading
+import pyperclipfix
+import mss
+import asyncio
+import websockets
+import socketserver
+import queue
+import time
+
+from datetime import datetime
+from PIL import Image, ImageDraw
+from PIL import UnidentifiedImageError
+from pynput import keyboard
+from desktop_notifier import DesktopNotifierSync
+import psutil
+
+import inspect
+from .ocr import *
 
 
 config = None
