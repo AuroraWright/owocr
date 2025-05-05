@@ -7,6 +7,7 @@ import websockets
 import socketserver
 import queue
 
+from datetime import datetime
 from PIL import Image, ImageDraw
 from PIL import UnidentifiedImageError
 from pynput import keyboard
