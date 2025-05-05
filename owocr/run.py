@@ -361,53 +361,6 @@ class WindowsWindowTracker(threading.Thread):
             on_window_closed(False)
 
 
-def capture_macos_window_screenshot(window_id):
-    def shareable_content_completion_handler(shareable_content, error):
-        if error:
-            screencapturekit_queue.put(None)
-            return
-
-        target_window = None
-        for window in shareable_content.windows():
-            if window.windowID() == window_id:
-                target_window = window
-                break
-
-        if not target_window:
-            screencapturekit_queue.put(None)
-            return
-
-        with objc.autorelease_pool():
-            content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
-
-            frame = content_filter.contentRect()
-            scale = content_filter.pointPixelScale()
-            width = frame.size.width * scale
-            height = frame.size.height * scale
-            configuration = SCStreamConfiguration.alloc().init()
-            configuration.setSourceRect_(CGRectMake(0, 0, frame.size.width, frame.size.height))
-            configuration.setWidth_(width)
-            configuration.setHeight_(height)
-            configuration.setShowsCursor_(False)
-            configuration.setCaptureResolution_(SCCaptureResolutionBest)
-            configuration.setIgnoreGlobalClipSingleWindow_(True)
-
-            SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
-                content_filter, configuration, capture_image_completion_handler
-            )
-
-    def capture_image_completion_handler(image, error):
-        if error:
-            screencapturekit_queue.put(None)
-            return
-
-        screencapturekit_queue.put(image)
-
-    SCShareableContent.getShareableContentWithCompletionHandler_(
-        shareable_content_completion_handler
-    )
-
-
 def get_windows_window_handle(window_title):
     def callback(hwnd, window_title_part):
         window_title = win32gui.GetWindowText(hwnd)
@@ -551,7 +504,7 @@ class ScreenshotClass:
             screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
-                if int(platform.mac_ver()[0].split('.')[0]) < 14:
+                if config.get_general('screen_capture_old_macos_api') or int(platform.mac_ver()[0].split('.')[0]) < 14:
                     self.old_macos_screenshot_api = True
                 else:
                     self.old_macos_screenshot_api = False
@@ -608,6 +561,52 @@ class ScreenshotClass:
             self.windows_window_tracker.stop = True
             self.windows_window_tracker.join()
 
+    def capture_macos_window_screenshot(self, window_id):
+        def shareable_content_completion_handler(shareable_content, error):
+            if error:
+                screencapturekit_queue.put(None)
+                return
+
+            target_window = None
+            for window in shareable_content.windows():
+                if window.windowID() == window_id:
+                    target_window = window
+                    break
+
+            if not target_window:
+                screencapturekit_queue.put(None)
+                return
+
+            with objc.autorelease_pool():
+                content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
+
+                frame = content_filter.contentRect()
+                scale = content_filter.pointPixelScale()
+                width = frame.size.width * scale
+                height = frame.size.height * scale
+                configuration = SCStreamConfiguration.alloc().init()
+                configuration.setSourceRect_(CGRectMake(0, 0, frame.size.width, frame.size.height))
+                configuration.setWidth_(width)
+                configuration.setHeight_(height)
+                configuration.setShowsCursor_(False)
+                configuration.setCaptureResolution_(SCCaptureResolutionBest)
+                configuration.setIgnoreGlobalClipSingleWindow_(True)
+
+                SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
+                    content_filter, configuration, capture_image_completion_handler
+                )
+
+        def capture_image_completion_handler(image, error):
+            if error:
+                screencapturekit_queue.put(None)
+                return
+
+            screencapturekit_queue.put(image)
+
+        SCShareableContent.getShareableContentWithCompletionHandler_(
+            shareable_content_completion_handler
+        )
+
     def __call__(self):
         if self.screencapture_mode == 2:
             if sys.platform == 'darwin':
@@ -615,7 +614,7 @@ class ScreenshotClass:
                     if self.old_macos_screenshot_api:
                         cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming)
                     else:
-                        capture_macos_window_screenshot(self.window_id)
+                        self.capture_macos_window_screenshot(self.window_id)
                         try:
                             cg_image = screencapturekit_queue.get(timeout=0.5)
                         except queue.Empty:

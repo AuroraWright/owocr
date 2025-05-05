@@ -67,7 +67,8 @@ class Config:
         'screen_capture_area': '',
         'screen_capture_delay_secs': 3,
         'screen_capture_only_active_windows': True,
-        'screen_capture_combo': ''
+        'screen_capture_combo': '',
+        'screen_capture_old_macos_api': False
     }
 
     def __parse(self, value):
