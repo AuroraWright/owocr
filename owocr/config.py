@@ -4,6 +4,14 @@ import argparse
 import textwrap
 import urllib.request
 
+def str2bool(value):
+    if value.lower() == 'true':
+        return True
+    elif value.lower() == 'false':
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser(prog='owocr', description=textwrap.dedent('''\
     Runs OCR in the background.
     It can read images copied to the system clipboard or placed in a directory, images sent via a websocket or a Unix domain socket, or directly capture a screen (or a portion of it) or a window.
@@ -36,7 +44,7 @@ parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.S
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
 parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between screenshots when reading with screen capture.')
-parser.add_argument('-sw', '--screen_capture_only_active_windows', action='store_true', default=argparse.SUPPRESS,
+parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')

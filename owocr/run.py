@@ -296,92 +296,6 @@ class RequestHandler(socketserver.BaseRequestHandler):
             conn.sendall(b'False')
 
 
-class MacOSWindowTracker(threading.Thread):
-    def __init__(self, window_id):
-        super().__init__(daemon=True)
-        self.stop = False
-        self.window_id = window_id
-        self.window_active = screencapture_window_active
-
-    def run(self):
-        found = True
-        while found and not self.stop:
-            found = False
-            is_active = False
-            with objc.autorelease_pool():
-                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
-                for i, window in enumerate(window_list):
-                    if found and window.get(kCGWindowName, '') == 'Fullscreen Backdrop':
-                        is_active = True
-                        break
-                    if self.window_id == window['kCGWindowNumber']:
-                        found = True
-                        if i == 0 or window_list[i-1].get(kCGWindowName, '') in ('Dock', 'Color Enforcer Window'):
-                            is_active = True
-                            break
-                if not found:
-                    window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
-                    if len(window_list) > 0:
-                        found = True
-            if found and self.window_active != is_active:
-                on_window_activated(is_active)
-                self.window_active = is_active
-            time.sleep(0.2)
-        if not found:
-            on_window_closed(False)
-
-
-class WindowsWindowTracker(threading.Thread):
-    def __init__(self, window_handle, only_active):
-        super().__init__(daemon=True)
-        self.stop = False
-        self.window_handle = window_handle
-        self.only_active = only_active
-        self.window_active = screencapture_window_active
-        self.window_minimized = not screencapture_window_visible
-
-    def run(self):
-        found = True
-        while not self.stop:
-            found = win32gui.IsWindow(self.window_handle)
-            if not found:
-                break
-            if self.only_active:
-                is_active = self.window_handle == win32gui.GetForegroundWindow()
-                if self.window_active != is_active:
-                    on_window_activated(is_active)
-                    self.window_active = is_active
-            else:
-                is_minimized = win32gui.IsIconic(self.window_handle)
-                if self.window_minimized != is_minimized:
-                    on_window_minimized(is_minimized)
-                    self.window_minimized = is_minimized
-            time.sleep(0.2)
-        if not found:
-            on_window_closed(False)
-
-
-def get_windows_window_handle(window_title):
-    def callback(hwnd, window_title_part):
-        window_title = win32gui.GetWindowText(hwnd)
-        if window_title_part in window_title:
-            handles.append((hwnd, window_title))
-        return True
-
-    handle = win32gui.FindWindow(None, window_title)
-    if handle:
-        return (handle, window_title)
-
-    handles = []
-    win32gui.EnumWindows(callback, window_title)
-    for handle in handles:
-        _, pid = win32process.GetWindowThreadProcessId(handle[0])
-        if psutil.Process(pid).name().lower() not in ('cmd.exe', 'powershell.exe', 'windowsterminal.exe'):
-            return handle
-
-    return (None, None)
-
-
 class TextFiltering:
     accurate_filtering = False
 
@@ -453,8 +367,10 @@ class TextFiltering:
 class ScreenshotClass:
     def __init__(self):
         screen_capture_area = config.get_general('screen_capture_area')
-        self.macos_window_tracker = None
-        self.windows_window_tracker = None
+        self.macos_window_tracker_instance = None
+        self.windows_window_tracker_instance = None
+        self.screencapture_window_active = True
+        self.screencapture_window_visible = True
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -501,15 +417,14 @@ class ScreenshotClass:
             self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
-            screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
+            self.screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
             if sys.platform == 'darwin':
                 if config.get_general('screen_capture_old_macos_api') or int(platform.mac_ver()[0].split('.')[0]) < 14:
                     self.old_macos_screenshot_api = True
                 else:
                     self.old_macos_screenshot_api = False
-                    global screencapturekit_queue
-                    screencapturekit_queue = queue.Queue()
+                    self.screencapturekit_queue = queue.Queue()
                     CGMainDisplayID()
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
@@ -535,36 +450,68 @@ class ScreenshotClass:
                 self.window_id = window_ids[window_index]
                 window_title = window_titles[window_index]
 
-                if screen_capture_only_active_windows:
-                    self.macos_window_tracker = MacOSWindowTracker(self.window_id)
-                    self.macos_window_tracker.start()
+                if self.screen_capture_only_active_windows:
+                    self.macos_window_tracker_instance = threading.Thread(target=self.macos_window_tracker)
+                    self.macos_window_tracker_instance.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
-                self.window_handle, window_title = get_windows_window_handle(screen_capture_area)
+                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
                     raise ValueError(area_invalid_error)
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
-                self.windows_window_tracker = WindowsWindowTracker(self.window_handle, screen_capture_only_active_windows)
-                self.windows_window_tracker.start()
+                self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
+                self.windows_window_tracker_instance.start()
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
                 raise ValueError('Window capture is only currently supported on Windows and macOS')
 
     def __del__(self):
-        if self.macos_window_tracker:
-            self.macos_window_tracker.stop = True
-            self.macos_window_tracker.join()
-        elif self.windows_window_tracker:
-            self.windows_window_tracker.stop = True
-            self.windows_window_tracker.join()
+        if self.macos_window_tracker_instance:
+            self.macos_window_tracker_instance.join()
+        elif self.windows_window_tracker_instance:
+            self.windows_window_tracker_instance.join()
+
+    def get_windows_window_handle(self, window_title):
+        def callback(hwnd, window_title_part):
+            window_title = win32gui.GetWindowText(hwnd)
+            if window_title_part in window_title:
+                handles.append((hwnd, window_title))
+            return True
+
+        handle = win32gui.FindWindow(None, window_title)
+        if handle:
+            return (handle, window_title)
+
+        handles = []
+        win32gui.EnumWindows(callback, window_title)
+        for handle in handles:
+            _, pid = win32process.GetWindowThreadProcessId(handle[0])
+            if psutil.Process(pid).name().lower() not in ('cmd.exe', 'powershell.exe', 'windowsterminal.exe'):
+                return handle
+
+        return (None, None)
+
+    def windows_window_tracker(self):
+        found = True
+        while not terminated:
+            found = win32gui.IsWindow(self.window_handle)
+            if not found:
+                break
+            if self.screen_capture_only_active_windows:
+                self.screencapture_window_active = self.window_handle == win32gui.GetForegroundWindow()
+            else:
+                self.screencapture_window_visible = not win32gui.IsIconic(self.window_handle)
+            time.sleep(0.2)
+        if not found:
+            on_window_closed(False)
 
     def capture_macos_window_screenshot(self, window_id):
         def shareable_content_completion_handler(shareable_content, error):
             if error:
-                screencapturekit_queue.put(None)
+                self.screencapturekit_queue.put(None)
                 return
 
             target_window = None
@@ -574,7 +521,7 @@ class ScreenshotClass:
                     break
 
             if not target_window:
-                screencapturekit_queue.put(None)
+                self.screencapturekit_queue.put(None)
                 return
 
             with objc.autorelease_pool():
@@ -598,14 +545,40 @@ class ScreenshotClass:
 
         def capture_image_completion_handler(image, error):
             if error:
-                screencapturekit_queue.put(None)
+                self.screencapturekit_queue.put(None)
                 return
 
-            screencapturekit_queue.put(image)
+            self.screencapturekit_queue.put(image)
 
         SCShareableContent.getShareableContentWithCompletionHandler_(
             shareable_content_completion_handler
         )
+
+    def macos_window_tracker(self):
+        found = True
+        while found and not terminated:
+            found = False
+            is_active = False
+            with objc.autorelease_pool():
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
+                for i, window in enumerate(window_list):
+                    if found and window.get(kCGWindowName, '') == 'Fullscreen Backdrop':
+                        is_active = True
+                        break
+                    if self.window_id == window['kCGWindowNumber']:
+                        found = True
+                        if i == 0 or window_list[i-1].get(kCGWindowName, '') in ('Dock', 'Color Enforcer Window'):
+                            is_active = True
+                            break
+                if not found:
+                    window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
+                    if len(window_list) > 0:
+                        found = True
+            if found:
+                self.screencapture_window_active = is_active
+            time.sleep(0.2)
+        if not found:
+            on_window_closed(False)
 
     def __call__(self):
         if self.screencapture_mode == 2:
@@ -616,7 +589,7 @@ class ScreenshotClass:
                     else:
                         self.capture_macos_window_screenshot(self.window_id)
                         try:
-                            cg_image = screencapturekit_queue.get(timeout=0.5)
+                            cg_image = self.screencapturekit_queue.get(timeout=0.5)
                         except queue.Empty:
                             cg_image = None
                     if not cg_image:
@@ -783,16 +756,6 @@ def on_window_closed(alive):
         terminated = True
 
 
-def on_window_activated(active):
-    global screencapture_window_active
-    screencapture_window_active = active
-
-
-def on_window_minimized(minimized):
-    global screencapture_window_visible
-    screencapture_window_visible = not minimized
-
-
 def on_screenshot_combo():
     if not paused:
         img = take_screenshot()
@@ -917,11 +880,7 @@ def run():
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
-        global screencapture_window_active
-        global screencapture_window_visible
         global take_screenshot
-        screencapture_window_active = False
-        screencapture_window_visible = True
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_combo = config.get_general('screen_capture_combo')
         last_screenshot_time = 0
@@ -992,7 +951,7 @@ def run():
                 pass
 
         if (not img) and process_screenshots:
-            if (not paused) and screencapture_window_active and screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+            if (not paused) and take_screenshot.screencapture_window_active and take_screenshot.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
                 img = take_screenshot()
                 filter_img = True
                 notify = False
