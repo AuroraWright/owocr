@@ -1,24 +1,14 @@
-from datetime import datetime
-import sys
-import signal
-import time
 import threading
-from pathlib import Path
 
-import fire
-import numpy as np
 import pyperclipfix
 import mss
 import asyncio
 import websockets
 import socketserver
 import queue
-import io
-import re
 
 from PIL import Image, ImageDraw
 from PIL import UnidentifiedImageError
-from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifierSync
 import psutil
