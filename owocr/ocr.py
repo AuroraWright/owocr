@@ -319,7 +319,7 @@ class GoogleLens:
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
+            # img.close()
             img = img_resized
 
         return (pil_image_to_bytes(img), img.width, img.height)
@@ -415,7 +415,7 @@ class GoogleLensWeb:
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
+            # img.close()
             img = img_resized
 
         return pil_image_to_bytes(img)
@@ -542,7 +542,7 @@ class Bing:
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
+            # img.close()
             img = img_resized
 
         img_bytes, _ = limit_image_size(img, max_byte_size)
@@ -843,7 +843,7 @@ class AzureImageAnalysis:
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
             img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
+            # img.close()
             img = img_resized
 
         return pil_image_to_bytes(img)

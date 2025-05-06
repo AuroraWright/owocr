@@ -431,9 +431,6 @@ class ScreenshotClass:
         if self.screen_capture_window:
             self.screencapture_mode = 2
 
-        print(self.screen_capture_window)
-        print(screen_capture_area)
-
         if self.screencapture_mode != 2:
             self.sct = mss.mss()
 
@@ -695,6 +692,12 @@ class ScreenshotClass:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
 
+        # import random  # Ensure this is imported at the top of the file if not already
+        # rand_int = random.randint(1, 10)  # Executes only once out of 10 times
+
+        # if rand_int == 1:  # Executes only once out of 10 times
+        #     img.show()
+
         if self.screen_capture_exclusions:
             img = img.convert("RGBA")
             draw = ImageDraw.Draw(img)
@@ -704,6 +707,9 @@ class ScreenshotClass:
 
         if self.custom_left:
             img = img.crop((self.custom_left, self.custom_top, self.custom_left + self.custom_width, self.custom_top + self.custom_height))
+
+        # if rand_int == 1:
+        #     img.show()
 
         return img
 
