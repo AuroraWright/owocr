@@ -29,6 +29,7 @@ import io
 import re
 import logging
 import inspect
+import time
 
 import pyperclipfix
 import mss
