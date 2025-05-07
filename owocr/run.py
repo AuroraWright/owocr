@@ -53,8 +53,7 @@ except ImportError:
     pass
 from .config import Config
 from .screen_coordinate_picker import get_screen_selection
-from ...configuration import get_temporary_directory
-
+from ...configuration import get_temporary_directory, get_app_directory
 
 config = None
 
@@ -513,7 +512,7 @@ class ScreenshotClass:
                 if not self.window_handle:
                     raise ValueError(area_invalid_error)
 
-                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
                 self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
                 self.windows_window_tracker_instance.start()
@@ -693,11 +692,11 @@ class ScreenshotClass:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
 
-        # import random  # Ensure this is imported at the top of the file if not already
-        # rand_int = random.randint(1, 10)  # Executes only once out of 10 times
+        import random  # Ensure this is imported at the top of the file if not already
+        rand_int = random.randint(1, 20)  # Executes only once out of 10 times
 
-        # if rand_int == 1:  # Executes only once out of 10 times
-        #     img.show()
+        if rand_int == 1:  # Executes only once out of 10 times
+            img.save(os.path.join(get_temporary_directory(), 'before_crop.png'), 'PNG')
 
         if self.screen_capture_exclusions:
             img = img.convert("RGBA")
@@ -709,8 +708,9 @@ class ScreenshotClass:
         if self.custom_left:
             img = img.crop((self.custom_left, self.custom_top, self.custom_left + self.custom_width, self.custom_top + self.custom_height))
 
-        # if rand_int == 1:
-        #     img.show()
+        if rand_int == 1:
+            img.save(os.path.join(get_temporary_directory(), 'after_crop.png'), 'PNG')
+            print(f'OCR images saved to {get_temporary_directory()} if debugging is needed, this is 1/20 chance')
 
         return img
 
