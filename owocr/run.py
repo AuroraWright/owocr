@@ -512,7 +512,7 @@ class ScreenshotClass:
                 if not self.window_handle:
                     raise ValueError(area_invalid_error)
 
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+                self.set_dpi_awareness()
 
                 self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
                 self.windows_window_tracker_instance.start()
@@ -525,6 +525,25 @@ class ScreenshotClass:
             self.macos_window_tracker_instance.join()
         elif self.windows_window_tracker_instance:
             self.windows_window_tracker_instance.join()
+
+    @staticmethod
+    def set_dpi_awareness():
+        try:
+            # Try Windows 10+ API first
+            awareness_context = -4
+            success = ctypes.windll.user32.SetProcessDpiAwarenessContext(awareness_context)
+            if success:
+                print("Set DPI awareness: PER_MONITOR_AWARE_V2")
+            else:
+                print("Failed to set DPI awareness context (-4); falling back.")
+        except AttributeError:
+            # Fallback for older Windows versions (8.1+)
+            try:
+                per_monitor_awareness = 2
+                ctypes.windll.shcore.SetProcessDpiAwareness(per_monitor_awareness)
+                print("Set DPI awareness: PER_MONITOR_DPI_AWARE")
+            except Exception as e:
+                print("Could not set DPI awareness:", e)
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -881,7 +900,7 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, orig_text, rectangle, ocr_start_time, img_or_path)
+            txt_callback(text, orig_text, rectangle, ocr_start_time, img_or_path, bool(engine))
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -907,6 +926,7 @@ def init_config(parse_args=True):
 
 
 def run(read_from=None,
+        read_from_secondary=None,
         write_to=None,
         engine=None,
         pause_at_startup=None,
@@ -927,6 +947,8 @@ def run(read_from=None,
         rectangle=None,
         text_callback=None,
         language=None,
+        monitor_index=None,
+        ocr2=None,
         ):
     """
     Japanese OCR client
@@ -954,6 +976,9 @@ def run(read_from=None,
 
     if read_from is None:
         read_from = config.get_general('read_from')
+
+    if read_from_secondary is None:
+        read_from_secondary = config.get_general('read_from_secondary')
 
     if screen_capture_area is None:
         screen_capture_area = config.get_general('screen_capture_area')
@@ -1054,7 +1079,6 @@ def run(read_from=None,
     delay_secs = config.get_general('delay_secs')
 
     non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
-    read_from_secondary = config.get_general('read_from_secondary')
     read_from_path = None
     read_from_readable = []
     terminated = False
@@ -1181,7 +1205,7 @@ def run(read_from=None,
                 if res:
                     last_result = (res, engine_index)
             else:
-                process_and_write_results(img, None, None, notify)
+                process_and_write_results(img, write_to, None, notify=notify, rectangle=rectangle, ocr_start_time=ocr_start_time, engine=ocr2)
             if isinstance(img, Path):
                 if delete_images:
                     Path.unlink(img)
