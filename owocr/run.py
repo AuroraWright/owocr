@@ -379,7 +379,7 @@ class TextFiltering:
             else:
                 orig_text_filtered.append(None)
 
-        if last_result[1] == engine_index:
+        if last_result and last_result[1] == engine_index:
             last_text = last_result[0]
         else:
             last_text = []
@@ -399,6 +399,7 @@ class TextFiltering:
                         break
         else:
             for block in new_blocks:
+                print(block)
                 if lang not in ["ja", "zh"] or self.classify(block)[0] == lang:
                     final_blocks.append(block)
 
@@ -407,7 +408,7 @@ class TextFiltering:
 
 
 class ScreenshotClass:
-    def __init__(self, screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows):
+    def __init__(self, screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas):
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.screencapture_window_active = True
@@ -415,6 +416,7 @@ class ScreenshotClass:
         self.custom_left = None
         self.screen_capture_exclusions = screen_capture_exclusions
         self.screen_capture_window = screen_capture_window
+        self.areas = []
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -463,9 +465,15 @@ class ScreenshotClass:
 
             self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
             logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
-        if len(screen_capture_area.split(',')) == 4:
-            self.custom_left, self.custom_top, self.custom_width, self.custom_height = [int(c.strip()) for c in
-                                                                    screen_capture_area.split(',')]
+        if screen_capture_areas:
+            for area in screen_capture_areas:
+                if len(area.split(',')) == 4:
+                    self.areas.append(([int(c.strip()) for c in area.split(',')]))
+        else:
+            if len(screen_capture_area.split(',')) == 4:
+                self.areas.append(([int(c.strip()) for c in screen_capture_area.split(',')]))
+
+        self.areas.sort(key=lambda rect: (rect[1], rect[0]))
 
 
         if self.screencapture_mode == 2 or self.screen_capture_window:
@@ -724,8 +732,35 @@ class ScreenshotClass:
                 left, top, width, height = exclusion
                 draw.rectangle((left, top, left + width, top + height), fill=(0, 0, 0, 0))
 
-        if self.custom_left:
-            img = img.crop((self.custom_left, self.custom_top, self.custom_left + self.custom_width, self.custom_top + self.custom_height))
+        cropped_sections = []
+        start = time.time()
+        for area in self.areas:
+            cropped_sections.append(img.crop((area[0], area[1], area[0] + area[2], area[1] + area[3])))
+
+        # if len(cropped_sections) > 1:
+        #     combined_width = sum(section.width for section in cropped_sections)
+        #     combined_height = max(section.height for section in cropped_sections)
+        #     combined_img = Image.new("RGBA", (combined_width, combined_height))
+        #
+        #     x_offset = 0
+        #     for section in cropped_sections:
+        #         combined_img.paste(section, (x_offset, 0))
+        #         x_offset += section.width
+        #
+        #     img = combined_img
+        if len(cropped_sections) > 1:
+            combined_width = max(section.width for section in cropped_sections)
+            combined_height = sum(section.height for section in cropped_sections) + (len(cropped_sections) - 1) * 10  # Add space for gaps
+            combined_img = Image.new("RGBA", (combined_width, combined_height))
+
+            y_offset = 0
+            for section in cropped_sections:
+                combined_img.paste(section, (0, y_offset))
+                y_offset += section.height + 50  # Add gap between sections
+
+            img = combined_img
+        elif cropped_sections:
+            img = cropped_sections[0]
 
         if rand_int == 1:
             img.save(os.path.join(get_temporary_directory(), 'after_crop.png'), 'PNG')
@@ -858,7 +893,7 @@ def on_window_minimized(minimized):
     screencapture_window_visible = not minimized
 
 
-def process_and_write_results(img_or_path, write_to=None, last_result=None, filtering=None, notify=None, engine=None, rectangle=None, ocr_start_time=None):
+def process_and_write_results(img_or_path, write_to=None, last_result=None, filtering=None, notify=None, engine=None, ocr_start_time=None):
     global engine_index
     if auto_pause_handler:
         auto_pause_handler.stop()
@@ -900,7 +935,7 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, orig_text, rectangle, ocr_start_time, img_or_path, bool(engine))
+            txt_callback(text, orig_text, ocr_start_time, img_or_path, bool(engine), filtering)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
@@ -937,6 +972,7 @@ def run(read_from=None,
         combo_pause=None,
         combo_engine_switch=None,
         screen_capture_area=None,
+        screen_capture_areas=None,
         screen_capture_exclusions=None,
         screen_capture_window=None,
         screen_capture_delay_secs=None,
@@ -944,11 +980,11 @@ def run(read_from=None,
         screen_capture_combo=None,
         stop_running_flag=None,
         screen_capture_event_bus=None,
-        rectangle=None,
         text_callback=None,
         language=None,
         monitor_index=None,
         ocr2=None,
+        gsm_ocr_config=None,
         ):
     """
     Japanese OCR client
@@ -1003,9 +1039,6 @@ def run(read_from=None,
 
     if screen_capture_event_bus is None:
         screen_capture_event_bus = config.get_general('screen_capture_event_bus')
-
-    if rectangle is None:
-        rectangle = config.get_general('rectangle')
 
     if text_callback is None:
         text_callback = config.get_general('text_callback')
@@ -1063,8 +1096,8 @@ def run(read_from=None,
     global paused
     global just_unpaused
     global first_pressed
-    global notifier
     global auto_pause_handler
+    global notifier
     global websocket_server_thread
     global image_queue
     custom_left = None
@@ -1124,7 +1157,8 @@ def run(read_from=None,
         if screen_capture_combo != '':
             screen_capture_on_combo = True
             key_combos[screen_capture_combo] = on_screenshot_combo
-        take_screenshot = ScreenshotClass(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows)
+        take_screenshot = ScreenshotClass(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas)
+        # global_take_screenshot = ScreenshotClass(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, rectangle)
         filtering = TextFiltering()
         read_from_readable.append('screen capture')
     if 'websocket' in (read_from, read_from_secondary):
@@ -1201,11 +1235,11 @@ def run(read_from=None,
             break
         elif img:
             if filter_img:
-                res, _ = process_and_write_results(img, write_to, last_result, filtering, notify, rectangle=rectangle, ocr_start_time=ocr_start_time)
+                res, _ = process_and_write_results(img, write_to, last_result, filtering, notify, ocr_start_time=ocr_start_time)
                 if res:
                     last_result = (res, engine_index)
             else:
-                process_and_write_results(img, write_to, None, notify=notify, rectangle=rectangle, ocr_start_time=ocr_start_time, engine=ocr2)
+                process_and_write_results(img, write_to, None, notify=notify, ocr_start_time=ocr_start_time, engine=ocr2)
             if isinstance(img, Path):
                 if delete_images:
                     Path.unlink(img)
