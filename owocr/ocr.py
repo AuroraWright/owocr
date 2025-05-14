@@ -1011,19 +1011,13 @@ class GeminiOCR:
         except Exception as e:
             logger.error(f'Error configuring google-generativeai: {e}')
 
-    def __call__(self, img_or_path):
+    def __call__(self, img):
         if not self.available:
             return (False, 'GeminiOCR is not available due to missing API key or configuration error.')
 
         try:
+            img = input_to_pil_image(img)
             import google.generativeai as genai
-            if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
-                img = Image.open(img_or_path)
-            elif isinstance(img_or_path, Image.Image):
-                img = img_or_path
-            else:
-                raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
-
             img_bytes = self._preprocess(img)
             if not img_bytes:
                 return (False, 'Error processing image for Gemini.')
@@ -1050,7 +1044,7 @@ class GeminiOCR:
             return (True, text_output)
 
         except FileNotFoundError:
-            return (False, f'File not found: {img_or_path}')
+            return (False, f'File not found: {img}')
         except Exception as e:
             return (False, f'Gemini API request failed: {e}')
 
@@ -1079,17 +1073,12 @@ class GroqOCR:
         except Exception as e:
             logger.error(f'Error initializing Groq client: {e}')
 
-    def __call__(self, img_or_path):
+    def __call__(self, img):
         if not self.available:
             return (False, 'GroqOCR is not available due to missing API key or configuration error.')
 
         try:
-            if isinstance(img_or_path, str) or isinstance(img_or_path, Path):
-                img = Image.open(img_or_path).convert("RGB")
-            elif isinstance(img_or_path, Image.Image):
-                img = img_or_path.convert("RGB")
-            else:
-                raise ValueError(f'img_or_path must be a path or PIL.Image, instead got: {img_or_path}')
+            img = input_to_pil_image(img)
 
             img_base64 = self._preprocess(img)
             if not img_base64:
@@ -1126,7 +1115,7 @@ class GroqOCR:
                 return (True, "")
 
         except FileNotFoundError:
-            return (False, f'File not found: {img_or_path}')
+            return (False, f'File not found: {img}')
         except Exception as e:
             return (False, f'Groq API request failed: {e}')
 
