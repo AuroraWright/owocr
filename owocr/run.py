@@ -1,3 +1,5 @@
+from ...ocr.gsm_ocr_config import set_dpi_awareness
+
 try:
     import win32gui
     import win32ui
@@ -520,7 +522,7 @@ class ScreenshotClass:
                 if not self.window_handle:
                     raise ValueError(area_invalid_error)
 
-                self.set_dpi_awareness()
+                set_dpi_awareness()
 
                 self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
                 self.windows_window_tracker_instance.start()
@@ -533,25 +535,6 @@ class ScreenshotClass:
             self.macos_window_tracker_instance.join()
         elif self.windows_window_tracker_instance:
             self.windows_window_tracker_instance.join()
-
-    @staticmethod
-    def set_dpi_awareness():
-        try:
-            # Try Windows 10+ API first
-            awareness_context = -4
-            success = ctypes.windll.user32.SetProcessDpiAwarenessContext(awareness_context)
-            if success:
-                print("Set DPI awareness: PER_MONITOR_AWARE_V2")
-            else:
-                print("Failed to set DPI awareness context (-4); falling back.")
-        except AttributeError:
-            # Fallback for older Windows versions (8.1+)
-            try:
-                per_monitor_awareness = 2
-                ctypes.windll.shcore.SetProcessDpiAwareness(per_monitor_awareness)
-                print("Set DPI awareness: PER_MONITOR_DPI_AWARE")
-            except Exception as e:
-                print("Could not set DPI awareness:", e)
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):

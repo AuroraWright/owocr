@@ -13,6 +13,7 @@ from urllib.parse import urlparse, parse_qs
 import jaconv
 import numpy as np
 from PIL import Image
+from google.generativeai import GenerationConfig
 from loguru import logger
 import requests
 
@@ -1003,7 +1004,10 @@ class GeminiOCR:
                 logger.warning('Gemini API key not provided, GeminiOCR will not work!')
             else:
                 genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(config['model'])
+                self.model = genai.GenerativeModel(config['model'], generation_config=GenerationConfig(
+                    temperature=0.0,
+                    max_output_tokens=300
+                ))
                 self.available = True
                 logger.info('Gemini (using google-generativeai) ready')
         except KeyError:
@@ -1105,7 +1109,8 @@ class GroqOCR:
                         ],
                     }
                 ],
-                max_tokens=300
+                max_tokens=300,
+                temperature=0.0
             )
 
             if response.choices and response.choices[0].message.content:
