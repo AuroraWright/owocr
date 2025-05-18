@@ -287,7 +287,7 @@ class GoogleLens:
         }
 
         try:
-            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers, timeout=20)
+            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers, timeout=5)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -366,7 +366,7 @@ class GoogleLensWeb:
         cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
 
         try:
-            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
+            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=5, allow_redirects=False)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -386,7 +386,7 @@ class GoogleLensWeb:
             return (False, 'Unknown error!')
 
         try:
-            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
+            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=5)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -458,7 +458,7 @@ class Bing:
         for _ in range(2):
             api_host = urlparse(upload_url).netloc
             try:
-                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
+                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=5, allow_redirects=False)
             except requests.exceptions.Timeout:
                 return (False, 'Request timeout!')
             except requests.exceptions.ConnectionError:
@@ -499,7 +499,7 @@ class Bing:
         }
 
         try:
-            res = self.requests_session.post(api_url, headers=api_headers, files=files, timeout=20)
+            res = self.requests_session.post(api_url, headers=api_headers, files=files, timeout=5)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -961,7 +961,7 @@ class OCRSpace:
         files = {'file': ('image.' + img_extension, img_bytes, 'image/' + img_extension)}
 
         try:
-            res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=20)
+            res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=5)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:

@@ -381,7 +381,12 @@ class TextFiltering:
             else:
                 orig_text_filtered.append(None)
 
-        if last_result and last_result[1] == engine_index:
+        if not isinstance(last_result, tuple):
+            print(type(last_result))
+        if isinstance(last_result, list):
+            print("last_result is a list")
+            last_text = last_result
+        elif last_result and last_result[1] == engine_index:
             last_text = last_result[0]
         else:
             last_text = []
@@ -884,18 +889,28 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
         for i, instance in enumerate(engine_instances):
             if instance.name.lower() in engine.lower():
                 engine_instance = instance
-                if last_result:
-                    last_result = (last_result[0], i)
                 break
     else:
         engine_instance = engine_instances[engine_index]
+
+
+    engine_color = config.get_general('engine_color')
 
     start_time = time.time()
     res, text = engine_instance(img_or_path)
     end_time = time.time()
 
+    if not res and ocr_2 == engine:
+        logger.opt(ansi=True).info(f"<{engine_color}>{engine_instance.readable_name}</{engine_color}> failed with message: {text}, trying <{engine_color}>{ocr_1}</{engine_color}>")
+        for i, instance in enumerate(engine_instances):
+            if instance.name.lower() in ocr_1.lower():
+                engine_instance = instance
+                if last_result:
+                    last_result = []
+                break
+        res, text = engine_instance(img_or_path)
+
     orig_text = []
-    engine_color = config.get_general('engine_color')
     # print(filtering)
     #
     #
@@ -966,6 +981,7 @@ def run(read_from=None,
         text_callback=None,
         language=None,
         monitor_index=None,
+        ocr1=None,
         ocr2=None,
         gsm_ocr_config=None,
         ):
@@ -1083,6 +1099,10 @@ def run(read_from=None,
     global notifier
     global websocket_server_thread
     global image_queue
+    global ocr_1
+    global ocr_2
+    ocr_1 = ocr1
+    ocr_2 = ocr2
     custom_left = None
     terminated = False
     paused = pause_at_startup
