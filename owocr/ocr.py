@@ -17,6 +17,8 @@ from google.generativeai import GenerationConfig
 from loguru import logger
 import requests
 
+from ...configuration import get_temporary_directory
+
 try:
     from manga_ocr import MangaOcr as MOCR
 except ImportError:
@@ -765,11 +767,16 @@ class OneOCR:
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
-
+        crop_coords = None
         if sys.platform == 'win32':
             try:
                 ocr_resp = self.model.recognize_pil(img)
                 # print(json.dumps(ocr_resp))
+                x_coords = [line['bounding_rect'][f'x{i}'] for line in ocr_resp['lines'] for i in range(1, 5)]
+                y_coords = [line['bounding_rect'][f'y{i}'] for line in ocr_resp['lines'] for i in range(1, 5)]
+                if x_coords and y_coords:
+                    crop_coords = (min(x_coords) - 5, min(y_coords) - 5, max(x_coords) + 5, max(y_coords) + 5)
+
                 res = ocr_resp['text']
             except RuntimeError as e:
                 return (False, e)
@@ -787,7 +794,7 @@ class OneOCR:
 
             res = res.json()['text']
 
-        x = (True, res)
+        x = (True, res, crop_coords)
 
         # img.close()
         return x

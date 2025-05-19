@@ -381,10 +381,7 @@ class TextFiltering:
             else:
                 orig_text_filtered.append(None)
 
-        if not isinstance(last_result, tuple):
-            print(type(last_result))
         if isinstance(last_result, list):
-            print("last_result is a list")
             last_text = last_result
         elif last_result and last_result[1] == engine_index:
             last_text = last_result[0]
@@ -406,7 +403,6 @@ class TextFiltering:
                         break
         else:
             for block in new_blocks:
-                print(block)
                 if lang not in ["ja", "zh"] or self.classify(block)[0] == lang:
                     final_blocks.append(block)
 
@@ -752,7 +748,6 @@ class ScreenshotClass:
 
         if rand_int == 1:
             img.save(os.path.join(get_temporary_directory(), 'after_crop.png'), 'PNG')
-            print(f'OCR images saved to {get_temporary_directory()} if debugging is needed, this is 1/20 chance')
 
         return img
 
@@ -897,7 +892,9 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
     engine_color = config.get_general('engine_color')
 
     start_time = time.time()
-    res, text = engine_instance(img_or_path)
+    result = engine_instance(img_or_path)
+    res, text, crop_coords = (*result, None)[:3]
+
     end_time = time.time()
 
     if not res and ocr_2 == engine:
@@ -908,7 +905,8 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
                 if last_result:
                     last_result = []
                 break
-        res, text = engine_instance(img_or_path)
+        result = engine_instance(img_or_path)
+        res, text, crop_coords = (*result, None)[:3]
 
     orig_text = []
     # print(filtering)
@@ -933,7 +931,7 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
         elif write_to == 'clipboard':
             pyperclipfix.copy(text)
         elif write_to == "callback":
-            txt_callback(text, orig_text, ocr_start_time, img_or_path, bool(engine), filtering)
+            txt_callback(text, orig_text, ocr_start_time, img_or_path, bool(engine), filtering, crop_coords)
         elif write_to:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
