@@ -1043,7 +1043,7 @@ class GeminiOCR:
                             }
                         },
                         {
-                            'text': 'Analyze the image. Extract text *only* from within dialogue boxes (speech bubbles or panels containing character dialogue). From the extracted dialogue text, filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. If no text is found within dialogue boxes after applying filters, return nothing. Do not include any other output, formatting markers, or commentary.'
+                            'text': 'Analyze the image. Extract text *only* from within dialogue boxes (speech bubbles or panels containing character dialogue). If Text appears to be vertical, read the text from top to bottom, right to left. From the extracted dialogue text, filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. If no text is found within dialogue boxes after applying filters, return nothing. Do not include any other output, formatting markers, or commentary.'
                         }
                     ]
                 }
@@ -1096,13 +1096,14 @@ class GroqOCR:
                 return (False, 'Error processing image for Groq.')
 
             prompt = (
-                "Analyze this image and extract text from it"
+                "Analyze the image. Extract text *only* from within dialogue boxes (speech bubbles or panels containing character dialogue). If Text appears to be vertical, read the text from top to bottom, right to left. From the extracted dialogue text, filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. If no text is found within dialogue boxes after applying filters, return nothing. Do not include any other output, formatting markers, or commentary."
+                # "Analyze this i#mage and extract text from it"
                 # "(speech bubbles or panels containing character dialogue). From the extracted dialogue text, "
                 # "filter out any furigana. Ignore and do not include any text found outside of dialogue boxes, "
                 # "including character names, speaker labels, or sound effects. Return *only* the filtered dialogue text. "
                 # "If no text is found within dialogue boxes after applying filters, return an empty string. "
                 # "OR, if there are no text bubbles or dialogue boxes found, return everything."
-                "Do not include any other output, formatting markers, or commentary, only the text from the image."
+                # "Do not include any other output, formatting markers, or commentary, only the text from the image."
             )
 
             response = self.client.chat.completions.create(
