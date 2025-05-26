@@ -17,8 +17,6 @@ from google.generativeai import GenerationConfig
 from loguru import logger
 import requests
 
-from ...configuration import get_temporary_directory
-
 try:
     from manga_ocr import MangaOcr as MOCR
 except ImportError:

@@ -55,7 +55,7 @@ except ImportError:
     pass
 from .config import Config
 from .screen_coordinate_picker import get_screen_selection
-from ...configuration import get_temporary_directory, get_app_directory
+from GameSentenceMiner.util.configuration import get_temporary_directory
 
 config = None
 
