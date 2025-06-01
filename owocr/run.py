@@ -381,11 +381,15 @@ class TextFiltering:
             else:
                 orig_text_filtered.append(None)
 
-        if isinstance(last_result, list):
-            last_text = last_result
-        elif last_result and last_result[1] == engine_index:
-            last_text = last_result[0]
-        else:
+        try:
+            if isinstance(last_result, list):
+                last_text = last_result
+            elif last_result and last_result[1] == engine_index:
+                last_text = last_result[0]
+            else:
+                last_text = []
+        except Exception as e:
+            logger.error(f"Error processing last_result {last_result}: {e}")
             last_text = []
 
         new_blocks = []
@@ -895,7 +899,6 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
     result = engine_instance(img_or_path)
     res, text, crop_coords = (*result, None)[:3]
 
-    end_time = time.time()
 
     if not res and ocr_2 == engine:
         logger.opt(ansi=True).info(f"<{engine_color}>{engine_instance.readable_name}</{engine_color}> failed with message: {text}, trying <{engine_color}>{ocr_1}</{engine_color}>")
@@ -905,8 +908,12 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
                 if last_result:
                     last_result = []
                 break
+        start_time = time.time()
         result = engine_instance(img_or_path)
         res, text, crop_coords = (*result, None)[:3]
+
+    end_time = time.time()
+
 
     orig_text = []
     # print(filtering)

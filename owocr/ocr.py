@@ -763,6 +763,13 @@ class OneOCR:
 
     def __call__(self, img):
         img = input_to_pil_image(img)
+        if img.width < 51 or img.height < 51:
+            new_width = max(img.width, 51)
+            new_height = max(img.height, 51)
+            new_img = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
+            new_img.paste(img, ((new_width - img.width) // 2, (new_height - img.height) // 2))
+            img = new_img
+
         if not img:
             return (False, 'Invalid image provided')
         crop_coords = None
