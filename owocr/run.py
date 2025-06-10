@@ -309,7 +309,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
 class TextFiltering:
     accurate_filtering = False
 
-    def __init__(self):
+    def __init__(self, lang="ja"):
         from pysbd import Segmenter
         self.segmenter = Segmenter(language=lang, clean=True)
         self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
@@ -1159,7 +1159,6 @@ def run(read_from=None,
 
     if 'screencapture' in (read_from, read_from_secondary):
         global take_screenshot
-        screen_capture_combo = config.get_general('screen_capture_combo')
         last_screenshot_time = 0
         last_result = ([], engine_index)
         if screen_capture_combo != '':
@@ -1216,6 +1215,8 @@ def run(read_from=None,
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
     logger.opt(ansi=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+    if screen_capture_combo:
+        logger.opt(ansi=True).info(f'Manual OCR Running... Press <{engine_color}>{screen_capture_combo.replace("<", "").replace(">", "")}</{engine_color}> to run OCR')
 
     while not terminated:
         ocr_start_time = datetime.now()

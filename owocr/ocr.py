@@ -307,6 +307,7 @@ class GoogleLens:
         #     json.dump(response_dict, f, indent=4, ensure_ascii=False)
         res = ''
         text = response_dict['objects_response']['text']
+        skipped = []
         if furigana_filter_sensitivity > 0:
             if 'text_layout' in text:
                 for paragraph in text['text_layout']['paragraphs']:
@@ -315,9 +316,11 @@ class GoogleLens:
                             for word in line['words']:
                                 res += word['plain_text'] + word['text_separator']
                         else:
+                            skipped.append(word['plain_text'] for word in line['words'])
                             continue
                         res += '\n'
-
+            # logger.info(
+            #     f"Skipped {len(skipped)} chars due to furigana filter sensitivity: {furigana_filter_sensitivity}")
             # widths = []
             # heights = []
             # if 'text_layout' in text:
@@ -789,7 +792,6 @@ class OneOCR:
     available = False
 
     def __init__(self, config={}):
-        self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('OneOCR is not supported on Windows older than 10!')
@@ -836,10 +838,9 @@ class OneOCR:
                 #           encoding='utf-8') as f:
                 #     json.dump(ocr_resp, f, indent=4, ensure_ascii=False)
                 res = ''
+                skipped = []
                 if furigana_filter_sensitivity > 0:
                     for line in ocr_resp['lines']:
-                        if self.kana_kanji_regex.search(line['text']) is None:
-                            continue
                         x1, x2, x3, x4 = line['bounding_rect']['x1'], line['bounding_rect']['x2'], \
                             line['bounding_rect']['x3'], line['bounding_rect']['x4']
                         y1, y2, y3, y4 = line['bounding_rect']['y1'], line['bounding_rect']['y2'], \
@@ -849,8 +850,11 @@ class OneOCR:
                         if width > furigana_filter_sensitivity and height > furigana_filter_sensitivity:
                             res += line['text']
                         else:
+                            skipped.extend(char for char in line['text'])
                             continue
                         res += '\n'
+                    # logger.info(
+                    #     f"Skipped {len(skipped)} chars due to furigana filter sensitivity: {furigana_filter_sensitivity}")
                     # widths, heights = [], []
                     # for line in ocr_resp['lines']:
                     #     for word in line['words']:
