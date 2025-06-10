@@ -315,7 +315,6 @@ class TextFiltering:
         self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         self.chinese_common_regex = re.compile(r'[\u4E00-\u9FFF]')
         self.english_regex = re.compile(r'[a-zA-Z0-9.,!?;:"\'()\[\]{}]')
-        self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         self.chinese_common_regex = re.compile(r'[\u4E00-\u9FFF]')
         self.english_regex = re.compile(r'[a-zA-Z0-9.,!?;:"\'()\[\]{}]')
         self.korean_regex = re.compile(r'[\uAC00-\uD7AF]')
@@ -880,7 +879,7 @@ def on_window_minimized(minimized):
     screencapture_window_visible = not minimized
 
 
-def process_and_write_results(img_or_path, write_to=None, last_result=None, filtering=None, notify=None, engine=None, ocr_start_time=None):
+def process_and_write_results(img_or_path, write_to=None, last_result=None, filtering=None, notify=None, engine=None, ocr_start_time=None, furigana_filter_sensitivity=0):
     global engine_index
     if auto_pause_handler:
         auto_pause_handler.stop()
@@ -896,7 +895,7 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
     engine_color = config.get_general('engine_color')
 
     start_time = time.time()
-    result = engine_instance(img_or_path)
+    result = engine_instance(img_or_path, furigana_filter_sensitivity)
     res, text, crop_coords = (*result, None)[:3]
 
 
@@ -909,7 +908,7 @@ def process_and_write_results(img_or_path, write_to=None, last_result=None, filt
                     last_result = []
                 break
         start_time = time.time()
-        result = engine_instance(img_or_path)
+        result = engine_instance(img_or_path, furigana_filter_sensitivity)
         res, text, crop_coords = (*result, None)[:3]
 
     end_time = time.time()
@@ -989,6 +988,7 @@ def run(read_from=None,
         ocr1=None,
         ocr2=None,
         gsm_ocr_config=None,
+        furigana_filter_sensitivity=None,
         ):
     """
     Japanese OCR client
@@ -1243,7 +1243,7 @@ def run(read_from=None,
             break
         elif img:
             if filter_img:
-                res, _ = process_and_write_results(img, write_to, last_result, filtering, notify, ocr_start_time=ocr_start_time)
+                res, _ = process_and_write_results(img, write_to, last_result, filtering, notify, ocr_start_time=ocr_start_time, furigana_filter_sensitivity=furigana_filter_sensitivity)
                 if res:
                     last_result = (res, engine_index)
             else:

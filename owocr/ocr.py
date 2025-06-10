@@ -17,6 +17,8 @@ from google.generativeai import GenerationConfig
 from loguru import logger
 import requests
 
+from GameSentenceMiner.util.configuration import get_app_directory, get_temporary_directory
+
 try:
     from manga_ocr import MangaOcr as MOCR
 except ImportError:
@@ -73,9 +75,10 @@ except ImportError:
 
 try:
     import betterproto
-    from .lens_betterproto import *
+    from GameSentenceMiner.owocr.owocr.lens_betterproto import *
     import random
 except ImportError:
+    print('Google Lens not available, please install betterproto package!')
     pass
 
 try:
@@ -174,7 +177,7 @@ class MangaOcr:
             self.available = True
             logger.info('Manga OCR ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -204,7 +207,7 @@ class GoogleVision:
             except:
                 logger.warning('Error parsing Google credentials, Google Vision will not work!')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -234,13 +237,14 @@ class GoogleLens:
     available = False
 
     def __init__(self):
+        self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         if 'betterproto' not in sys.modules:
             logger.warning('betterproto not available, Google Lens will not work!')
         else:
             self.available = True
             logger.info('Google Lens ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -269,7 +273,7 @@ class GoogleLens:
         image_data = self._preprocess(img)
         request.objects_request.image_data.payload.image_bytes = image_data[0]
         request.objects_request.image_data.image_metadata.width = image_data[1]
-        request.objects_request.image_data.image_metadata.height = image_data[2] 
+        request.objects_request.image_data.image_metadata.height = image_data[2]
 
         payload = request.SerializeToString()
 
@@ -299,15 +303,59 @@ class GoogleLens:
         response_proto = LensOverlayServerResponse().FromString(res.content)
         response_dict = response_proto.to_dict(betterproto.Casing.SNAKE)
 
+        # with open(os.path.join(get_temporary_directory(), 'glens_response.json'), 'w', encoding='utf-8') as f:
+        #     json.dump(response_dict, f, indent=4, ensure_ascii=False)
         res = ''
         text = response_dict['objects_response']['text']
-        if 'text_layout' in text:
-            paragraphs = text['text_layout']['paragraphs']
-            for paragraph in paragraphs:
-                for line in paragraph['lines']:
-                    for word in line['words']:
-                        res += word['plain_text'] + word['text_separator']
-                res += '\n'
+        if furigana_filter_sensitivity > 0:
+            if 'text_layout' in text:
+                for paragraph in text['text_layout']['paragraphs']:
+                    for line in paragraph['lines']:
+                        if furigana_filter_sensitivity < line['geometry']['bounding_box']['width'] * img.width and furigana_filter_sensitivity < line['geometry']['bounding_box']['height'] * img.height:
+                            for word in line['words']:
+                                res += word['plain_text'] + word['text_separator']
+                        else:
+                            continue
+                        res += '\n'
+
+            # widths = []
+            # heights = []
+            # if 'text_layout' in text:
+            #     paragraphs = text['text_layout']['paragraphs']
+            #     for paragraph in paragraphs:
+            #         for line in paragraph['lines']:
+            #             for word in line['words']:
+            #                 if self.kana_kanji_regex.search(word['plain_text']) is None:
+            #                     continue
+            #                 widths.append(word['geometry']['bounding_box']['width'])
+            #                 heights.append(word['geometry']['bounding_box']['height'])
+            #
+            # max_width = max(sorted(widths)[:-max(1, len(widths) // 10)]) if len(widths) > 1 else 0
+            # max_height = max(sorted(heights)[:-max(1, len(heights) // 10)]) if len(heights) > 1 else 0
+            #
+            # required_width = max_width * furigana_filter_sensitivity
+            # required_height = max_height * furigana_filter_sensitivity
+            #
+            # if 'text_layout' in text:
+            #     paragraphs = text['text_layout']['paragraphs']
+            #     for paragraph in paragraphs:
+            #         for line in paragraph['lines']:
+            #             if furigana_filter_sensitivity == 0 or line['geometry']['bounding_box']['width'] > required_width or line['geometry']['bounding_box']['height'] > required_height:
+            #                 for word in line['words']:
+            #                         res += word['plain_text'] + word['text_separator']
+            #             else:
+            #                 continue
+            #         res += '\n'
+        else:
+            if 'text_layout' in text:
+                paragraphs = text['text_layout']['paragraphs']
+                for paragraph in paragraphs:
+                    for line in paragraph['lines']:
+                        for word in line['words']:
+                                res += word['plain_text'] + word['text_separator']
+                        else:
+                            continue
+                    res += '\n'
 
         x = (True, res)
 
@@ -339,7 +387,7 @@ class GoogleLensWeb:
             self.available = True
             logger.info('Google Lens (web) ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -432,7 +480,7 @@ class Bing:
         self.available = True
         logger.info('Bing ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -568,7 +616,7 @@ class AppleVision:
             self.available = True
             logger.info('Apple Vision ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -647,7 +695,7 @@ class AppleLiveText:
             self.available = True
             logger.info('Apple Live Text ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -704,7 +752,7 @@ class WinRTOCR:
             except:
                 logger.warning('Error reading URL from config, WinRT OCR will not work!')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -727,6 +775,7 @@ class WinRTOCR:
 
         x = (True, res)
 
+
         # img.close()
         return x
 
@@ -740,6 +789,7 @@ class OneOCR:
     available = False
 
     def __init__(self, config={}):
+        self.kana_kanji_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('OneOCR is not supported on Windows older than 10!')
@@ -761,7 +811,7 @@ class OneOCR:
             except:
                 logger.warning('Error reading URL from config, OneOCR will not work!')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if img.width < 51 or img.height < 51:
             new_width = max(img.width, 51)
@@ -782,7 +832,60 @@ class OneOCR:
                 if x_coords and y_coords:
                     crop_coords = (min(x_coords) - 5, min(y_coords) - 5, max(x_coords) + 5, max(y_coords) + 5)
 
-                res = ocr_resp['text']
+                # with open(os.path.join(get_temporary_directory(), 'oneocr_response.json'), 'w',
+                #           encoding='utf-8') as f:
+                #     json.dump(ocr_resp, f, indent=4, ensure_ascii=False)
+                res = ''
+                if furigana_filter_sensitivity > 0:
+                    for line in ocr_resp['lines']:
+                        if self.kana_kanji_regex.search(line['text']) is None:
+                            continue
+                        x1, x2, x3, x4 = line['bounding_rect']['x1'], line['bounding_rect']['x2'], \
+                            line['bounding_rect']['x3'], line['bounding_rect']['x4']
+                        y1, y2, y3, y4 = line['bounding_rect']['y1'], line['bounding_rect']['y2'], \
+                            line['bounding_rect']['y3'], line['bounding_rect']['y4']
+                        width = max(x2 - x1, x3 - x4)
+                        height = max(y3 - y1, y4 - y2)
+                        if width > furigana_filter_sensitivity and height > furigana_filter_sensitivity:
+                            res += line['text']
+                        else:
+                            continue
+                        res += '\n'
+                    # widths, heights = [], []
+                    # for line in ocr_resp['lines']:
+                    #     for word in line['words']:
+                    #         if self.kana_kanji_regex.search(word['text']) is None:
+                    #             continue
+                    #         # x1, x2, x3, x4 = line['bounding_rect']['x1'], line['bounding_rect']['x2'], line['bounding_rect']['x3'], line['bounding_rect']['x4']
+                    #         # y1, y2, y3, y4 = line['bounding_rect']['y1'], line['bounding_rect']['y2'], line['bounding_rect']['y3'], line['bounding_rect']['y4']
+                    #         x1, x2, x3, x4 = word['bounding_rect']['x1'], word['bounding_rect']['x2'], \
+                    #         word['bounding_rect']['x3'], word['bounding_rect']['x4']
+                    #         y1, y2, y3, y4 = word['bounding_rect']['y1'], word['bounding_rect']['y2'], \
+                    #         word['bounding_rect']['y3'], word['bounding_rect']['y4']
+                    #         widths.append(max(x2 - x1, x3 - x4))
+                    #         heights.append(max(y2 - y1, y3 - y4))
+                    #
+                    #
+                    # max_width = max(sorted(widths)[:-max(1, len(widths) // 10)]) if len(widths) > 1 else 0
+                    # max_height = max(sorted(heights)[:-max(1, len(heights) // 10)]) if len(heights) > 1 else 0
+                    #
+                    # required_width = max_width * furigana_filter_sensitivity
+                    # required_height = max_height * furigana_filter_sensitivity
+                    # for line in ocr_resp['lines']:
+                    #     for word in line['words']:
+                    #         x1, x2, x3, x4 = word['bounding_rect']['x1'], word['bounding_rect']['x2'], \
+                    #         word['bounding_rect']['x3'], word['bounding_rect']['x4']
+                    #         y1, y2, y3, y4 = word['bounding_rect']['y1'], word['bounding_rect']['y2'], \
+                    #         word['bounding_rect']['y3'], word['bounding_rect']['y4']
+                    #         width = max(x2 - x1, x3 - x4)
+                    #         height = max(y2 - y1, y3 - y4)
+                    #         if furigana_filter_sensitivity == 0 or width > required_width or height > required_height:
+                    #             res += word['text']
+                    #         else:
+                    #             continue
+                    #     res += '\n'
+                else:
+                    res = ocr_resp['text']
             except RuntimeError as e:
                 return (False, e)
         else:
@@ -825,7 +928,7 @@ class AzureImageAnalysis:
             except:
                 logger.warning('Error parsing Azure credentials, Azure Image Analysis will not work!')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -877,7 +980,7 @@ class EasyOCR:
             self.available = True
             logger.info('EasyOCR ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -923,7 +1026,7 @@ class RapidOCR:
             self.available = True
             logger.info('RapidOCR ready')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -957,7 +1060,7 @@ class OCRSpace:
         except:
             logger.warning('Error reading API key from config, OCRSpace will not work!')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         img = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
@@ -1027,7 +1130,7 @@ class GeminiOCR:
         except Exception as e:
             logger.error(f'Error configuring google-generativeai: {e}')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         if not self.available:
             return (False, 'GeminiOCR is not available due to missing API key or configuration error.')
 
@@ -1089,7 +1192,7 @@ class GroqOCR:
         except Exception as e:
             logger.error(f'Error initializing Groq client: {e}')
 
-    def __call__(self, img):
+    def __call__(self, img, furigana_filter_sensitivity=0):
         if not self.available:
             return (False, 'GroqOCR is not available due to missing API key or configuration error.')
 
@@ -1139,3 +1242,61 @@ class GroqOCR:
 
     def _preprocess(self, img):
         return base64.b64encode(pil_image_to_bytes(img, png_compression=1)).decode('utf-8')
+
+# class LocalOCR:
+#     name = 'local_ocr'
+#     readable_name = 'Local OCR'
+#     key = '-'
+#     available = False
+#
+#     def __init__(self):
+#         self.requests_session = requests.Session()
+#         self.available = True
+#         # logger.info('Local OCR ready') # Uncomment if you have a logger defined
+#
+#     def __call__(self, img, furigana_filter_sensitivity=0):
+#         if not isinstance(img, Image.Image):
+#             try:
+#                 img = Image.open(io.BytesIO(img))
+#             except Exception:
+#                 return (False, 'Invalid image provided')
+#
+#         img = input_to_pil_image(img)
+#
+#         img_base64 = self._preprocess(img)
+#         if not img_base64:
+#             return (False, 'Image preprocessing failed (e.g., too big after resize)!')
+#
+#         api_url = 'http://localhost:2333/api/ocr'
+#         # Send as JSON with base64 encoded image
+#         json_data = {
+#             'image': img_base64
+#         }
+#
+#         try:
+#             res = self.requests_session.post(api_url, json=json_data, timeout=5)
+#             print(res.content)
+#         except requests.exceptions.Timeout:
+#             return (False, 'Request timeout!')
+#         except requests.exceptions.ConnectionError:
+#             return (False, 'Connection error!')
+#
+#         if res.status_code != 200:
+#             return (False, f'Error: {res.status_code} - {res.text}')
+#
+#         try:
+#             data = res.json()
+#             # Assuming the local OCR service returns text in a 'text' key
+#             extracted_text = data.get('text', '')
+#             return (True, extracted_text)
+#         except requests.exceptions.JSONDecodeError:
+#             return (False, 'Invalid JSON response from OCR service!')
+#
+#     def _preprocess(self, img):
+#         return base64.b64encode(pil_image_to_bytes(img, png_compression=1)).decode('utf-8')
+
+# lens = GoogleLens()
+#
+# res, text = lens(Image.open('test_furigana.png'), furigana_filter_sensitivity=.6)  # Example usage
+#
+# print(text)

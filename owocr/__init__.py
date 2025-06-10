@@ -1,1 +1,1 @@
-from owocr.ocr import *
+from GameSentenceMiner.owocr.owocr.ocr import *
