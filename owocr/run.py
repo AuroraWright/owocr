@@ -585,7 +585,9 @@ class ScreenshotThread(threading.Thread):
     def run(self):
         if self.screencapture_mode != 2:
             sct = mss.mss()
-        while screenshot_event.wait() and not terminated:
+        while not terminated:
+            if not screenshot_event.wait(timeout=0.1):
+                continue
             if self.screencapture_mode == 2:
                 if sys.platform == 'darwin':
                     with objc.autorelease_pool():
@@ -854,6 +856,7 @@ def run():
     global notifier
     global auto_pause_handler
     global websocket_server_thread
+    global screenshot_thread
     global image_queue
     non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
     read_from = config.get_general('read_from')
@@ -866,6 +869,7 @@ def run():
     auto_pause = config.get_general('auto_pause')
     clipboard_thread = None
     websocket_server_thread = None
+    screenshot_thread = None
     directory_watcher_thread = None
     unix_socket_server = None
     key_combo_listener = None
@@ -892,7 +896,6 @@ def run():
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
-        global screenshot_thread
         global screenshot_event
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_combo = config.get_general('screen_capture_combo')
@@ -1007,5 +1010,7 @@ def run():
     if unix_socket_server:
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
+    if screenshot_thread:
+        screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()
