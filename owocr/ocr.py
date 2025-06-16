@@ -97,11 +97,13 @@ def post_process(text):
 
 
 def input_to_pil_image(img):
+    is_path = False
     if isinstance(img, Image.Image):
         pil_image = img
     elif isinstance(img, (bytes, bytearray)):
         pil_image = Image.open(io.BytesIO(img))
     elif isinstance(img, Path):
+        is_path = True
         try:
             pil_image = Image.open(img)
             pil_image.load()
@@ -109,7 +111,7 @@ def input_to_pil_image(img):
             return None
     else:
         raise ValueError(f'img must be a path, PIL.Image or bytes object, instead got: {img}')
-    return pil_image
+    return pil_image, is_path
 
 
 def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80, optimize=False):
@@ -174,13 +176,14 @@ class MangaOcr:
             logger.info('Manga OCR ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
         x = (True, self.model(img))
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
 class GoogleVision:
@@ -204,7 +207,7 @@ class GoogleVision:
                 logger.warning('Error parsing Google credentials, Google Vision will not work!')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -220,7 +223,8 @@ class GoogleVision:
         res = texts[0].description if len(texts) > 0 else ''
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -240,7 +244,7 @@ class GoogleLens:
             logger.info('Google Lens ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -310,7 +314,8 @@ class GoogleLens:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -318,9 +323,7 @@ class GoogleLens:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return (pil_image_to_bytes(img), img.width, img.height)
 
@@ -339,7 +342,7 @@ class GoogleLensWeb:
             logger.info('Google Lens (web) ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -406,7 +409,8 @@ class GoogleLensWeb:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -414,9 +418,7 @@ class GoogleLensWeb:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
@@ -432,7 +434,7 @@ class Bing:
         logger.info('Bing ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -529,7 +531,8 @@ class Bing:
         
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -541,9 +544,7 @@ class Bing:
             resize_factor = max(max_pixel_size / img.width, max_pixel_size / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         img_bytes, _ = limit_image_size(img, max_byte_size)
 
@@ -568,7 +569,7 @@ class AppleVision:
             logger.info('Apple Vision ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -593,7 +594,8 @@ class AppleVision:
             else:
                 x = (False, 'Unknown error!')
 
-            img.close()
+            if is_path:
+                img.close()
             return x
 
     def _preprocess(self, img):
@@ -647,7 +649,7 @@ class AppleLiveText:
             logger.info('Apple Live Text ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -704,7 +706,7 @@ class WinRTOCR:
                 logger.warning('Error reading URL from config, WinRT OCR will not work!')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -726,7 +728,8 @@ class WinRTOCR:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -761,7 +764,7 @@ class OneOCR:
                 logger.warning('Error reading URL from config, OneOCR will not work!')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -785,7 +788,8 @@ class OneOCR:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -810,7 +814,7 @@ class AzureImageAnalysis:
                 logger.warning('Error parsing Azure credentials, Azure Image Analysis will not work!')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -831,7 +835,8 @@ class AzureImageAnalysis:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -839,9 +844,7 @@ class AzureImageAnalysis:
             resize_factor = max(50 / img.width, 50 / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
@@ -862,7 +865,7 @@ class EasyOCR:
             logger.info('EasyOCR ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -873,7 +876,8 @@ class EasyOCR:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -908,7 +912,7 @@ class RapidOCR:
             logger.info('RapidOCR ready')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -920,7 +924,8 @@ class RapidOCR:
 
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):
@@ -942,7 +947,7 @@ class OCRSpace:
             logger.warning('Error reading API key from config, OCRSpace will not work!')
 
     def __call__(self, img):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -976,7 +981,8 @@ class OCRSpace:
         res = res['ParsedResults'][0]['ParsedText']
         x = (True, res)
 
-        img.close()
+        if is_path:
+            img.close()
         return x
 
     def _preprocess(self, img):       

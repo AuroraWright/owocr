@@ -364,13 +364,15 @@ class TextFiltering:
         return text, orig_text_filtered
 
 
-class ScreenshotClass:
-    def __init__(self):
+class ScreenshotThread(threading.Thread):
+    def __init__(self, screen_capture_on_combo):
+        super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.screencapture_window_active = True
         self.screencapture_window_visible = True
+        self.use_periodic_queue = not screen_capture_on_combo
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -385,10 +387,10 @@ class ScreenshotClass:
             self.screencapture_mode = 2
 
         if self.screencapture_mode != 2:
-            self.sct = mss.mss()
+            sct = mss.mss()
 
             if self.screencapture_mode == 1:
-                mon = self.sct.monitors
+                mon = sct.monitors
                 if len(mon) <= screen_capture_monitor:
                     raise ValueError('Invalid monitor number in screen_capture_area')
                 coord_left = mon[screen_capture_monitor]['left']
@@ -467,12 +469,6 @@ class ScreenshotClass:
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
                 raise ValueError('Window capture is only currently supported on Windows and macOS')
-
-    def __del__(self):
-        if self.macos_window_tracker_instance:
-            self.macos_window_tracker_instance.join()
-        elif self.windows_window_tracker_instance:
-            self.windows_window_tracker_instance.join()
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -580,67 +576,84 @@ class ScreenshotClass:
         if not found:
             on_window_closed(False)
 
-    def __call__(self):
-        if self.screencapture_mode == 2:
-            if sys.platform == 'darwin':
-                with objc.autorelease_pool():
-                    if self.old_macos_screenshot_api:
-                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming)
-                    else:
-                        self.capture_macos_window_screenshot(self.window_id)
-                        try:
-                            cg_image = self.screencapturekit_queue.get(timeout=0.5)
-                        except queue.Empty:
-                            cg_image = None
-                    if not cg_image:
-                        return 0
-                    width = CGImageGetWidth(cg_image)
-                    height = CGImageGetHeight(cg_image)
-                    raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                    bpr = CGImageGetBytesPerRow(cg_image)
-                img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
-            else:
-                try:
-                    coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
-                    coord_width = right - coord_left
-                    coord_height = bottom - coord_top
-
-                    hwnd_dc = win32gui.GetWindowDC(self.window_handle)
-                    mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                    save_dc = mfc_dc.CreateCompatibleDC()
-
-                    save_bitmap = win32ui.CreateBitmap()
-                    save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
-                    save_dc.SelectObject(save_bitmap)
-
-                    result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
-
-                    bmpinfo = save_bitmap.GetInfo()
-                    bmpstr = save_bitmap.GetBitmapBits(True)
-                except pywintypes.error:
-                    return 0
-                img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-                try:
-                    win32gui.DeleteObject(save_bitmap.GetHandle())
-                except:
-                    pass
-                try:
-                    save_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    mfc_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    win32gui.ReleaseDC(self.window_handle, hwnd_dc)
-                except:
-                    pass                    
+    def write_result(self, result):
+        if self.use_periodic_queue:
+            periodic_screenshot_queue.put(result)
         else:
-            sct_img = self.sct.grab(self.sct_params)
-            img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+            image_queue.put((result, True))
 
-        return img
+    def run(self):
+        if self.screencapture_mode != 2:
+            sct = mss.mss()
+        while screenshot_event.wait() and not terminated:
+            if self.screencapture_mode == 2:
+                if sys.platform == 'darwin':
+                    with objc.autorelease_pool():
+                        if self.old_macos_screenshot_api:
+                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming)
+                        else:
+                            self.capture_macos_window_screenshot(self.window_id)
+                            try:
+                                cg_image = self.screencapturekit_queue.get(timeout=0.5)
+                            except queue.Empty:
+                                cg_image = None
+                        if not cg_image:
+                            self.write_result(0)
+                            break
+                        width = CGImageGetWidth(cg_image)
+                        height = CGImageGetHeight(cg_image)
+                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                        bpr = CGImageGetBytesPerRow(cg_image)
+                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
+                else:
+                    try:
+                        coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
+                        coord_width = right - coord_left
+                        coord_height = bottom - coord_top
+
+                        hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+                        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                        save_dc = mfc_dc.CreateCompatibleDC()
+
+                        save_bitmap = win32ui.CreateBitmap()
+                        save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
+                        save_dc.SelectObject(save_bitmap)
+
+                        result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
+
+                        bmpinfo = save_bitmap.GetInfo()
+                        bmpstr = save_bitmap.GetBitmapBits(True)
+                    except pywintypes.error:
+                        self.write_result(0)
+                        break
+                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+                    try:
+                        win32gui.DeleteObject(save_bitmap.GetHandle())
+                    except:
+                        pass
+                    try:
+                        save_dc.DeleteDC()
+                    except:
+                        pass
+                    try:
+                        mfc_dc.DeleteDC()
+                    except:
+                        pass
+                    try:
+                        win32gui.ReleaseDC(self.window_handle, hwnd_dc)
+                    except:
+                        pass                    
+            else:
+                sct_img = sct.grab(self.sct_params)
+                img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+
+            self.write_result(img)
+            screenshot_event.clear()
+
+        if self.macos_window_tracker_instance:
+            self.macos_window_tracker_instance.join()
+        elif self.windows_window_tracker_instance:
+            self.windows_window_tracker_instance.join()
 
 
 class AutopauseTimer:
@@ -758,8 +771,7 @@ def on_window_closed(alive):
 
 def on_screenshot_combo():
     if not paused:
-        img = take_screenshot()
-        image_queue.put((img, True))
+        screenshot_event.set()
 
 
 def process_and_write_results(img_or_path, last_result, filtering, notify):
@@ -880,7 +892,8 @@ def run():
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
-        global take_screenshot
+        global screenshot_thread
+        global screenshot_event
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_combo = config.get_general('screen_capture_combo')
         last_screenshot_time = 0
@@ -888,7 +901,12 @@ def run():
         if screen_capture_combo != '':
             screen_capture_on_combo = True
             key_combos[screen_capture_combo] = on_screenshot_combo
-        take_screenshot = ScreenshotClass()
+        else:
+            global periodic_screenshot_queue
+            periodic_screenshot_queue = queue.Queue()
+        screenshot_event = threading.Event()
+        screenshot_thread = ScreenshotThread(screen_capture_on_combo)
+        screenshot_thread.start()
         filtering = TextFiltering()
         read_from_readable.append('screen capture')
     if 'websocket' in (read_from, read_from_secondary):
@@ -951,8 +969,9 @@ def run():
                 pass
 
         if (not img) and process_screenshots:
-            if (not paused) and take_screenshot.screencapture_window_active and take_screenshot.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
-                img = take_screenshot()
+            if (not paused) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+                screenshot_event.set()
+                img = periodic_screenshot_queue.get()
                 filter_img = True
                 notify = False
                 last_screenshot_time = time.time()
