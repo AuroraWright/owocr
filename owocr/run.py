@@ -406,7 +406,8 @@ class TextFiltering:
                         break
         else:
             for block in new_blocks:
-                if lang not in ["ja", "zh"] or self.classify(block)[0] == lang:
+                # This only filters out NON JA/ZH from text when lang is JA/ZH
+                if lang not in ["ja", "zh"] or self.classify(block)[0] in ['ja', 'zh']:
                     final_blocks.append(block)
 
         text = '\n'.join(final_blocks)
