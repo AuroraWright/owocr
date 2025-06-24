@@ -414,8 +414,9 @@ class TextFiltering:
         return text, orig_text_filtered
 
 
-class ScreenshotClass:
-    def __init__(self, screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas):
+class ScreenshotThread(threading.Thread):
+    def __init__(self, screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas, screen_capture_on_combo):
+        super().__init__(daemon=True)
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.screencapture_window_active = True
@@ -424,6 +425,7 @@ class ScreenshotClass:
         self.screen_capture_exclusions = screen_capture_exclusions
         self.screen_capture_window = screen_capture_window
         self.areas = []
+        self.use_periodic_queue = not screen_capture_on_combo
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -441,10 +443,10 @@ class ScreenshotClass:
             self.screencapture_mode = 2
 
         if self.screencapture_mode != 2:
-            self.sct = mss.mss()
+            sct = mss.mss()
 
             if self.screencapture_mode == 1:
-                mon = self.sct.monitors
+                mon = sct.monitors
                 if len(mon) <= screen_capture_monitor:
                     raise ValueError('Invalid monitor number in screen_capture_area')
                 coord_left = mon[screen_capture_monitor]['left']
@@ -534,12 +536,6 @@ class ScreenshotClass:
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
                 raise ValueError('Window capture is only currently supported on Windows and macOS')
-
-    def __del__(self):
-        if self.macos_window_tracker_instance:
-            self.macos_window_tracker_instance.join()
-        elif self.windows_window_tracker_instance:
-            self.windows_window_tracker_instance.join()
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -647,114 +643,121 @@ class ScreenshotClass:
         if not found:
             on_window_closed(False)
 
-    def __call__(self):
-        if self.screencapture_mode == 2 or self.screen_capture_window:
-            if sys.platform == 'darwin':
-                with objc.autorelease_pool():
-                    if self.old_macos_screenshot_api:
-                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming)
-                    else:
-                        self.capture_macos_window_screenshot(self.window_id)
-                        try:
-                            cg_image = self.screencapturekit_queue.get(timeout=0.5)
-                        except queue.Empty:
-                            cg_image = None
-                    if not cg_image:
-                        return 0
-                    width = CGImageGetWidth(cg_image)
-                    height = CGImageGetHeight(cg_image)
-                    raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                    bpr = CGImageGetBytesPerRow(cg_image)
-                img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
-            else:
-                try:
-                    coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
-                    coord_width = right - coord_left
-                    coord_height = bottom - coord_top
-
-                    hwnd_dc = win32gui.GetWindowDC(self.window_handle)
-                    mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                    save_dc = mfc_dc.CreateCompatibleDC()
-
-                    save_bitmap = win32ui.CreateBitmap()
-                    save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
-                    save_dc.SelectObject(save_bitmap)
-
-                    result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
-
-                    bmpinfo = save_bitmap.GetInfo()
-                    bmpstr = save_bitmap.GetBitmapBits(True)
-                except pywintypes.error:
-                    return 0
-                img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-                try:
-                    win32gui.DeleteObject(save_bitmap.GetHandle())
-                except:
-                    pass
-                try:
-                    save_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    mfc_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    win32gui.ReleaseDC(self.window_handle, hwnd_dc)
-                except:
-                    pass
+    def write_result(self, result):
+        if self.use_periodic_queue:
+            periodic_screenshot_queue.put(result)
         else:
-            sct_img = self.sct.grab(self.sct_params)
-            img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+            image_queue.put((result, True))
 
-        import random  # Ensure this is imported at the top of the file if not already
-        rand_int = random.randint(1, 20)  # Executes only once out of 10 times
+    def run(self):
+        if self.screencapture_mode != 2:
+            sct = mss.mss()
+        while not terminated:
+            if not screenshot_event.wait(timeout=0.1):
+                continue
+            if self.screencapture_mode == 2 or self.screen_capture_window:
+                if sys.platform == 'darwin':
+                    with objc.autorelease_pool():
+                        if self.old_macos_screenshot_api:
+                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id],
+                                                                        kCGWindowImageBoundsIgnoreFraming)
+                        else:
+                            self.capture_macos_window_screenshot(self.window_id)
+                            try:
+                                cg_image = self.screencapturekit_queue.get(timeout=0.5)
+                            except queue.Empty:
+                                cg_image = None
+                        if not cg_image:
+                            return 0
+                        width = CGImageGetWidth(cg_image)
+                        height = CGImageGetHeight(cg_image)
+                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                        bpr = CGImageGetBytesPerRow(cg_image)
+                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
+                else:
+                    try:
+                        coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
+                        coord_width = right - coord_left
+                        coord_height = bottom - coord_top
 
-        if rand_int == 1:  # Executes only once out of 10 times
-            img.save(os.path.join(get_temporary_directory(), 'before_crop.png'), 'PNG')
+                        hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+                        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                        save_dc = mfc_dc.CreateCompatibleDC()
 
-        if self.screen_capture_exclusions:
-            img = img.convert("RGBA")
-            draw = ImageDraw.Draw(img)
-            for exclusion in self.screen_capture_exclusions:
-                left, top, width, height = exclusion
-                draw.rectangle((left, top, left + width, top + height), fill=(0, 0, 0, 0))
+                        save_bitmap = win32ui.CreateBitmap()
+                        save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
+                        save_dc.SelectObject(save_bitmap)
 
-        cropped_sections = []
-        start = time.time()
-        for area in self.areas:
-            cropped_sections.append(img.crop((area[0], area[1], area[0] + area[2], area[1] + area[3])))
+                        result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
 
-        # if len(cropped_sections) > 1:
-        #     combined_width = sum(section.width for section in cropped_sections)
-        #     combined_height = max(section.height for section in cropped_sections)
-        #     combined_img = Image.new("RGBA", (combined_width, combined_height))
-        #
-        #     x_offset = 0
-        #     for section in cropped_sections:
-        #         combined_img.paste(section, (x_offset, 0))
-        #         x_offset += section.width
-        #
-        #     img = combined_img
-        if len(cropped_sections) > 1:
-            combined_width = max(section.width for section in cropped_sections)
-            combined_height = sum(section.height for section in cropped_sections) + (len(cropped_sections) - 1) * 10  # Add space for gaps
-            combined_img = Image.new("RGBA", (combined_width, combined_height))
+                        bmpinfo = save_bitmap.GetInfo()
+                        bmpstr = save_bitmap.GetBitmapBits(True)
+                    except pywintypes.error:
+                        return 0
+                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0,
+                                           1)
+                    try:
+                        win32gui.DeleteObject(save_bitmap.GetHandle())
+                    except:
+                        pass
+                    try:
+                        save_dc.DeleteDC()
+                    except:
+                        pass
+                    try:
+                        mfc_dc.DeleteDC()
+                    except:
+                        pass
+                    try:
+                        win32gui.ReleaseDC(self.window_handle, hwnd_dc)
+                    except:
+                        pass
+            else:
+                sct_img = sct.grab(self.sct_params)
+                img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
 
-            y_offset = 0
-            for section in cropped_sections:
-                combined_img.paste(section, (0, y_offset))
-                y_offset += section.height + 50  # Add gap between sections
+            import random  # Ensure this is imported at the top of the file if not already
+            rand_int = random.randint(1, 20)  # Executes only once out of 10 times
 
-            img = combined_img
-        elif cropped_sections:
-            img = cropped_sections[0]
+            if rand_int == 1:  # Executes only once out of 10 times
+                img.save(os.path.join(get_temporary_directory(), 'before_crop.png'), 'PNG')
 
-        if rand_int == 1:
-            img.save(os.path.join(get_temporary_directory(), 'after_crop.png'), 'PNG')
+            if self.screen_capture_exclusions:
+                img = img.convert("RGBA")
+                draw = ImageDraw.Draw(img)
+                for exclusion in self.screen_capture_exclusions:
+                    left, top, width, height = exclusion
+                    draw.rectangle((left, top, left + width, top + height), fill=(0, 0, 0, 0))
 
-        return img
+            cropped_sections = []
+            for area in self.areas:
+                cropped_sections.append(img.crop((area[0], area[1], area[0] + area[2], area[1] + area[3])))
 
+            if len(cropped_sections) > 1:
+                combined_width = max(section.width for section in cropped_sections)
+                combined_height = sum(section.height for section in cropped_sections) + (
+                            len(cropped_sections) - 1) * 10  # Add space for gaps
+                combined_img = Image.new("RGBA", (combined_width, combined_height))
+
+                y_offset = 0
+                for section in cropped_sections:
+                    combined_img.paste(section, (0, y_offset))
+                    y_offset += section.height + 50  # Add gap between sections
+
+                img = combined_img
+            elif cropped_sections:
+                img = cropped_sections[0]
+
+            if rand_int == 1:
+                img.save(os.path.join(get_temporary_directory(), 'after_crop.png'), 'PNG')
+
+            self.write_result(img)
+            screenshot_event.clear()
+
+        if self.macos_window_tracker_instance:
+            self.macos_window_tracker_instance.join()
+        elif self.windows_window_tracker_instance:
+            self.windows_window_tracker_instance.join()
 
 class AutopauseTimer:
     def __init__(self, timeout):
@@ -871,8 +874,7 @@ def on_window_closed(alive):
 
 def on_screenshot_combo():
     if not paused:
-        img = take_screenshot()
-        image_queue.put((img, True))
+        screenshot_event.set()
 
 
 def on_window_minimized(minimized):
@@ -1104,6 +1106,7 @@ def run(read_from=None,
     global auto_pause_handler
     global notifier
     global websocket_server_thread
+    global screenshot_thread
     global image_queue
     global ocr_1
     global ocr_2
@@ -1128,6 +1131,7 @@ def run(read_from=None,
     auto_pause = config.get_general('auto_pause')
     clipboard_thread = None
     websocket_server_thread = None
+    screenshot_thread = None
     directory_watcher_thread = None
     unix_socket_server = None
     key_combo_listener = None
@@ -1160,13 +1164,18 @@ def run(read_from=None,
 
     if 'screencapture' in (read_from, read_from_secondary):
         global take_screenshot
+        global screenshot_event
         last_screenshot_time = 0
         last_result = ([], engine_index)
         if screen_capture_combo != '':
             screen_capture_on_combo = True
             key_combos[screen_capture_combo] = on_screenshot_combo
-        take_screenshot = ScreenshotClass(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas)
-        # global_take_screenshot = ScreenshotClass(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, rectangle)
+        else:
+            global periodic_screenshot_queue
+            periodic_screenshot_queue = queue.Queue()
+        screenshot_event = threading.Event()
+        screenshot_thread = ScreenshotThread(screen_capture_area, screen_capture_window, screen_capture_exclusions, screen_capture_only_active_windows, screen_capture_areas, screen_capture_on_combo)
+        screenshot_thread.start()
         filtering = TextFiltering()
         read_from_readable.append('screen capture')
     if 'websocket' in (read_from, read_from_secondary):
@@ -1233,8 +1242,9 @@ def run(read_from=None,
                 pass
 
         if (not img) and process_screenshots:
-            if (not paused) and take_screenshot.screencapture_window_active and take_screenshot.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
-                img = take_screenshot()
+            if (not paused) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+                screenshot_event.set()
+                img = periodic_screenshot_queue.get()
                 filter_img = True
                 notify = False
                 last_screenshot_time = time.time()
@@ -1270,5 +1280,7 @@ def run(read_from=None,
     if unix_socket_server:
         unix_socket_server.shutdown()
         unix_socket_server_thread.join()
+    if screenshot_thread:
+        screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()

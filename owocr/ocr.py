@@ -77,7 +77,6 @@ try:
     from GameSentenceMiner.owocr.owocr.lens_betterproto import *
     import random
 except ImportError:
-    print('Google Lens not available, please install betterproto package!')
     pass
 
 try:
@@ -100,11 +99,13 @@ def post_process(text):
 
 
 def input_to_pil_image(img):
+    is_path = False
     if isinstance(img, Image.Image):
         pil_image = img
     elif isinstance(img, (bytes, bytearray)):
         pil_image = Image.open(io.BytesIO(img))
     elif isinstance(img, Path):
+        is_path = True
         try:
             pil_image = Image.open(img)
             pil_image.load()
@@ -112,7 +113,7 @@ def input_to_pil_image(img):
             return None
     else:
         raise ValueError(f'img must be a path, PIL.Image or bytes object, instead got: {img}')
-    return pil_image
+    return pil_image, is_path
 
 
 def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80, optimize=False):
@@ -177,7 +178,7 @@ class MangaOcr:
             logger.info('Manga OCR ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -207,7 +208,7 @@ class GoogleVision:
                 logger.warning('Error parsing Google credentials, Google Vision will not work!')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -244,7 +245,7 @@ class GoogleLens:
             logger.info('Google Lens ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -290,7 +291,7 @@ class GoogleLens:
         }
 
         try:
-            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers, timeout=5)
+            res = requests.post('https://lensfrontend-pa.googleapis.com/v1/crupload', data=payload, headers=headers, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -369,9 +370,7 @@ class GoogleLens:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            # img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return (pil_image_to_bytes(img), img.width, img.height)
 
@@ -390,7 +389,7 @@ class GoogleLensWeb:
             logger.info('Google Lens (web) ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -416,7 +415,7 @@ class GoogleLensWeb:
         cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
 
         try:
-            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=5, allow_redirects=False)
+            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -436,7 +435,7 @@ class GoogleLensWeb:
             return (False, 'Unknown error!')
 
         try:
-            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=5)
+            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -465,9 +464,7 @@ class GoogleLensWeb:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
             new_h = int(new_w / aspect_ratio)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            # img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
@@ -483,7 +480,7 @@ class Bing:
         logger.info('Bing ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -508,7 +505,7 @@ class Bing:
         for _ in range(2):
             api_host = urlparse(upload_url).netloc
             try:
-                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=5, allow_redirects=False)
+                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
             except requests.exceptions.Timeout:
                 return (False, 'Request timeout!')
             except requests.exceptions.ConnectionError:
@@ -549,7 +546,7 @@ class Bing:
         }
 
         try:
-            res = self.requests_session.post(api_url, headers=api_headers, files=files, timeout=5)
+            res = self.requests_session.post(api_url, headers=api_headers, files=files, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -592,9 +589,7 @@ class Bing:
             resize_factor = max(max_pixel_size / img.width, max_pixel_size / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            # img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         img_bytes, _ = limit_image_size(img, max_byte_size)
 
@@ -619,7 +614,7 @@ class AppleVision:
             logger.info('Apple Vision ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -698,7 +693,7 @@ class AppleLiveText:
             logger.info('Apple Live Text ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -755,7 +750,7 @@ class WinRTOCR:
                 logger.warning('Error reading URL from config, WinRT OCR will not work!')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -813,14 +808,13 @@ class OneOCR:
                 logger.warning('Error reading URL from config, OneOCR will not work!')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if img.width < 51 or img.height < 51:
             new_width = max(img.width, 51)
             new_height = max(img.height, 51)
             new_img = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
             new_img.paste(img, ((new_width - img.width) // 2, (new_height - img.height) // 2))
             img = new_img
-
         if not img:
             return (False, 'Invalid image provided')
         crop_coords = None
@@ -902,7 +896,6 @@ class OneOCR:
             if res.status_code != 200:
                 return (False, 'Unknown error!')
 
-
             res = res.json()['text']
 
         x = (True, res, crop_coords)
@@ -932,7 +925,7 @@ class AzureImageAnalysis:
                 logger.warning('Error parsing Azure credentials, Azure Image Analysis will not work!')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -961,9 +954,7 @@ class AzureImageAnalysis:
             resize_factor = max(50 / img.width, 50 / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
-            img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            # img.close()
-            img = img_resized
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img)
 
@@ -984,7 +975,7 @@ class EasyOCR:
             logger.info('EasyOCR ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -1030,7 +1021,7 @@ class RapidOCR:
             logger.info('RapidOCR ready')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -1064,7 +1055,7 @@ class OCRSpace:
             logger.warning('Error reading API key from config, OCRSpace will not work!')
 
     def __call__(self, img, furigana_filter_sensitivity=0):
-        img = input_to_pil_image(img)
+        img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
@@ -1079,7 +1070,7 @@ class OCRSpace:
         files = {'file': ('image.' + img_extension, img_bytes, 'image/' + img_extension)}
 
         try:
-            res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=5)
+            res = requests.post('https://api.ocr.space/parse/image', data=data, files=files, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
