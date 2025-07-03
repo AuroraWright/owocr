@@ -199,7 +199,7 @@ class DirectoryWatcher(threading.Thread):
         old_paths = set()
         for path in self.path.iterdir():
             if path.suffix.lower() in self.allowed_extensions:
-                old_paths.add(get_path_key(path))
+                old_paths.add(self.get_path_key(path))
 
         while not terminated:
             if paused:
@@ -357,7 +357,7 @@ class TextFiltering:
                         break
         else:
             for block in new_blocks:
-                if self.classify(block)[0] == 'ja':
+                if self.classify(block)[0] in ('ja', 'zh'):
                     final_blocks.append(block)
 
         text = '\n'.join(final_blocks)
