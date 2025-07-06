@@ -772,12 +772,11 @@ def on_window_closed(alive):
 
 
 def on_screenshot_combo():
-    if not paused:
-        screenshot_event.set()
+    screenshot_event.set()
 
 
 def process_and_write_results(img_or_path, last_result, filtering, notify):
-    if auto_pause_handler:
+    if auto_pause_handler and not filtering:
         auto_pause_handler.stop()
 
     engine_instance = engine_instances[engine_index]
@@ -804,7 +803,7 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(text + '\n')
 
-        if auto_pause_handler and not paused:
+        if auto_pause_handler and not paused and not filtering:
             auto_pause_handler.start()
     else:
         logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {text}')
