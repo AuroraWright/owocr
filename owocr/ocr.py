@@ -337,7 +337,6 @@ class GoogleLensWeb:
         if 'pyjson5' not in sys.modules:
             logger.warning('pyjson5 not available, Google Lens (web) will not work!')
         else:
-            self.requests_session = requests.Session()
             self.available = True
             logger.info('Google Lens (web) ready')
 
@@ -346,6 +345,7 @@ class GoogleLensWeb:
         if not img:
             return (False, 'Invalid image provided')
 
+        requests_session = requests.Session()
         url = 'https://lens.google.com/v3/upload'
         files = {'encoded_image': ('image.png', self._preprocess(img), 'image/png')}
         headers = {
@@ -368,7 +368,7 @@ class GoogleLensWeb:
         cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
 
         try:
-            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
+            res = requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -388,7 +388,7 @@ class GoogleLensWeb:
             return (False, 'Unknown error!')
 
         try:
-            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
+            res = requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
@@ -429,7 +429,6 @@ class Bing:
     available = False
 
     def __init__(self):
-        self.requests_session = requests.Session()
         self.available = True
         logger.info('Bing ready')
 
@@ -442,6 +441,7 @@ class Bing:
         if not img_bytes:
             return (False, 'Image is too big!')
 
+        requests_session = requests.Session()
         upload_url = 'https://www.bing.com/images/search?view=detailv2&iss=sbiupload'
         upload_headers = {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -459,7 +459,7 @@ class Bing:
         for _ in range(2):
             api_host = urlparse(upload_url).netloc
             try:
-                res = self.requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
+                res = requests_session.post(upload_url, headers=upload_headers, files=files, timeout=20, allow_redirects=False)
             except requests.exceptions.Timeout:
                 return (False, 'Request timeout!')
             except requests.exceptions.ConnectionError:
@@ -500,7 +500,7 @@ class Bing:
         }
 
         try:
-            res = self.requests_session.post(api_url, headers=api_headers, files=files, timeout=20)
+            res = requests_session.post(api_url, headers=api_headers, files=files, timeout=20)
         except requests.exceptions.Timeout:
             return (False, 'Request timeout!')
         except requests.exceptions.ConnectionError:
