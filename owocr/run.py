@@ -20,7 +20,7 @@ import socketserver
 from PIL import Image, UnidentifiedImageError
 from loguru import logger
 from pynput import keyboard
-from desktop_notifier import DesktopNotifierSync
+from desktop_notifier import DesktopNotifierSync, Urgency
 
 from .ocr import *
 from .config import config
@@ -689,6 +689,12 @@ class AutopauseTimer:
                 pause_handler(True)
 
 
+def get_notification_urgency():
+    if sys.platform == 'win32':
+        return Urgency.Low
+    return Urgency.Normal
+
+
 def pause_handler(is_combo=True):   
     global paused
     message = 'Unpaused!' if paused else 'Paused!'
@@ -696,7 +702,7 @@ def pause_handler(is_combo=True):
     if auto_pause_handler:
         auto_pause_handler.stop()
     if is_combo:
-        notifier.send(title='owocr', message=message)
+        notifier.send(title='owocr', message=message, urgency=get_notification_urgency())
     logger.info(message)
     paused = not paused
 
@@ -715,7 +721,7 @@ def engine_change_handler(user_input='s', is_combo=True):
     if engine_index != old_engine_index:
         new_engine_name = engine_instances[engine_index].readable_name
         if is_combo:
-            notifier.send(title='owocr', message=f'Switched to {new_engine_name}')
+            notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
         engine_color = config.get_general('engine_color')
         logger.opt(ansi=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
 
@@ -792,7 +798,7 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
         text = post_process(text)
         logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
         if notify and config.get_general('notifications'):
-            notifier.send(title='owocr', message='Text recognized: ' + text)
+            notifier.send(title='owocr', message='Text recognized: ' + text, urgency=get_notification_urgency())
 
         write_to = config.get_general('write_to')
         if write_to == 'websocket':
