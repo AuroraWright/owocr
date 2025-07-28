@@ -299,10 +299,10 @@ class RequestHandler(socketserver.BaseRequestHandler):
 class TextFiltering:
     accurate_filtering = False
 
-    def __init__(self, lang='ja'):
+    def __init__(self, language='ja'):
         from pysbd import Segmenter
-        self.segmenter = Segmenter(language=lang, clean=True)
-        self.regex = self.get_regex(lang)
+        self.segmenter = Segmenter(language=language, clean=True)
+        self.regex = self.get_regex(language)
 
         try:
             from transformers import pipeline, AutoTokenizer
@@ -327,22 +327,22 @@ class TextFiltering:
             import langid
             self.classify = langid.classify
             
-    def get_regex(self, lang):
-        if lang == 'ja':
+    def get_regex(self, language):
+        if language == 'ja':
             return re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
-        elif lang == 'zh':
+        elif language == 'zh':
             return re.compile(r'[\u4E00-\u9FFF]')
-        elif lang == 'ko':
+        elif language == 'ko':
             return re.compile(r'[\uAC00-\uD7AF]')
-        elif lang == 'ar':
+        elif language == 'ar':
             return re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
-        elif lang == 'ru':
+        elif language == 'ru':
             return re.compile(r'[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F\u1C80-\u1C8F]')
-        elif lang == 'el':
+        elif language == 'el':
             return re.compile(r'[\u0370-\u03FF\u1F00-\u1FFF]')
-        elif lang == 'he':
+        elif language == 'he':
             return re.compile(r'[\u0590-\u05FF\uFB1D-\uFB4F]')
-        elif lang == 'th':
+        elif language == 'th':
             return re.compile(r'[\u0E00-\u0E7F]')
         else:
             # Latin Extended regex for many European languages/English
@@ -940,7 +940,7 @@ def run():
         screenshot_event = threading.Event()
         screenshot_thread = ScreenshotThread(screen_capture_on_combo)
         screenshot_thread.start()
-        filtering = TextFiltering(lang=language)
+        filtering = TextFiltering(language=language)
         read_from_readable.append('screen capture')
     if 'websocket' in (read_from, read_from_secondary):
         read_from_readable.append('websocket')
