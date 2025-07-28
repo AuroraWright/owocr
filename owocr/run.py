@@ -896,6 +896,7 @@ def run():
     terminated = False
     paused = config.get_general('pause_at_startup')
     auto_pause = config.get_general('auto_pause')
+    language = config.get_general('language')
     clipboard_thread = None
     websocket_server_thread = None
     screenshot_thread = None
@@ -939,7 +940,7 @@ def run():
         screenshot_event = threading.Event()
         screenshot_thread = ScreenshotThread(screen_capture_on_combo)
         screenshot_thread.start()
-        filtering = TextFiltering()
+        filtering = TextFiltering(lang=language)
         read_from_readable.append('screen capture')
     if 'websocket' in (read_from, read_from_secondary):
         read_from_readable.append('websocket')
