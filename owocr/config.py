@@ -48,8 +48,10 @@ parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
-parser.add.argument('-l', '--language', type=str, default=argparse.SUPPRESS,
+parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code for filtering screencapture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
+parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS, choices=['text', 'json'],
+                    help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 
 class Config:
     has_config = False
@@ -79,7 +81,8 @@ class Config:
         'screen_capture_only_active_windows': True,
         'screen_capture_combo': '',
         'screen_capture_old_macos_api': False,
-        'language': 'ja'
+        'language': 'ja',
+        'output_format': 'text'
     }
 
     def __parse(self, value):

@@ -8,6 +8,9 @@ import io
 import re
 import logging
 import inspect
+import os
+import json
+from dataclasses import asdict
 
 import numpy as np
 import pyperclipfix
@@ -811,32 +814,70 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
 
     engine_instance = engine_instances[engine_index]
     start_time = time.time()
-    res, text = engine_instance(img_or_path)
+    res, result_data = engine_instance(img_or_path)
     end_time = time.time()
 
     orig_text = []
     engine_color = config.get_general('engine_color')
-    if res:
+    if not res:
+        logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data}')
+        return orig_text
+
+    output_format = config.get_general('output_format')
+    output_string = ''
+    log_message = ''
+    
+    # Check if the engine returned a structured OcrResult object
+    if isinstance(result_data, OcrResult):
+        # Assemble full text for logging/notifications
+        full_text_parts = []
+        for p in result_data.paragraphs:
+            for l in p.lines:
+                for w in l.words:
+                    full_text_parts.append(w.text)
+                    if w.separator:
+                        full_text_parts.append(w.separator)
+        unprocessed_text = "".join(full_text_parts)
+
+        if output_format == 'json':
+            result_dict = asdict(result_data)
+            output_string = json.dumps(result_dict, indent=4, ensure_ascii=False)
+            log_message = post_process(unprocessed_text)
+        else: # 'text' format for a modern engine
+            if filtering:
+                text_to_process, orig_text = filtering(unprocessed_text, last_result)
+                output_string = post_process(text_to_process)
+            else:
+                output_string = post_process(unprocessed_text)
+            log_message = output_string
+    else: # Handle engines that return a simple string for result_data
+        if output_format == 'json':
+            logger.warning(f"Engine '{engine_instance.name}' does not support JSON output. Falling back to text.")
+        unprocessed_text = result_data
         if filtering:
-            text, orig_text = filtering(text, last_result)
-        text = post_process(text)
-        logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {text}')
-        if notify and config.get_general('notifications'):
-            notifier.send(title='owocr', message='Text recognized: ' + text, urgency=get_notification_urgency())
-
-        write_to = config.get_general('write_to')
-        if write_to == 'websocket':
-            websocket_server_thread.send_text(text)
-        elif write_to == 'clipboard':
-            pyperclipfix.copy(text)
+            text_to_process, orig_text = filtering(unprocessed_text, last_result)
+            output_string = post_process(text_to_process)
         else:
-            with Path(write_to).open('a', encoding='utf-8') as f:
-                f.write(text + '\n')
+            output_string = post_process(unprocessed_text)
+        log_message = output_string
 
-        if auto_pause_handler and not paused and not filtering:
-            auto_pause_handler.start()
+    logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {log_message}')
+
+    if notify and config.get_general('notifications'):
+        notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
+
+    # Write the final formatted string to the destination
+    write_to = config.get_general('write_to')
+    if write_to == 'websocket':
+        websocket_server_thread.send_text(output_string)
+    elif write_to == 'clipboard':
+        pyperclipfix.copy(output_string)
     else:
-        logger.opt(ansi=True).info(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {text}')
+        with Path(write_to).open('a', encoding='utf-8') as f:
+            f.write(output_string + '\n')
+
+    if auto_pause_handler and not paused and not filtering:
+        auto_pause_handler.start()
 
     return orig_text
 
@@ -862,7 +903,7 @@ def run():
         for config_engine in config.get_general('engines').split(','):
             config_engines.append(config_engine.strip().lower())
 
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x))):
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
             if config.get_engine(engine_class.name) == None:
                 engine_instance = engine_class()
@@ -897,6 +938,7 @@ def run():
     paused = config.get_general('pause_at_startup')
     auto_pause = config.get_general('auto_pause')
     language = config.get_general('language')
+    output_format = config.get_general('output_format')
     clipboard_thread = None
     websocket_server_thread = None
     screenshot_thread = None
@@ -987,6 +1029,13 @@ def run():
         auto_pause_handler = AutopauseTimer(auto_pause)
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
+
+    # if json is selected check if engine is compatible
+    if output_format == 'json' and engine_instances[engine_index].name not in ['bing', 'glens', 'oneocr']:
+        logger.error(f"The selected engine '{engine_instances[engine_index].name}' does not support coordinate output.")
+        logger.error(f"Please choose one of: {', '.join(COORDINATE_SUPPORTED_ENGINES)}")
+        sys.exit(1)
+
     logger.opt(ansi=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated:
