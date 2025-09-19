@@ -207,6 +207,7 @@ class MangaOcr:
     readable_name = 'Manga OCR'
     key = 'm'
     available = False
+    coordinate_support = False
 
     def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu': False}):
         if 'manga_ocr' not in sys.modules:
@@ -237,6 +238,7 @@ class GoogleVision:
     readable_name = 'Google Vision'
     key = 'g'
     available = False
+    coordinate_support = False
 
     def __init__(self):
         if 'google.cloud' not in sys.modules:
@@ -281,6 +283,7 @@ class GoogleLens:
     readable_name = 'Google Lens'
     key = 'l'
     available = False
+    coordinate_support = True
 
     def __init__(self):
         if 'betterproto' not in sys.modules:
@@ -425,6 +428,7 @@ class GoogleLensWeb:
     readable_name = 'Google Lens (web)'
     key = 'k'
     available = False
+    coordinate_support = False
 
     def __init__(self):
         if 'pyjson5' not in sys.modules:
@@ -520,6 +524,7 @@ class Bing:
     readable_name = 'Bing'
     key = 'b'
     available = False
+    coordinate_support = True
 
     def __init__(self):
         self.requests_session = requests.Session()
@@ -697,6 +702,7 @@ class AppleVision:
     readable_name = 'Apple Vision'
     key = 'a'
     available = False
+    coordinate_support = False
 
     def __init__(self):
         if sys.platform != 'darwin':
@@ -746,6 +752,7 @@ class AppleLiveText:
     readable_name = 'Apple Live Text'
     key = 'd'
     available = False
+    coordinate_support = False
 
     def __init__(self):
         if sys.platform != 'darwin':
@@ -826,6 +833,7 @@ class WinRTOCR:
     readable_name = 'WinRT OCR'
     key = 'w'
     available = False
+    coordinate_support = False
 
     def __init__(self, config={}):
         if sys.platform == 'win32':
@@ -879,6 +887,7 @@ class OneOCR:
     readable_name = 'OneOCR'
     key = 'z'
     available = False
+    coordinate_support = True
 
     def __init__(self, config={}):
         if sys.platform == 'win32':
@@ -1001,6 +1010,7 @@ class AzureImageAnalysis:
     readable_name = 'Azure Image Analysis'
     key = 'v'
     available = False
+    coordinate_support = False
 
     def __init__(self, config={}):
         if 'azure.ai.vision.imageanalysis' not in sys.modules:
@@ -1054,6 +1064,7 @@ class EasyOCR:
     readable_name = 'EasyOCR'
     key = 'e'
     available = False
+    coordinate_support = False
 
     def __init__(self, config={'gpu': True}):
         if 'easyocr' not in sys.modules:
@@ -1089,6 +1100,7 @@ class RapidOCR:
     readable_name = 'RapidOCR'
     key = 'r'
     available = False
+    coordinate_support = False
 
     def __init__(self):
         if 'rapidocr_onnxruntime' not in sys.modules:
@@ -1137,6 +1149,7 @@ class OCRSpace:
     readable_name = 'OCRSpace'
     key = 'o'
     available = False
+    coordinate_support = False
 
     def __init__(self, config={}):
         try:

@@ -841,9 +841,9 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
 
         if output_format == 'json':
             result_dict = asdict(result_data)
-            output_string = json.dumps(result_dict, indent=4, ensure_ascii=False)
+            output_string = json.dumps(result_dict, ensure_ascii=False)
             log_message = post_process(unprocessed_text)
-        else: # 'text' format for a modern engine
+        else: # 'text' format
             if filtering:
                 text_to_process, orig_text = filtering(unprocessed_text, last_result)
                 output_string = post_process(text_to_process)
@@ -1031,9 +1031,10 @@ def run():
     user_input_thread.start()
 
     # if json is selected check if engine is compatible
-    if output_format == 'json' and engine_instances[engine_index].name not in ['bing', 'glens', 'oneocr']:
+    if output_format == 'json' and not engine_instances[engine_index].coordinate_support:
+        supported_engines = (engine.name for engine in engine_instances if engine.coordinate_support)
         logger.error(f"The selected engine '{engine_instances[engine_index].name}' does not support coordinate output.")
-        logger.error(f"Please choose one of: {', '.join(COORDINATE_SUPPORTED_ENGINES)}")
+        logger.error(f"Please choose one of: {', '.join(supported_engines)}")
         sys.exit(1)
 
     logger.opt(ansi=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
