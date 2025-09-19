@@ -568,8 +568,7 @@ class Bing:
                         for w in l.get('words', []):
                             word = Word(
                                 text=w.get('text', ''),
-                                bounding_box=self._quad_to_center_bbox(w['boundingBox']),
-                                separator=" "
+                                bounding_box=self._quad_to_center_bbox(w['boundingBox'])
                             )
                             words.append(word)
 
@@ -752,7 +751,7 @@ class AppleLiveText:
     readable_name = 'Apple Live Text'
     key = 'd'
     available = False
-    coordinate_support = False
+    coordinate_support = True
 
     def __init__(self):
         if sys.platform != 'darwin':
@@ -799,27 +798,84 @@ class AppleLiveText:
         if not img:
             return (False, 'Invalid image provided')
 
+        self.result = None
+
         with objc.autorelease_pool():
             analyzer = self.VKCImageAnalyzer.alloc().init()
             req = self.VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
             req.setLocales_(['ja','en'])
-            self.result = None
             analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
 
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
 
-            if self.result == None:
-                return (False, 'Unknown error!')
-            return (True, self.result)
+        if self.result == None:
+            return (False, 'Unknown error!')
+
+        ocr_response = OcrResult(
+            image_properties=ImageProperties(width=img.width, height=img.height),
+            paragraphs=self.result
+        )
+        x = (True, ocr_response)
+
+        if is_path:
+            img.close()
+        return x
 
     def _process(self, analysis, error):
-        res = ''
-        lines = analysis.allLines()
+        lines = []
+        response_lines = analysis.allLines()
+        if response_lines:
+            for l in response_lines:
+                words = []
+                for i, w in enumerate(l.children()):
+                    w_bbox = w.quad().boundingBox()
+                    word = Word(
+                        text=w.string(),
+                        bounding_box=BoundingBox(
+                            width=w_bbox.size.width,
+                            height=w_bbox.size.height,
+                            center_x=w_bbox.origin.x + (w_bbox.size.width / 2),
+                            center_y=w_bbox.origin.y + (w_bbox.size.height / 2),
+                            rotation_z=0.0
+                        )
+                    )
+                    words.append(word)
+                
+                l_bbox = l.quad().boundingBox()
+                line = Line(
+                    bounding_box=BoundingBox(
+                        width=l_bbox.size.width,
+                        height=l_bbox.size.height,
+                        center_x=l_bbox.origin.x + (l_bbox.size.width / 2),
+                        center_y=l_bbox.origin.y + (l_bbox.size.height / 2),
+                        rotation_z=0.0
+                    ),
+                    words=words
+                )
+                lines.append(line)
+
+        # Create a single paragraph to hold all lines
         if lines:
-            for line in lines:
-                res += line.string() + '\n'
-        self.result = res
-        CFRunLoopStop(CFRunLoopGetCurrent())
+            # Approximate paragraph bbox by combining all line bboxes
+            all_line_bboxes = [l.bounding_box for l in lines]
+            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
+            
+            p_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        self.result = paragraphs
+        CFRunLoopStop(CFRunLoopGetCurrent())        
 
     def _preprocess(self, img):
         image_bytes = pil_image_to_bytes(img, 'tiff')
@@ -933,10 +989,8 @@ class OneOCR:
         for l in response.get('lines', []):
             words = []
             for i, w in enumerate(l.get('words', [])):
-                separator = " " if i < len(l.get('words', [])) - 1 else None
                 word = Word(
                     text=w.get('text', ''),
-                    separator=separator,
                     bounding_box=self._pixel_quad_to_center_bbox(w['bounding_rect'], img_width, img_height)
                 )
                 words.append(word)
