@@ -85,6 +85,7 @@ try:
 except:
     optimized_png_encode = False
 
+
 @dataclass
 class BoundingBox:
     """
@@ -133,14 +134,12 @@ class OcrResult:
 def empty_post_process(text):
     return text
 
-
 def post_process(text):
     text = ' '.join([''.join(i.split()) for i in text.splitlines()])
     text = text.replace('…', '...')
     text = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', text)
     text = jaconv.h2z(text, ascii=True, digit=True)
     return text
-
 
 def input_to_pil_image(img):
     is_path = False
@@ -159,7 +158,6 @@ def input_to_pil_image(img):
         raise ValueError(f'img must be a path, PIL.Image or bytes object, instead got: {img}')
     return pil_image, is_path
 
-
 def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80, optimize=False):
     if img_format == 'png' and optimized_png_encode and not optimize:
         raw_data = img.convert('RGBA').tobytes()
@@ -172,10 +170,8 @@ def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80
         image_bytes = image_bytes.getvalue()
     return image_bytes
 
-
 def pil_image_to_numpy_array(img):
     return np.array(img.convert('RGBA'))
-
 
 def limit_image_size(img, max_size):
     img_bytes = pil_image_to_bytes(img)
@@ -745,7 +741,6 @@ class AppleVision:
     def _preprocess(self, img):
         return pil_image_to_bytes(img, 'tiff')
 
-
 class AppleLiveText:
     name = 'alivetext'
     readable_name = 'Apple Live Text'
@@ -882,7 +877,6 @@ class AppleLiveText:
         ns_data = NSData.dataWithBytes_length_(image_bytes, len(image_bytes))
         ns_image = NSImage.alloc().initWithData_(ns_data)
         return ns_image
-
 
 class WinRTOCR:
     name = 'winrtocr'

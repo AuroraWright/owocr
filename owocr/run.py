@@ -825,6 +825,7 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
         return orig_text
 
     output_format = config.get_general('output_format')
+    verbosity = config.get_general('verbosity')
     output_string = ''
     log_message = ''
     
@@ -838,6 +839,7 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
                     full_text_parts.append(w.text)
                     if w.separator:
                         full_text_parts.append(w.separator)
+                full_text_parts.append('\n')
         unprocessed_text = "".join(full_text_parts)
 
         if output_format == 'json':
@@ -862,7 +864,15 @@ def process_and_write_results(img_or_path, last_result, filtering, notify):
             output_string = post_process(unprocessed_text)
         log_message = output_string
 
-    logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>: {log_message}')
+    if verbosity != 0:
+        if verbosity < -1:
+            log_message_terminal = ': ' + log_message
+        elif verbosity == -1:
+            log_message_terminal = ''
+        else:
+            log_message_terminal = ': ' + (log_message if len(log_message) <= verbosity else log_message[:verbosity] + '[...]')
+
+        logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>{log_message_terminal}')
 
     if notify and config.get_general('notifications'):
         notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
