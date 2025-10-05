@@ -85,8 +85,6 @@ try:
 except:
     optimized_png_encode = False
 
-cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
-
 
 @dataclass
 class BoundingBox:
@@ -134,18 +132,6 @@ class OcrResult:
 
 
 def empty_post_process(text):
-    return text
-
-def post_process(text):
-    is_cj_text = cj_regex.search(text)
-    if is_cj_text:
-        text = ' '.join([''.join(i.split()) for i in text.splitlines()])
-    else:
-        text = ' '.join([re.sub(r'\s+', ' ', i).strip() for i in text.splitlines()])
-    text = text.replace('…', '...')
-    text = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', text)
-    if is_cj_text:
-        text = jaconv.h2z(text, ascii=True, digit=True)
     return text
 
 def input_to_pil_image(img):
