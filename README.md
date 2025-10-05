@@ -1,6 +1,6 @@
 # OwOCR
 
-Command line client for several Japanese OCR providers derived from [Manga OCR](https://github.com/kha-white/manga-ocr).
+Command line client for several OCR providers derived from [Manga OCR](https://github.com/kha-white/manga-ocr), with a focus on Japanese text.
 
 # Installation
 
