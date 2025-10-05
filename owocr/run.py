@@ -917,9 +917,15 @@ def run():
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
             if config.get_engine(engine_class.name) == None:
-                engine_instance = engine_class()
+                if engine_class.manual_language:
+                    engine_instance = engine_class(language=config.get_general('language'))
+                else:
+                    engine_instance = engine_class()
             else:
-                engine_instance = engine_class(config.get_engine(engine_class.name))
+                if engine_class.manual_language:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.name), language=config.get_general('language'))
+                else:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.name))
 
             if engine_instance.available:
                 engine_instances.append(engine_instance)

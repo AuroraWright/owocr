@@ -48,9 +48,8 @@ easyocr = [
 ]
 
 rapidocr = [
-    "rapidocr",
-    "onnxruntime",
-    "rapidocr_onnxruntime"
+    "rapidocr>=3.4.0",
+    "onnxruntime"
 ]
 
 mangaocr = [

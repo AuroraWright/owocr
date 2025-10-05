@@ -52,8 +52,8 @@ except ImportError:
     pass
 
 try:
-    from rapidocr_onnxruntime import RapidOCR as ROCR
-    import urllib.request
+    from rapidocr import RapidOCR as ROCR
+    from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion
 except ImportError:
     pass
 
@@ -84,6 +84,8 @@ try:
     optimized_png_encode = True
 except:
     optimized_png_encode = False
+
+cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
 
 
 @dataclass
@@ -135,10 +137,15 @@ def empty_post_process(text):
     return text
 
 def post_process(text):
-    text = ' '.join([''.join(i.split()) for i in text.splitlines()])
+    is_cj_text = cj_regex.search(text)
+    if is_cj_text:
+        text = ' '.join([''.join(i.split()) for i in text.splitlines()])
+    else:
+        text = ' '.join([re.sub(r'\s+', ' ', i).strip() for i in text.splitlines()])
     text = text.replace('…', '...')
     text = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', text)
-    text = jaconv.h2z(text, ascii=True, digit=True)
+    if is_cj_text:
+        text = jaconv.h2z(text, ascii=True, digit=True)
     return text
 
 def input_to_pil_image(img):
@@ -203,6 +210,7 @@ class MangaOcr:
     readable_name = 'Manga OCR'
     key = 'm'
     available = False
+    manual_language = False
     coordinate_support = False
 
     def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu': False}):
@@ -234,6 +242,7 @@ class GoogleVision:
     readable_name = 'Google Vision'
     key = 'g'
     available = False
+    manual_language = False
     coordinate_support = False
 
     def __init__(self):
@@ -279,6 +288,7 @@ class GoogleLens:
     readable_name = 'Google Lens'
     key = 'l'
     available = False
+    manual_language = False
     coordinate_support = True
 
     def __init__(self):
@@ -424,6 +434,7 @@ class GoogleLensWeb:
     readable_name = 'Google Lens (web)'
     key = 'k'
     available = False
+    manual_language = False
     coordinate_support = False
 
     def __init__(self):
@@ -520,6 +531,7 @@ class Bing:
     readable_name = 'Bing'
     key = 'b'
     available = False
+    manual_language = False
     coordinate_support = True
 
     def __init__(self):
@@ -697,15 +709,17 @@ class AppleVision:
     readable_name = 'Apple Vision'
     key = 'a'
     available = False
+    manual_language = True
     coordinate_support = False
 
-    def __init__(self):
+    def __init__(self, language='ja'):
         if sys.platform != 'darwin':
             logger.warning('Apple Vision is not supported on non-macOS platforms!')
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
         else:
             self.available = True
+            self.language = [language, 'en']
             logger.info('Apple Vision ready')
 
     def __call__(self, img):
@@ -719,7 +733,7 @@ class AppleVision:
             req.setRevision_(Vision.VNRecognizeTextRequestRevision3)
             req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
             req.setUsesLanguageCorrection_(True)
-            req.setRecognitionLanguages_(['ja','en'])
+            req.setRecognitionLanguages_(self.language)
 
             handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(
                 self._preprocess(img), None
@@ -746,9 +760,10 @@ class AppleLiveText:
     readable_name = 'Apple Live Text'
     key = 'd'
     available = False
+    manual_language = True
     coordinate_support = True
 
-    def __init__(self):
+    def __init__(self, language='ja'):
         if sys.platform != 'darwin':
             logger.warning('Apple Live Text is not supported on non-macOS platforms!')
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
@@ -785,6 +800,7 @@ class AppleLiveText:
                     }
                 }
             )
+            self.language = [language, 'en']
             self.available = True
             logger.info('Apple Live Text ready')
 
@@ -798,7 +814,7 @@ class AppleLiveText:
         with objc.autorelease_pool():
             analyzer = self.VKCImageAnalyzer.alloc().init()
             req = self.VKCImageAnalyzerRequest.alloc().initWithImage_requestType_(self._preprocess(img), 1) #VKAnalysisTypeText
-            req.setLocales_(['ja','en'])
+            req.setLocales_(self.language)
             analyzer.processRequest_progressHandler_completionHandler_(req, lambda progress: None, self._process)
 
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10.0, False)
@@ -883,20 +899,23 @@ class WinRTOCR:
     readable_name = 'WinRT OCR'
     key = 'w'
     available = False
+    manual_language = True
     coordinate_support = False
 
-    def __init__(self, config={}):
+    def __init__(self, config={}, language='ja'):
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('WinRT OCR is not supported on Windows older than 10!')
             elif 'winocr' not in sys.modules:
                 logger.warning('winocr not available, WinRT OCR will not work!')
             else:
+                self.language = language
                 self.available = True
                 logger.info('WinRT OCR ready')
         else:
             try:
                 self.url = config['url']
+                self.language = language
                 self.available = True
                 logger.info('WinRT OCR ready')
             except:
@@ -908,9 +927,9 @@ class WinRTOCR:
             return (False, 'Invalid image provided')
 
         if sys.platform == 'win32':
-            res = winocr.recognize_pil_sync(img, lang='ja')['text']
+            res = winocr.recognize_pil_sync(img, lang=self.language)['text']
         else:
-            params = {'lang': 'ja'}
+            params = {'lang': self.language}
             try:
                 res = requests.post(self.url, params=params, data=self._preprocess(img), timeout=3)
             except requests.exceptions.Timeout:
@@ -937,6 +956,7 @@ class OneOCR:
     readable_name = 'OneOCR'
     key = 'z'
     available = False
+    manual_language = False
     coordinate_support = True
 
     def __init__(self, config={}):
@@ -1058,6 +1078,7 @@ class AzureImageAnalysis:
     readable_name = 'Azure Image Analysis'
     key = 'v'
     available = False
+    manual_language = False
     coordinate_support = False
 
     def __init__(self, config={}):
@@ -1112,15 +1133,16 @@ class EasyOCR:
     readable_name = 'EasyOCR'
     key = 'e'
     available = False
+    manual_language = True
     coordinate_support = False
 
-    def __init__(self, config={'gpu': True}):
+    def __init__(self, config={'gpu': True}, language='ja'):
         if 'easyocr' not in sys.modules:
             logger.warning('easyocr not available, EasyOCR will not work!')
         else:
             logger.info('Loading EasyOCR model')
             logging.getLogger('easyocr.easyocr').setLevel(logging.ERROR)
-            self.model = easyocr.Reader(['ja','en'], gpu=config['gpu'])
+            self.model = easyocr.Reader([language,'en'], gpu=config['gpu'])
             self.available = True
             logger.info('EasyOCR ready')
 
@@ -1148,29 +1170,45 @@ class RapidOCR:
     readable_name = 'RapidOCR'
     key = 'r'
     available = False
+    manual_language = True
     coordinate_support = False
 
-    def __init__(self):
-        if 'rapidocr_onnxruntime' not in sys.modules:
-            logger.warning('rapidocr_onnxruntime not available, RapidOCR will not work!')
+    def __init__(self, config={'high_accuracy_detection': False, 'high_accuracy_recognition': True}, language='ja'):
+        if 'rapidocr' not in sys.modules:
+            logger.warning('rapidocr not available, RapidOCR will not work!')
         else:
-            rapidocr_model_file = os.path.join(os.path.expanduser('~'),'.cache','rapidocr_japan_PP-OCRv4_rec_infer.onnx')
-            if not os.path.isfile(rapidocr_model_file):
-                logger.info('Downloading RapidOCR model ' + rapidocr_model_file)
-                try:
-                    cache_folder = os.path.join(os.path.expanduser('~'),'.cache')
-                    if not os.path.isdir(cache_folder):
-                        os.makedirs(cache_folder)
-                    urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/rapidocr_japan_PP-OCRv4_rec_infer.onnx', rapidocr_model_file)
-                except:
-                    logger.warning('Download failed. RapidOCR will not work!')
-                    return
-
             logger.info('Loading RapidOCR model')
-            self.model = ROCR(rec_model_path=rapidocr_model_file)
+            lang_det, lang_rec = self.language_to_model_language(language)
+            self.model = ROCR(params={
+                'Det.engine_type': EngineType.ONNXRUNTIME,
+                'Det.lang_type': lang_det,
+                'Det.model_type': ModelType.SERVER if config['high_accuracy_detection'] else ModelType.MOBILE,
+                'Det.ocr_version': OCRVersion.PPOCRV5,
+                'Rec.engine_type': EngineType.ONNXRUNTIME,
+                'Rec.lang_type': lang_rec,
+                'Rec.model_type': ModelType.SERVER if config['high_accuracy_recognition'] else ModelType.MOBILE,
+                'Rec.ocr_version': OCRVersion.PPOCRV5,
+                'Global.log_level': 'error'
+            })
             logging.getLogger().setLevel(logging.ERROR)
             self.available = True
             logger.info('RapidOCR ready')
+
+    def language_to_model_language(self, language):
+        if language == 'ja':
+            return LangDet.CH, LangRec.CH
+        if language == 'zh':
+            return LangDet.CH, LangRec.CH
+        elif language == 'ko':
+            return LangDet.MULTI, LangRec.KOREAN
+        elif language == 'ru':
+            return LangDet.MULTI, LangRec.ESLAV
+        elif language == 'el':
+            return LangDet.MULTI, LangRec.EL
+        elif language == 'th':
+            return LangDet.MULTI, LangRec.TH
+        else:
+            return LangDet.MULTI, LangRec.LATIN
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
@@ -1178,10 +1216,10 @@ class RapidOCR:
             return (False, 'Invalid image provided')
 
         res = ''
-        read_results, elapsed = self.model(self._preprocess(img))
+        read_results = self.model(self._preprocess(img))
         if read_results:
-            for read_result in read_results:
-                res += read_result[1] + '\n'
+            for read_result in read_results.txts:
+                res += read_result + '\n'
 
         x = (True, res)
 
@@ -1197,16 +1235,37 @@ class OCRSpace:
     readable_name = 'OCRSpace'
     key = 'o'
     available = False
+    manual_language = True
     coordinate_support = False
 
-    def __init__(self, config={}):
+    def __init__(self, config={}, language='ja'):
         try:
             self.api_key = config['api_key']
             self.max_byte_size = config.get('file_size_limit', 1000000)
+            self.engine_version = config.get('engine_version', 2)
+            self.language = self.language_to_model_language(language)
             self.available = True
             logger.info('OCRSpace ready')
         except:
             logger.warning('Error reading API key from config, OCRSpace will not work!')
+
+    def language_to_model_language(self, language):
+        if language == 'ja':
+            return 'jpn'
+        if language == 'zh':
+            return 'chs'
+        elif language == 'ko':
+            return 'kor'
+        elif language == 'ar':
+            return 'ara'
+        elif language == 'ru':
+            return 'rus'
+        elif language == 'el':
+            return 'gre'
+        elif language == 'th':
+            return 'tha'
+        else:
+            return 'auto'
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
@@ -1219,7 +1278,8 @@ class OCRSpace:
 
         data = {
             'apikey': self.api_key,
-            'language': 'jpn'
+            'language': self.language,
+            'OCREngine': str(self.engine_version)
         }
         files = {'file': ('image.' + img_extension, img_bytes, 'image/' + img_extension)}
 
