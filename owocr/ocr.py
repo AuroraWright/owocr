@@ -1190,7 +1190,6 @@ class RapidOCR:
                 'Rec.ocr_version': OCRVersion.PPOCRV5,
                 'Global.log_level': 'error'
             })
-            logging.getLogger().setLevel(logging.ERROR)
             self.available = True
             logger.info('RapidOCR ready')
 
