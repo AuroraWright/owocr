@@ -197,6 +197,7 @@ class MangaOcr:
     readable_name = 'Manga OCR'
     key = 'm'
     available = False
+    local = True
     manual_language = False
     coordinate_support = False
 
@@ -229,6 +230,7 @@ class GoogleVision:
     readable_name = 'Google Vision'
     key = 'g'
     available = False
+    local = False
     manual_language = False
     coordinate_support = False
 
@@ -275,6 +277,7 @@ class GoogleLens:
     readable_name = 'Google Lens'
     key = 'l'
     available = False
+    local = False
     manual_language = False
     coordinate_support = True
 
@@ -421,6 +424,7 @@ class GoogleLensWeb:
     readable_name = 'Google Lens (web)'
     key = 'k'
     available = False
+    local = False
     manual_language = False
     coordinate_support = False
 
@@ -518,6 +522,7 @@ class Bing:
     readable_name = 'Bing'
     key = 'b'
     available = False
+    local = False
     manual_language = False
     coordinate_support = True
 
@@ -697,6 +702,7 @@ class AppleVision:
     readable_name = 'Apple Vision'
     key = 'a'
     available = False
+    local = True
     manual_language = True
     coordinate_support = False
 
@@ -748,6 +754,7 @@ class AppleLiveText:
     readable_name = 'Apple Live Text'
     key = 'd'
     available = False
+    local = True
     manual_language = True
     coordinate_support = True
 
@@ -888,6 +895,7 @@ class WinRTOCR:
     readable_name = 'WinRT OCR'
     key = 'w'
     available = False
+    local = True
     manual_language = True
     coordinate_support = False
 
@@ -945,6 +953,7 @@ class OneOCR:
     readable_name = 'OneOCR'
     key = 'z'
     available = False
+    local = True
     manual_language = False
     coordinate_support = True
 
@@ -1068,6 +1077,7 @@ class AzureImageAnalysis:
     readable_name = 'Azure Image Analysis'
     key = 'v'
     available = False
+    local = False
     manual_language = False
     coordinate_support = False
 
@@ -1123,6 +1133,7 @@ class EasyOCR:
     readable_name = 'EasyOCR'
     key = 'e'
     available = False
+    local = True
     manual_language = True
     coordinate_support = False
 
@@ -1160,6 +1171,7 @@ class RapidOCR:
     readable_name = 'RapidOCR'
     key = 'r'
     available = False
+    local = True
     manual_language = True
     coordinate_support = False
 
@@ -1168,10 +1180,10 @@ class RapidOCR:
             logger.warning('rapidocr not available, RapidOCR will not work!')
         else:
             logger.info('Loading RapidOCR model')
-            lang_det, lang_rec = self.language_to_model_language(language)
+            lang_rec = self.language_to_model_language(language)
             self.model = ROCR(params={
                 'Det.engine_type': EngineType.ONNXRUNTIME,
-                'Det.lang_type': lang_det,
+                'Det.lang_type': LangDet.CH,
                 'Det.model_type': ModelType.SERVER if config['high_accuracy_detection'] else ModelType.MOBILE,
                 'Det.ocr_version': OCRVersion.PPOCRV5,
                 'Rec.engine_type': EngineType.ONNXRUNTIME,
@@ -1185,19 +1197,19 @@ class RapidOCR:
 
     def language_to_model_language(self, language):
         if language == 'ja':
-            return LangDet.CH, LangRec.CH
+            return LangRec.CH
         if language == 'zh':
-            return LangDet.CH, LangRec.CH
+            return LangRec.CH
         elif language == 'ko':
-            return LangDet.MULTI, LangRec.KOREAN
+            return LangRec.KOREAN
         elif language == 'ru':
-            return LangDet.MULTI, LangRec.ESLAV
+            return LangRec.ESLAV
         elif language == 'el':
-            return LangDet.MULTI, LangRec.EL
+            return LangRec.EL
         elif language == 'th':
-            return LangDet.MULTI, LangRec.TH
+            return LangRec.TH
         else:
-            return LangDet.MULTI, LangRec.LATIN
+            return LangRec.LATIN
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
@@ -1224,6 +1236,7 @@ class OCRSpace:
     readable_name = 'OCRSpace'
     key = 'o'
     available = False
+    local = False
     manual_language = True
     coordinate_support = False
 

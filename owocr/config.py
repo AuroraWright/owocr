@@ -26,6 +26,8 @@ parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
                     help='OCR engine to use. Available: "mangaocr", "glens", "glensweb", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
+parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
+                    help='OCR engine to use for two-pass processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Pause at startup.')
 parser.add_argument('-i', '--ignore_flag', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -66,6 +68,7 @@ class Config:
         'read_from_secondary': '',
         'write_to': 'clipboard',
         'engine': '',
+        'engine_secondary': '',
         'pause_at_startup': False,
         'auto_pause' : 0,
         'ignore_flag': False,
