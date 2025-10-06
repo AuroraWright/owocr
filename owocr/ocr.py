@@ -110,6 +110,7 @@ class Line:
     """Represents a single line of text, composed of words."""
     bounding_box: BoundingBox
     words: List[Word] = field(default_factory=list)
+    text: Optional[str] = None
 
 @dataclass
 class Paragraph:
@@ -567,6 +568,7 @@ class Bing:
                             words.append(word)
 
                         line = Line(
+                            text=l.get('text', ''),
                             bounding_box=self._quad_to_center_bbox(l['boundingBox']),
                             words=words
                         )
@@ -840,6 +842,7 @@ class AppleLiveText:
                 
                 l_bbox = l.quad().boundingBox()
                 line = Line(
+                    text=l.string(),
                     bounding_box=BoundingBox(
                         width=l_bbox.size.width,
                         height=l_bbox.size.height,
@@ -996,6 +999,7 @@ class OneOCR:
                 words.append(word)
             
             line = Line(
+                text=l.get('text', ''),
                 bounding_box=self._pixel_quad_to_center_bbox(l['bounding_rect'], img_width, img_height),
                 words=words
             )

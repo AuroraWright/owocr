@@ -729,12 +729,15 @@ class OutputResult:
         full_text_parts = []
         for p in result_data.paragraphs:
             for l in p.lines:
-                for w in l.words:
-                    full_text_parts.append(w.text)
-                    if w.separator != None:
-                        full_text_parts.append(w.separator)
-                    else:
-                        full_text_parts.append(' ')
+                if l.text != None:
+                    full_text_parts.append(l.text)
+                else:
+                    for w in l.words:
+                        full_text_parts.append(w.text)
+                        if w.separator != None:
+                            full_text_parts.append(w.separator)
+                        else:
+                            full_text_parts.append(' ')
                 full_text_parts.append('\n')
         return "".join(full_text_parts)
 
