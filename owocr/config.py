@@ -26,13 +26,13 @@ parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
                     help='OCR engine to use. Available: "mangaocr", "glens", "glensweb", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
-parser.add_argument('-p', '--pause_at_startup', action='store_true', default=argparse.SUPPRESS,
+parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Pause at startup.')
-parser.add_argument('-i', '--ignore_flag', action='store_true', default=argparse.SUPPRESS,
+parser.add_argument('-i', '--ignore_flag', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).')
-parser.add_argument('-d', '--delete_images', action='store_true', default=argparse.SUPPRESS,
+parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Delete image files after processing when reading from a directory.')
-parser.add_argument('-n', '--notifications', action='store_true', default=argparse.SUPPRESS,
+parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture, unless screen_capture_combo is set.')
 parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
                     help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.')
@@ -44,7 +44,7 @@ parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.S
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
 parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between screenshots when reading with screen capture.')
-parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, default=argparse.SUPPRESS,
+parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
