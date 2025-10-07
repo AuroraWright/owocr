@@ -303,13 +303,30 @@ class RequestHandler(socketserver.BaseRequestHandler):
 
 class TextFiltering:
     def __init__(self):
-        from pysbd import Segmenter
-        import langid
         self.language = config.get_general('language')
-        self.segmenter = Segmenter(language=self.language, clean=True)
-        self.classify = langid.classify
         self.regex = self.get_regex()
-        self.last_result = ([], engine_index)
+        self.kana_variants = {
+            'ぁ': ['ぁ', 'あ'], 'あ': ['ぁ', 'あ'],
+            'ぃ': ['ぃ', 'い'], 'い': ['ぃ', 'い'],
+            'ぅ': ['ぅ', 'う'], 'う': ['ぅ', 'う'],
+            'ぇ': ['ぇ', 'え'], 'え': ['ぇ', 'え'],
+            'ぉ': ['ぉ', 'お'], 'お': ['ぉ', 'お'],
+            'ァ': ['ァ', 'ア'], 'ア': ['ァ', 'ア'],
+            'ィ': ['ィ', 'イ'], 'イ': ['ィ', 'イ'],
+            'ゥ': ['ゥ', 'ウ'], 'ウ': ['ゥ', 'ウ'],
+            'ェ': ['ェ', 'エ'], 'エ': ['ェ', 'エ'],
+            'ォ': ['ォ', 'オ'], 'オ': ['ォ', 'オ'],
+            'ゃ': ['ゃ', 'や'], 'や': ['ゃ', 'や'],
+            'ゅ': ['ゅ', 'ゆ'], 'ゆ': ['ゅ', 'ゆ'],
+            'ょ': ['ょ', 'よ'], 'よ': ['ょ', 'よ'],
+            'ャ': ['ャ', 'ヤ'], 'ヤ': ['ャ', 'ヤ'],
+            'ュ': ['ュ', 'ユ'], 'ユ': ['ュ', 'ユ'],
+            'ョ': ['ョ', 'ヨ'], 'ヨ': ['ョ', 'ヨ'],
+            'っ': ['っ', 'つ'], 'つ': ['っ', 'つ'],
+            'ッ': ['ッ', 'ツ'], 'ツ': ['ッ', 'ツ'],
+            'ゎ': ['ゎ', 'わ'], 'わ': ['ゎ', 'わ'],
+            'ヮ': ['ヮ', 'ワ'], 'ワ': ['ヮ', 'ワ']
+        }
 
     def get_regex(self):
         if self.language == 'ja':
@@ -334,51 +351,8 @@ class TextFiltering:
             r'[a-zA-Z\u00C0-\u00FF\u0100-\u017F\u0180-\u024F\u0250-\u02AF\u1D00-\u1D7F\u1D80-\u1DBF\u1E00-\u1EFF\u2C60-\u2C7F\uA720-\uA7FF\uAB30-\uAB6F]')
 
     def convert_small_kana_to_big(self, text):
-        small_to_big = {
-            # Hiragana
-            'ぁ': 'あ', 'ぃ': 'い', 'ぅ': 'う', 'ぇ': 'え', 'ぉ': 'お',
-            'っ': 'つ', 'ゃ': 'や', 'ゅ': 'ゆ', 'ょ': 'よ', 'ゎ': 'わ',
-            # Katakana
-            'ァ': 'ア', 'ィ': 'イ', 'ゥ': 'ウ', 'ェ': 'エ', 'ォ': 'オ',
-            'ッ': 'ツ', 'ャ': 'ヤ', 'ュ': 'ユ', 'ョ': 'ヨ', 'ヮ': 'ワ'
-        }
-
-        converted_text = ''.join(small_to_big.get(char, char) for char in text)
+        converted_text = ''.join(self.kana_variants.get(char, [char])[-1] for char in text)
         return converted_text
-
-    def __call__(self, text):
-        orig_text = self.segmenter.segment(text)
-        orig_text_filtered = []
-        for block in orig_text:
-            block_filtered = self.regex.findall(block)
-            if self.language == 'ja':
-                block_filtered = self.convert_small_kana_to_big(block_filtered)
-
-            if block_filtered:
-                orig_text_filtered.append(''.join(block_filtered))
-            else:
-                orig_text_filtered.append(None)
-
-        if self.last_result[1] == engine_index:
-            last_text = self.last_result[0]
-        else:
-            last_text = []
-
-        new_blocks = []
-        for idx, block in enumerate(orig_text):
-            if orig_text_filtered[idx] and (orig_text_filtered[idx] not in last_text):
-                new_blocks.append(block)
-
-        final_blocks = []
-        for block in new_blocks:
-            # This only looks at language IF language is ja or zh, otherwise it keeps all text
-            if self.language not in ['ja', 'zh'] or self.classify(block)[0] in ['ja', 'zh'] or block == "\n":
-                final_blocks.append(block)
-
-        text = '\n'.join(final_blocks)
-
-        self.last_result = (orig_text_filtered, engine_index)
-        return text
 
 
 class ScreenshotThread(threading.Thread):
@@ -711,6 +685,7 @@ class OutputResult:
         self.filtering = TextFiltering() if init_filtering else None
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         self.previous_result = None
+        self.previous_result_text = None
 
     def _coordinate_format_to_string(self, result_data):
         full_text_parts = []
@@ -745,7 +720,7 @@ class OutputResult:
                 text_parts.append(' ')
         return ''.join(text_parts)
 
-    def _compare_text(self, current_text, prev_text, threshold=80):
+    def _compare_text(self, current_text, prev_text, threshold=82):
         if current_text in prev_text:
             return True
         if len(prev_text) > len(current_text):
@@ -776,26 +751,154 @@ class OutputResult:
         for p in previous_result.paragraphs:
             previous_lines.extend(p.lines)
 
-        all_previous_text = ''
+        all_previous_text_spliced = []
         for prev_line in previous_lines:
             prev_text = self._get_line_text(prev_line)
             prev_text = ''.join(self.filtering.regex.findall(prev_text))
             if self.filtering.language == 'ja':
                 prev_text = self.filtering.convert_small_kana_to_big(prev_text)
-            all_previous_text += prev_text
+            all_previous_text_spliced.append(prev_text)
 
+        all_previous_text = ''.join(all_previous_text_spliced)
+
+        logger.debug(f"Previous text: '{all_previous_text_spliced}'")
+
+        first = True
         for current_line in current_lines:
             current_text = self._get_line_text(current_line)
             current_text = ''.join(self.filtering.regex.findall(current_text))
+            if not current_text:
+                continue
             if self.filtering.language == 'ja':
                 current_text = self.filtering.convert_small_kana_to_big(current_text)
 
-            text_similar = self._compare_text(current_text, all_previous_text)
+            # For the first line, check if it contains the end of previous text
+            if first and all_previous_text:
+                overlap = self._find_overlap(all_previous_text, current_text)
+                if overlap and len(current_text) > len(overlap):
+                    logger.debug(f"Found overlap: '{overlap}'")
+                    changed_lines.append(current_line)
+                    first = False
+                    continue
+
+            if len(current_text) < 3:
+                text_similar = current_text in all_previous_text_spliced
+            else:
+                text_similar = self._compare_text(current_text, all_previous_text)
+
+            logger.debug(f"Current line: '{current_text}' Similar: '{text_similar}'")
 
             if not text_similar:
                 changed_lines.append(current_line)
+                if len(current_text) >= 3:
+                    first = False
 
         return changed_lines
+
+    def _find_overlap(self, previous_text, current_text):
+        """Find the overlapping portion between the end of previous_text and start of current_text."""
+        # Try different overlap lengths, starting from the maximum possible
+        min_overlap_length = 3  # Minimum overlap to consider meaningful
+        max_overlap_length = min(len(previous_text), len(current_text))
+
+        for overlap_length in range(max_overlap_length, min_overlap_length - 1, -1):
+            previous_end = previous_text[-overlap_length:]
+            current_start = current_text[:overlap_length]
+
+            if previous_end == current_start:
+                return previous_end
+
+        return None
+
+    def _cut_at_overlap(self, current_line, overlap):
+        pattern_parts = []
+        for char in overlap:
+            # Check if character is kana and has small/big variants
+            if char in self.filtering.kana_variants:
+                # Use character class that matches both small and big variants
+                variants = self.filtering.kana_variants[char]
+                pattern_parts.append(f'[{"".join(variants)}]')
+            else:
+                # Escape regex special characters for regular characters
+                pattern_parts.append(re.escape(char))
+
+        # Create pattern: overlap characters with any characters (0 or more) between them
+        overlap_pattern = r'.*?'.join(pattern_parts)
+
+        # Also allow any characters at the beginning
+        full_pattern = r'^.*?' + overlap_pattern
+
+        logger.debug(f"Cut regex: '{full_pattern}'")
+
+        # Find the match
+        match = re.search(full_pattern, current_line)
+        if match:
+            # Cut after the matched overlapping portion
+            cut_position = match.end()
+            return current_line[cut_position:]
+
+        return current_line
+
+    def _find_changed_lines_text(self, current_result):
+        # Split both results into lines
+        current_lines = current_result.split('\n')
+
+        # If no previous result, all lines are considered changed
+        if self.previous_result_text is None:
+            self.previous_result_text = current_lines[-10:]  # Keep only last 10 lines
+            return current_result
+
+        changed_lines = []
+        all_previous_text_spliced = []
+
+        for prev_line in self.previous_result_text:
+            prev_text = ''.join(self.filtering.regex.findall(prev_line))
+            if self.filtering.language == 'ja':
+                prev_text = self.filtering.convert_small_kana_to_big(prev_text)
+            all_previous_text_spliced.append(prev_text)
+
+        all_previous_text = ''.join(all_previous_text_spliced)
+
+        logger.debug(f"Previous text: '{all_previous_text_spliced}'")
+
+        first = True
+        # Check each current line against the combined previous text
+        for current_line in current_lines:
+            current_text = ''.join(self.filtering.regex.findall(current_line))
+            if not current_text:
+                continue
+            if self.filtering.language == 'ja':
+                current_text = self.filtering.convert_small_kana_to_big(current_text)
+
+            # For the first line, check if it contains the end of previous text
+            if first and all_previous_text:
+                overlap = self._find_overlap(all_previous_text, current_text)
+                if overlap and len(current_text) > len(overlap):
+                    logger.debug(f"Found overlap: '{overlap}'")
+                    # Cut the current_line to remove the overlapping part
+                    current_line = self._cut_at_overlap(current_line, overlap)
+                    logger.debug(f"After cutting: '{current_line}'")
+                    changed_lines.append(current_line)
+                    first = False
+                    continue
+
+            if len(current_text) < 3:
+                text_similar = current_text in all_previous_text_spliced
+            else:
+                text_similar = self._compare_text(current_text, all_previous_text)
+
+            logger.debug(f"Current line: '{current_text}' Similar: '{text_similar}'")
+
+            if not text_similar:
+                changed_lines.append(current_line)
+                if len(current_text) >= 3:
+                    first = False
+
+        # Update cache with current lines, keeping only the last 10
+        self.previous_result_text.extend(current_lines)
+        self.previous_result_text = self.previous_result_text[-10:]
+
+        return '\n'.join(changed_lines)
 
     def _create_changed_regions_image(self, pil_image, changed_lines, margin=5):
         img_width, img_height = pil_image.size
@@ -896,7 +999,7 @@ class OutputResult:
             if output_format == 'json':
                 logger.warning(f"Engine '{engine_instance.name}' does not support JSON output. Falling back to text.")
             if filter_text:
-                text_to_process = self.filtering(result_data_text)
+                text_to_process = self._find_changed_lines_text(result_data_text)
                 output_string = self._post_process(text_to_process, True)
             else:
                 output_string = self._post_process(result_data_text, False)
@@ -1021,7 +1124,7 @@ def on_screenshot_combo():
 
 
 def run():
-    logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format')}])
+    logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format'), 'level': 'INFO'}])
 
     if config.has_config:
         logger.info('Parsed config file')
