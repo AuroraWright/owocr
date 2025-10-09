@@ -35,7 +35,7 @@ parser.add_argument('-i', '--ignore_flag', type=str2bool, nargs='?', const=True,
 parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Delete image files after processing when reading from a directory.')
 parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture, unless screen_capture_combo is set.')
+                    help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture and periodic screenshots.')
 parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
                     help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. Will be ignored when reading with screen capture. 0 to disable.')
 parser.add_argument('-cp', '--combo_pause', type=str, default=argparse.SUPPRESS,
@@ -45,11 +45,13 @@ parser.add_argument('-cs', '--combo_engine_switch', type=str, default=argparse.S
 parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.SUPPRESS,
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
 parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
-                    help='Delay (in seconds) between screenshots when reading with screen capture.')
+                    help='Delay (in seconds) between screenshots when reading with screen capture. -1 to disable periodic screenshots.')
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
+parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help="When reading with screen capture, try waiting until text is stable before processing it.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, combo to wait on for taking a screenshot instead of using the delay. As an example: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code for filtering screencapture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
@@ -82,8 +84,9 @@ class Config:
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',
-        'screen_capture_delay_secs': 3,
+        'screen_capture_delay_secs': -1,
         'screen_capture_only_active_windows': True,
+        'screen_capture_frame_stabilization': True,
         'screen_capture_combo': '',
         'screen_capture_old_macos_api': False,
         'language': 'ja',

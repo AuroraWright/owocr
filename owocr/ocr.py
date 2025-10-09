@@ -494,13 +494,12 @@ class GoogleLensWeb:
 
         lens_object = pyjson5.loads(res.text.splitlines()[2])
 
-        res = ''
+        res = []
         text = lens_object[0][2][0][0]
         for paragraph in text:
             for line in paragraph[1]:
                 for word in line[0]:
-                    res += word[1] + word[2]
-            res += '\n'
+                    res.append(word[1] + word[2])
 
         x = (True, res)
 
@@ -734,10 +733,10 @@ class AppleVision:
             )
 
             success = handler.performRequests_error_([req], None)
-            res = ''
+            res = []
             if success[0]:
                 for result in req.results():
-                    res += result.text() + '\n'
+                    res.append(result.text())
                 x = (True, res)
             else:
                 x = (False, 'Unknown error!')
@@ -1105,11 +1104,11 @@ class AzureImageAnalysis:
         except:
             return (False, 'Unknown error!')
 
-        res = ''
+        res = []
         if read_result.read:
             for block in read_result.read.blocks:
                 for line in block.lines:
-                    res += line.text + '\n'
+                    res.append(line.text)
         else:
             return (False, 'Unknown error!')
 
@@ -1152,10 +1151,10 @@ class EasyOCR:
         if not img:
             return (False, 'Invalid image provided')
 
-        res = ''
+        res = []
         read_result = self.model.readtext(self._preprocess(img), detail=0)
         for text in read_result:
-            res += text + '\n'
+            res.append(text)
 
         x = (True, res)
 
@@ -1216,11 +1215,11 @@ class RapidOCR:
         if not img:
             return (False, 'Invalid image provided')
 
-        res = ''
+        res = []
         read_results = self.model(self._preprocess(img))
         if read_results:
             for read_result in read_results.txts:
-                res += read_result + '\n'
+                res.append(read_result)
 
         x = (True, res)
 
