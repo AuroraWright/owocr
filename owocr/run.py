@@ -1271,6 +1271,8 @@ def run():
             global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
+        if not (screen_capture_on_combo or screen_capture_periodic):
+            raise ValueError('screen_capture_delay_secs or screen_capture_combo need to be valid values')
         screenshot_event = threading.Event()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()

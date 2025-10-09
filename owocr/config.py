@@ -84,7 +84,7 @@ class Config:
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',
-        'screen_capture_delay_secs': -1,
+        'screen_capture_delay_secs': 0,
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
         'screen_capture_combo': '',
