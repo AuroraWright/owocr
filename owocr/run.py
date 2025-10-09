@@ -310,6 +310,7 @@ class TextFiltering:
         self.last_frame_text = None
         self.stable_frame_text = None
         self.processed_stable_frame = False
+        self.frame_stabilization_timestamp = 0
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
         self.regex = self.get_regex()
         self.kana_variants = {
@@ -412,6 +413,8 @@ class TextFiltering:
         if frames_match:
             if self.processed_stable_frame:
                 return []
+            if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
+                return []
             changed_lines = self._find_changed_lines_impl(current_result, self.stable_frame_data)
             self.processed_stable_frame = True
             self.stable_frame_data = copy.deepcopy(current_result)
@@ -419,6 +422,7 @@ class TextFiltering:
         else:
             self.last_frame_data = copy.deepcopy(current_result)
             self.processed_stable_frame = False
+            self.frame_stabilization_timestamp = time.time()
             return []
 
     def _find_changed_lines_impl(self, current_result, previous_result):
@@ -496,6 +500,8 @@ class TextFiltering:
         if frames_match:
             if self.processed_stable_frame:
                 return []
+            if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
+                return []
             changed_lines = self._find_changed_lines_text_impl(current_result, self.stable_frame_text, True)
             self.processed_stable_frame = True
             self.stable_frame_text = current_result
@@ -503,6 +509,7 @@ class TextFiltering:
         else:
             self.last_frame_text = current_result
             self.processed_stable_frame = False
+            self.frame_stabilization_timestamp = time.time()
             return []
 
     def _find_changed_lines_text_impl(self, current_result, previous_stable_text, filtering):

@@ -48,8 +48,8 @@ parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=ar
                     help='Delay (in seconds) between screenshots when reading with screen capture. -1 to disable periodic screenshots.')
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
-parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help="When reading with screen capture, try waiting until text is stable before processing it.")
+parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=float, default=argparse.SUPPRESS,
+                    help="When reading with screen capture, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
@@ -86,7 +86,7 @@ class Config:
         'screen_capture_area': '',
         'screen_capture_delay_secs': -1,
         'screen_capture_only_active_windows': True,
-        'screen_capture_frame_stabilization': True,
+        'screen_capture_frame_stabilization': -1,
         'screen_capture_combo': '',
         'screen_capture_old_macos_api': False,
         'language': 'ja',
