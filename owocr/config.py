@@ -50,6 +50,10 @@ parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=float, default=argparse.SUPPRESS,
                     help="When reading with screen capture, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.")
+parser.add_argument('-sl', '--screen_capture_line_recovery', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help="When reading with screen capture and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.")
+parser.add_argument('-sff', '--screen_capture_furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help="When reading with screen capture, try to filter furigana lines.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
@@ -58,6 +62,7 @@ parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRES
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,
                     help='Terminal window verbosity. Can be -2 (all recognized text is showed whole, default), -1 (only timestamps are shown), 0 (nothing is shown but errors), or larger than 0 to cut displayed text to that amount of characters.')
+parser.add_argument('--uwu', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
 class Config:
     has_config = False
@@ -87,11 +92,14 @@ class Config:
         'screen_capture_delay_secs': 0,
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
+        'screen_capture_line_recovery': True,
+        'screen_capture_furigana_filter': True,
         'screen_capture_combo': '',
         'screen_capture_old_macos_api': False,
         'language': 'ja',
         'output_format': 'text',
-        'verbosity': -2
+        'verbosity': -2,
+        'uwu': False
     }
 
     def __parse(self, value):
