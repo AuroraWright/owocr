@@ -799,10 +799,10 @@ class ScreenshotThread(threading.Thread):
             self.screencapture_mode = 2
 
         if self.screencapture_mode != 2:
-            sct = mss.mss()
+            self.sct = mss.mss()
 
             if self.screencapture_mode == 1:
-                mon = sct.monitors
+                mon = self.sct.monitors
                 if len(mon) <= screen_capture_monitor:
                     raise ValueError('Invalid monitor number in screen_capture_area')
                 coord_left = mon[screen_capture_monitor]['left']
@@ -1051,7 +1051,7 @@ class ScreenshotThread(threading.Thread):
                 else:
                     img = img.crop(self.window_area_coordinates[1])
         else:
-            sct_img = sct.grab(self.sct_params)
+            sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
 
         return img
@@ -1105,7 +1105,7 @@ class ScreenshotThread(threading.Thread):
 
     def run(self):
         if self.screencapture_mode != 2:
-            sct = mss.mss()
+            self.sct = mss.mss()
         while not terminated:
             if not screenshot_event.wait(timeout=0.1):
                 if coordinate_selector_event.is_set():
