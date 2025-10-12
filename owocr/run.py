@@ -303,7 +303,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
 class TextFiltering:
     def __init__(self):
         self.language = config.get_general('language')
-        self.frame_stabilization = config.get_general('screen_capture_frame_stabilization')
+        self.frame_stabilization = 0 if not periodic_screenshot_queue else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('screen_capture_furigana_filter')
         self.recovered_lines_count = 0
@@ -448,6 +448,9 @@ class TextFiltering:
             return 0, None
 
     def _find_changed_lines_impl(self, current_result, previous_result, next_result=None):
+        if not current_result:
+            return None
+
         changed_lines = []
         current_lines = []
         previous_lines = []
@@ -1441,6 +1444,7 @@ def run():
     global websocket_server_thread
     global screenshot_thread
     global image_queue
+    global periodic_screenshot_queue
     global coordinate_selector_event
     non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
     read_from = config.get_general('read_from')
@@ -1469,6 +1473,7 @@ def run():
     coordinate_selector_event = threading.Event()
     notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
+    periodic_screenshot_queue = None
     key_combos = {}
 
     if combo_pause != '':
@@ -1494,7 +1499,6 @@ def run():
         if coordinate_selector_combo != '':
             key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
         if screen_capture_delay_secs != -1:
-            global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
