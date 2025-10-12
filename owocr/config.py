@@ -30,8 +30,6 @@ parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPP
                     help='OCR engine to use for two-pass processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Pause at startup.')
-parser.add_argument('-i', '--ignore_flag', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Process flagged clipboard images (images that are copied to the clipboard with the *ocr_ignore* string).')
 parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Delete image files after processing when reading from a directory.')
 parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -82,7 +80,6 @@ class Config:
         'engine_secondary': '',
         'pause_at_startup': False,
         'auto_pause' : 0,
-        'ignore_flag': False,
         'delete_images': False,
         'engines': [],
         'logger_format': '<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>',

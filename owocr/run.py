@@ -49,7 +49,7 @@ try:
     from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
                        CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
                        CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, kCGWindowImageNominalResolution
-    from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
+    from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
 except ImportError:
     pass
 
@@ -57,7 +57,6 @@ except ImportError:
 class ClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
-        self.ignore_flag = config.get_general('ignore_flag')
         self.delay_secs = config.get_general('delay_secs')
         self.last_update = time.time()
 
@@ -113,12 +112,8 @@ class ClipboardThread(threading.Thread):
                 time.sleep(0.1)
             try:
                 if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP) and win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
-                    clipboard_text = ''
-                    if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
-                        clipboard_text = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
-                    if self.ignore_flag or clipboard_text != '*ocr_ignore*':
-                        img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
-                        image_queue.put((img, False))
+                    img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
+                    image_queue.put((img, False))
                 win32clipboard.CloseClipboard()
             except pywintypes.error:
                 pass
@@ -142,7 +137,7 @@ class ClipboardThread(threading.Thread):
         else:
             is_macos = sys.platform == 'darwin'
             if is_macos:
-                from AppKit import NSPasteboard, NSPasteboardTypeTIFF, NSPasteboardTypeString
+                from AppKit import NSPasteboard, NSPasteboardTypeTIFF
                 pasteboard = NSPasteboard.generalPasteboard()
                 count = pasteboard.changeCount()
             else:
@@ -164,12 +159,8 @@ class ClipboardThread(threading.Thread):
                                 while len(pasteboard.types()) == 0:
                                     time.sleep(0.1)
                                 if NSPasteboardTypeTIFF in pasteboard.types():
-                                    clipboard_text = ''
-                                    if NSPasteboardTypeString in pasteboard.types():
-                                        clipboard_text = pasteboard.stringForType_(NSPasteboardTypeString)
-                                    if self.ignore_flag or clipboard_text != '*ocr_ignore*':
-                                        img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                                        image_queue.put((img, False))
+                                    img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
+                                    image_queue.put((img, False))
                     else:
                         old_img = img
                         try:
@@ -178,7 +169,6 @@ class ClipboardThread(threading.Thread):
                             pass
                         else:
                             if (process_clipboard and isinstance(img, Image.Image) and \
-                                (self.ignore_flag or pyperclipfix.paste() != '*ocr_ignore*') and \
                                 (not self.are_images_identical(img, old_img))):
                                 image_queue.put((img, False))
 
@@ -943,15 +933,14 @@ class ScreenshotThread(threading.Thread):
                 content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
 
                 frame = content_filter.contentRect()
-                scale = content_filter.pointPixelScale()
-                width = frame.size.width * scale
-                height = frame.size.height * scale
+                width = frame.size.width
+                height = frame.size.height
                 configuration = SCStreamConfiguration.alloc().init()
-                configuration.setSourceRect_(CGRectMake(0, 0, frame.size.width, frame.size.height))
+                configuration.setSourceRect_(CGRectMake(0, 0, width, height))
                 configuration.setWidth_(width)
                 configuration.setHeight_(height)
                 configuration.setShowsCursor_(False)
-                configuration.setCaptureResolution_(SCCaptureResolutionBest)
+                configuration.setCaptureResolution_(SCCaptureResolutionNominal)
                 configuration.setIgnoreGlobalClipSingleWindow_(True)
 
                 SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
