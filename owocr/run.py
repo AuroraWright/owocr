@@ -48,7 +48,7 @@ try:
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
     from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
                        CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
-                       CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow
+                       CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, kCGWindowImageNominalResolution
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionBest
 except ImportError:
     pass
@@ -312,7 +312,7 @@ class TextFiltering:
         self.stable_frame_data = None
         self.last_frame_text = []
         self.last_last_frame_text = []
-        self.stable_frame_text = None
+        self.stable_frame_text = []
         self.processed_stable_frame = False
         self.frame_stabilization_timestamp = 0
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E00-\u9FFF]')
@@ -388,12 +388,6 @@ class TextFiltering:
         return filtered_text
 
     def _find_changed_lines(self, pil_image, current_result):
-        if (self.last_frame_data != [None, None] and (current_result.image_properties.width != self.last_frame_data[1].image_properties.width or
-            current_result.image_properties.height != self.last_frame_data[1].image_properties.height)):
-            self.stable_frame_data = None
-            self.last_frame_data = [None, None]
-            self.last_last_frame_data = [None, None]
-
         if self.frame_stabilization == 0:
             changed_lines = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
             if changed_lines == None:
@@ -598,6 +592,11 @@ class TextFiltering:
                     self.recovered_lines_count -= 1
                     continue
 
+            changed_line = current_result[i]
+
+            if next_result != None:
+                logger.opt(ansi=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
+
             if current_lines_ocr:
                 current_line_bbox = current_lines_ocr[i].bounding_box
                 # Check if line contains only kana (no kanji)
@@ -641,11 +640,6 @@ class TextFiltering:
 
                     if is_furigana:
                         continue
-
-            changed_line = current_result[i]
-
-            if next_result != None:
-                logger.opt(ansi=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
 
             if first and len(current_text) > 3:
                 first = False
@@ -695,26 +689,22 @@ class TextFiltering:
         return current_line
 
     def _check_horizontal_overlap(self, bbox1, bbox2):
-        """
-        Calculate the horizontal overlap ratio between two bounding boxes.
-        Returns a value between 0.0 (no overlap) and 1.0 (complete overlap).
-        """
         # Calculate left and right boundaries for both boxes
         left1 = bbox1.center_x - bbox1.width / 2
         right1 = bbox1.center_x + bbox1.width / 2
         left2 = bbox2.center_x - bbox2.width / 2
         right2 = bbox2.center_x + bbox2.width / 2
-        
+
         # Calculate overlap
         overlap_left = max(left1, left2)
         overlap_right = min(right1, right2)
-        
+
         if overlap_right <= overlap_left:
             return 0.0
-        
+
         overlap_width = overlap_right - overlap_left
         smaller_width = min(bbox1.width, bbox2.width)
-        
+
         return overlap_width / smaller_width if smaller_width > 0 else 0.0
 
     def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
@@ -753,32 +743,32 @@ class TextFiltering:
             return cropped_2
 
         # Handle the case where both current and previous results are present
-        elif pil_image and pil_image_2:            
+        elif pil_image and pil_image_2:
             # Crop both images
             cropped_1 = crop_image(pil_image, changed_lines)
             cropped_2 = crop_image(pil_image_2, changed_lines_2)
-            
+
             if cropped_1 is None and cropped_2 is None:
                 return None
             elif cropped_1 is None:
                 return cropped_2
             elif cropped_2 is None:
                 return cropped_1
-            
+
             # Stitch vertically with previous_result on top
             total_width = max(cropped_1.width, cropped_2.width)
             total_height = cropped_1.height + cropped_2.height
-            
+
             # Create a new image with white background
             stitched_image = Image.new('RGB', (total_width, total_height), 'white')
-            
+
             # Paste previous (top) and current (bottom) images, centered horizontally
             prev_x_offset = (total_width - cropped_2.width) // 2
             stitched_image.paste(cropped_2, (prev_x_offset, 0))
-            
+
             curr_x_offset = (total_width - cropped_1.width) // 2
             stitched_image.paste(cropped_1, (curr_x_offset, cropped_2.height))
-            
+
             return stitched_image
         elif pil_image:
             return crop_image(pil_image, changed_lines)
@@ -790,6 +780,7 @@ class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
+        self.is_combo_screenshot = False
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.screencapture_window_active = True
@@ -821,27 +812,16 @@ class ScreenshotThread(threading.Thread):
             elif self.screencapture_mode == 3:
                 coord_left, coord_top, coord_width, coord_height = [int(c.strip()) for c in screen_capture_area.split(',')]
             else:
-                logger.opt(ansi=True).info('Launching screen coordinate picker')
-                screen_selection = get_screen_selection()
-                if not screen_selection:
-                    raise ValueError('Picker window was closed or an error occurred')
-                screen_capture_monitor = screen_selection['monitor']
-                x, y, coord_width, coord_height = screen_selection['coordinates']
-                if coord_width > 0 and coord_height > 0:
-                    coord_top = screen_capture_monitor['top'] + y
-                    coord_left = screen_capture_monitor['left'] + x
-                else:
-                    logger.opt(ansi=True).info('Selection is empty, selecting whole screen')
-                    coord_left = screen_capture_monitor['left']
-                    coord_top = screen_capture_monitor['top']
-                    coord_width = screen_capture_monitor['width']
-                    coord_height = screen_capture_monitor['height']
+                self.launch_coordinate_picker(True)
 
-            self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-            logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+            if self.screencapture_mode != 0:
+                self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
+                logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
             self.screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
+            self.window_area_coordinates = None
             area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
+
             if sys.platform == 'darwin':
                 if config.get_general('screen_capture_old_macos_api') or int(platform.mac_ver()[0].split('.')[0]) < 14:
                     self.old_macos_screenshot_api = True
@@ -890,7 +870,17 @@ class ScreenshotThread(threading.Thread):
                 logger.opt(ansi=True).info(f'Selected window: {window_title}')
             else:
                 raise ValueError('Window capture is only currently supported on Windows and macOS')
-        self.is_combo_screenshot = False
+
+            screen_capture_window_area = config.get_general('screen_capture_window_area')
+            if screen_capture_window_area != 'window':    
+                if len(screen_capture_window_area.split(',')) == 4:
+                    x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
+                    logger.opt(ansi=True).info(f'Selected window coordinates: {x},{y},{x2},{y2}')
+                    self.window_area_coordinates = (img.size, (x, y, x2, y2))
+                elif screen_capture_window_area == '':
+                    self.launch_coordinate_picker(True)
+                else:
+                    raise ValueError('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -998,6 +988,74 @@ class ScreenshotThread(threading.Thread):
         if not found:
             on_window_closed(False)
 
+    def take_screenshot(self):
+        if self.screencapture_mode == 2:
+            if sys.platform == 'darwin':
+                with objc.autorelease_pool():
+                    if self.old_macos_screenshot_api:
+                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
+                    else:
+                        self.capture_macos_window_screenshot(self.window_id)
+                        try:
+                            cg_image = self.screencapturekit_queue.get(timeout=0.5)
+                        except queue.Empty:
+                            cg_image = None
+                    if not cg_image:
+                        return None
+                    width = CGImageGetWidth(cg_image)
+                    height = CGImageGetHeight(cg_image)
+                    raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                    bpr = CGImageGetBytesPerRow(cg_image)
+                img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
+            else:
+                try:
+                    coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
+                    coord_width = right - coord_left
+                    coord_height = bottom - coord_top
+
+                    hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+                    mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                    save_dc = mfc_dc.CreateCompatibleDC()
+
+                    save_bitmap = win32ui.CreateBitmap()
+                    save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
+                    save_dc.SelectObject(save_bitmap)
+
+                    result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
+
+                    bmpinfo = save_bitmap.GetInfo()
+                    bmpstr = save_bitmap.GetBitmapBits(True)
+                except pywintypes.error:
+                    return None
+                img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+                try:
+                    win32gui.DeleteObject(save_bitmap.GetHandle())
+                except:
+                    pass
+                try:
+                    save_dc.DeleteDC()
+                except:
+                    pass
+                try:
+                    mfc_dc.DeleteDC()
+                except:
+                    pass
+                try:
+                    win32gui.ReleaseDC(self.window_handle, hwnd_dc)
+                except:
+                    pass
+            if self.window_area_coordinates:
+                if img.size != self.window_area_coordinates[0]:
+                    self.window_area_coordinates = None
+                    logger.opt(ansi=True).warning('Window size changed, discarding area selection')
+                else:
+                    img = img.crop(self.window_area_coordinates[1])
+        else:
+            sct_img = sct.grab(self.sct_params)
+            img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+
+        return img
+
     def write_result(self, result):
         if self.is_combo_screenshot:
             self.is_combo_screenshot = False
@@ -1005,72 +1063,60 @@ class ScreenshotThread(threading.Thread):
         else:
             periodic_screenshot_queue.put(result)
 
+    def launch_coordinate_picker(self, on_init):
+        if self.screencapture_mode != 2:
+            logger.opt(ansi=True).info('Launching screen coordinate picker')
+            screen_selection = get_screen_selection()
+            if not screen_selection:
+                if on_init:
+                    raise ValueError('Picker window was closed or an error occurred')
+                else:
+                    logger.opt(ansi=True).warning('Picker window was closed or an error occurred, leaving settings unchanged')
+                    return
+            screen_capture_monitor = screen_selection['monitor']
+            x, y, coord_width, coord_height = screen_selection['coordinates']
+            if coord_width > 0 and coord_height > 0:
+                coord_top = screen_capture_monitor['top'] + y
+                coord_left = screen_capture_monitor['left'] + x
+            else:
+                logger.opt(ansi=True).info('Selection is empty, selecting whole screen')
+                coord_left = screen_capture_monitor['left']
+                coord_top = screen_capture_monitor['top']
+                coord_width = screen_capture_monitor['width']
+                coord_height = screen_capture_monitor['height']
+            self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
+            logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+        else:
+            self.window_area_coordinates = None
+            img = self.take_screenshot()
+            logger.opt(ansi=True).info('Launching window coordinate picker')
+            window_selection = get_screen_selection(img)
+            if not window_selection:
+                logger.opt(ansi=True).warning('Picker window was closed or an error occurred, selecting whole window')
+            else:
+                x, y, coord_width, coord_height = window_selection['coordinates']
+                if coord_width > 0 and coord_height > 0:
+                    x2 = x + coord_width
+                    y2 = y + coord_height
+                    logger.opt(ansi=True).info(f'Selected window coordinates: {x},{y},{x2},{y2}')
+                    self.window_area_coordinates = (img.size, (x, y, x2, y2))
+                else:
+                    logger.opt(ansi=True).info('Selection is empty, selecting whole window')
+
     def run(self):
         if self.screencapture_mode != 2:
             sct = mss.mss()
         while not terminated:
             if not screenshot_event.wait(timeout=0.1):
+                if coordinate_selector_event.is_set():
+                    self.launch_coordinate_picker(False)
+                    coordinate_selector_event.clear()
                 continue
-            if self.screencapture_mode == 2:
-                if sys.platform == 'darwin':
-                    with objc.autorelease_pool():
-                        if self.old_macos_screenshot_api:
-                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming)
-                        else:
-                            self.capture_macos_window_screenshot(self.window_id)
-                            try:
-                                cg_image = self.screencapturekit_queue.get(timeout=0.5)
-                            except queue.Empty:
-                                cg_image = None
-                        if not cg_image:
-                            self.write_result(0)
-                            break
-                        width = CGImageGetWidth(cg_image)
-                        height = CGImageGetHeight(cg_image)
-                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                        bpr = CGImageGetBytesPerRow(cg_image)
-                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
-                else:
-                    try:
-                        coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
-                        coord_width = right - coord_left
-                        coord_height = bottom - coord_top
 
-                        hwnd_dc = win32gui.GetWindowDC(self.window_handle)
-                        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                        save_dc = mfc_dc.CreateCompatibleDC()
-
-                        save_bitmap = win32ui.CreateBitmap()
-                        save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
-                        save_dc.SelectObject(save_bitmap)
-
-                        result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
-
-                        bmpinfo = save_bitmap.GetInfo()
-                        bmpstr = save_bitmap.GetBitmapBits(True)
-                    except pywintypes.error:
-                        self.write_result(0)
-                        break
-                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-                    try:
-                        win32gui.DeleteObject(save_bitmap.GetHandle())
-                    except:
-                        pass
-                    try:
-                        save_dc.DeleteDC()
-                    except:
-                        pass
-                    try:
-                        mfc_dc.DeleteDC()
-                    except:
-                        pass
-                    try:
-                        win32gui.ReleaseDC(self.window_handle, hwnd_dc)
-                    except:
-                        pass
-            else:
-                sct_img = sct.grab(self.sct_params)
-                img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+            img = self.take_screenshot()
+            if not img:
+                self.write_result(0)
+                break
 
             self.write_result(img)
             screenshot_event.clear()
@@ -1275,31 +1321,43 @@ def user_input_thread_run():
     if sys.platform == 'win32':
         import msvcrt
         while not terminated:
-            user_input_bytes = msvcrt.getch()
-            try:
-                user_input = user_input_bytes.decode()
-                if user_input.lower() in 'tq':
-                    _terminate_handler()
-                elif user_input.lower() == 'p':
-                    pause_handler(False)
-                else:
-                    engine_change_handler(user_input, False)
-            except UnicodeDecodeError:
-                pass
+            if coordinate_selector_event.is_set():
+                while coordinate_selector_event.is_set():
+                    time.sleep(0.1)
+            if msvcrt.kbhit():
+                try:
+                    user_input_bytes = msvcrt.getch()
+                    user_input = user_input_bytes.decode()
+                    if user_input.lower() in 'tq':
+                        _terminate_handler()
+                    elif user_input.lower() == 'p':
+                        pause_handler(False)
+                    else:
+                        engine_change_handler(user_input, False)
+                except UnicodeDecodeError:
+                    pass
+            else:
+                time.sleep(0.1)
     else:
-        import tty, termios
+        import tty, termios, select
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
-            tty.setcbreak(sys.stdin.fileno())
+            tty.setcbreak(fd)
             while not terminated:
-                user_input = sys.stdin.read(1)
-                if user_input.lower() in 'tq':
-                    _terminate_handler()
-                elif user_input.lower() == 'p':
-                    pause_handler(False)
-                else:
-                    engine_change_handler(user_input, False)
+                if coordinate_selector_event.is_set():
+                    while coordinate_selector_event.is_set():
+                        time.sleep(0.1)
+                    tty.setcbreak(fd)
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+                if rlist:
+                    user_input = sys.stdin.read(1)
+                    if user_input.lower() in 'tq':
+                        _terminate_handler()
+                    elif user_input.lower() == 'p':
+                        pause_handler(False)
+                    else:
+                        engine_change_handler(user_input, False)
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -1320,6 +1378,10 @@ def on_window_closed(alive):
 def on_screenshot_combo():
     screenshot_thread.is_combo_screenshot = True
     screenshot_event.set()
+
+
+def on_coordinate_selector_combo():
+    coordinate_selector_event.set()
 
 
 def run():
@@ -1379,6 +1441,7 @@ def run():
     global websocket_server_thread
     global screenshot_thread
     global image_queue
+    global coordinate_selector_event
     non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
     read_from = config.get_general('read_from')
     read_from_secondary = config.get_general('read_from_secondary')
@@ -1403,6 +1466,7 @@ def run():
     combo_engine_switch = config.get_general('combo_engine_switch')
     screen_capture_periodic = False
     screen_capture_on_combo = False
+    coordinate_selector_event = threading.Event()
     notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
     key_combos = {}
@@ -1422,10 +1486,13 @@ def run():
         global screenshot_event
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_combo = config.get_general('screen_capture_combo')
+        coordinate_selector_combo = config.get_general('coordinate_selector_combo')
         last_screenshot_time = 0
         if screen_capture_combo != '':
             screen_capture_on_combo = True
             key_combos[screen_capture_combo] = on_screenshot_combo
+        if coordinate_selector_combo != '':
+            key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
         if screen_capture_delay_secs != -1:
             global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
@@ -1547,3 +1614,4 @@ def run():
         screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()
+    user_input_thread.join()

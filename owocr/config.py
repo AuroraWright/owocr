@@ -44,6 +44,8 @@ parser.add_argument('-cs', '--combo_engine_switch', type=str, default=argparse.S
                     help='Combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". To be used with combo_pause. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.SUPPRESS,
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
+parser.add_argument('-swa', '--screen_capture_window_area', type=str, default=argparse.SUPPRESS,
+                    help='If capturing with screen capture, subsection of the selected window. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "window" to use the whole window.')
 parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between screenshots when reading with screen capture. -1 to disable periodic screenshots.')
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -56,6 +58,8 @@ parser.add_argument('-sff', '--screen_capture_furigana_filter', type=str2bool, n
                     help="When reading with screen capture, try to filter furigana lines.")
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=argparse.SUPPRESS,
+                    help='When reading with screen capture, combo to wait on for invoking the coordinate picker to change the screen/window area. Example value: "<ctrl>+<shift>+c". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code for filtering screencapture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
@@ -89,12 +93,14 @@ class Config:
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',
+        'screen_capture_window_area': 'window',
         'screen_capture_delay_secs': 0,
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
         'screen_capture_line_recovery': True,
         'screen_capture_furigana_filter': True,
         'screen_capture_combo': '',
+        'coordinate_selector_combo': '',
         'screen_capture_old_macos_api': False,
         'language': 'ja',
         'output_format': 'text',
