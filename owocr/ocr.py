@@ -200,6 +200,7 @@ class MangaOcr:
     local = True
     manual_language = False
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu': False}):
         if 'manga_ocr' not in sys.modules:
@@ -233,6 +234,7 @@ class GoogleVision:
     local = False
     manual_language = False
     coordinate_support = False
+    threading_support = True
 
     def __init__(self):
         if 'google.cloud' not in sys.modules:
@@ -280,6 +282,7 @@ class GoogleLens:
     local = False
     manual_language = False
     coordinate_support = True
+    threading_support = True
 
     def __init__(self):
         if 'betterproto' not in sys.modules:
@@ -427,6 +430,7 @@ class GoogleLensWeb:
     local = False
     manual_language = False
     coordinate_support = False
+    threading_support = True
 
     def __init__(self):
         if 'pyjson5' not in sys.modules:
@@ -524,6 +528,7 @@ class Bing:
     local = False
     manual_language = False
     coordinate_support = True
+    threading_support = True
 
     def __init__(self):
         self.requests_session = requests.Session()
@@ -704,6 +709,7 @@ class AppleVision:
     local = True
     manual_language = True
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, language='ja'):
         if sys.platform != 'darwin':
@@ -756,6 +762,7 @@ class AppleLiveText:
     local = True
     manual_language = True
     coordinate_support = True
+    threading_support = False
 
     def __init__(self, language='ja'):
         if sys.platform != 'darwin':
@@ -897,6 +904,7 @@ class WinRTOCR:
     local = True
     manual_language = True
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={}, language='ja'):
         if sys.platform == 'win32':
@@ -955,6 +963,7 @@ class OneOCR:
     local = True
     manual_language = False
     coordinate_support = True
+    threading_support = True
 
     def __init__(self, config={}):
         if sys.platform == 'win32':
@@ -1079,6 +1088,7 @@ class AzureImageAnalysis:
     local = False
     manual_language = False
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={}):
         if 'azure.ai.vision.imageanalysis' not in sys.modules:
@@ -1135,6 +1145,7 @@ class EasyOCR:
     local = True
     manual_language = True
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={'gpu': True}, language='ja'):
         if 'easyocr' not in sys.modules:
@@ -1173,6 +1184,7 @@ class RapidOCR:
     local = True
     manual_language = True
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={'high_accuracy_detection': False, 'high_accuracy_recognition': True}, language='ja'):
         if 'rapidocr' not in sys.modules:
@@ -1238,6 +1250,7 @@ class OCRSpace:
     local = False
     manual_language = True
     coordinate_support = False
+    threading_support = True
 
     def __init__(self, config={}, language='ja'):
         try:

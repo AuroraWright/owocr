@@ -783,6 +783,7 @@ class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
+        self.coordinate_selector_combo_enabled = config.get_general('coordinate_selector_combo') != ''
         self.is_combo_screenshot = False
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
@@ -801,6 +802,9 @@ class ScreenshotThread(threading.Thread):
         else:
             self.screencapture_mode = 2
 
+        if self.coordinate_selector_combo_enabled:
+            self.launch_coordinate_picker(True, False)
+
         if self.screencapture_mode != 2:
             self.sct = mss.mss()
 
@@ -815,7 +819,7 @@ class ScreenshotThread(threading.Thread):
             elif self.screencapture_mode == 3:
                 coord_left, coord_top, coord_width, coord_height = [int(c.strip()) for c in screen_capture_area.split(',')]
             else:
-                self.launch_coordinate_picker(True)
+                self.launch_coordinate_picker(False, True)
 
             if self.screencapture_mode != 0:
                 self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
@@ -881,7 +885,7 @@ class ScreenshotThread(threading.Thread):
                     logger.opt(ansi=True).info(f'Selected window coordinates: {x},{y},{x2},{y2}')
                     self.window_area_coordinates = (img.size, (x, y, x2, y2))
                 elif screen_capture_window_area == '':
-                    self.launch_coordinate_picker(True)
+                    self.launch_coordinate_picker(False, False)
                 else:
                     raise ValueError('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
 
@@ -1066,10 +1070,14 @@ class ScreenshotThread(threading.Thread):
         else:
             periodic_screenshot_queue.put(result)
 
-    def launch_coordinate_picker(self, on_init):
+    def launch_coordinate_picker(self, init, must_return):
+        if init:
+            logger.opt(ansi=True).info('Preloading screen coordinate picker')
+            get_screen_selection(True, True)
+            return
         if self.screencapture_mode != 2:
             logger.opt(ansi=True).info('Launching screen coordinate picker')
-            screen_selection = get_screen_selection()
+            screen_selection = get_screen_selection(None, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if on_init:
                     raise ValueError('Picker window was closed or an error occurred')
@@ -1093,7 +1101,7 @@ class ScreenshotThread(threading.Thread):
             self.window_area_coordinates = None
             img = self.take_screenshot()
             logger.opt(ansi=True).info('Launching window coordinate picker')
-            window_selection = get_screen_selection(img)
+            window_selection = get_screen_selection(img, self.coordinate_selector_combo_enabled)
             if not window_selection:
                 logger.opt(ansi=True).warning('Picker window was closed or an error occurred, selecting whole window')
             else:
@@ -1112,7 +1120,7 @@ class ScreenshotThread(threading.Thread):
         while not terminated:
             if not screenshot_event.wait(timeout=0.1):
                 if coordinate_selector_event.is_set():
-                    self.launch_coordinate_picker(False)
+                    self.launch_coordinate_picker(False, False)
                     coordinate_selector_event.clear()
                 continue
 
@@ -1130,33 +1138,77 @@ class ScreenshotThread(threading.Thread):
             self.windows_window_tracker_instance.join()
 
 
+class SecondPassThread:
+    def __init__(self):
+        self.input_queue = queue.Queue()
+        self.output_queue = queue.Queue()
+        self.ocr_thread = None
+        self.running = False
+
+    def __del__(self):
+        self.stop()
+
+    def start(self):
+        if self.ocr_thread is None or not self.ocr_thread.is_alive():
+            self.running = True
+            self.ocr_thread = threading.Thread(target=self._process_ocr, daemon=True)
+            self.ocr_thread.start()
+    
+    def stop(self):
+        self.running = False
+        if self.ocr_thread and self.ocr_thread.is_alive():
+            self.ocr_thread.join()
+    
+    def _process_ocr(self):
+        while self.running and not terminated:
+            try:
+                img, engine_instance = self.input_queue.get(timeout=0.1)
+
+                start_time = time.time()
+                res, result_data = engine_instance(img)
+                end_time = time.time()
+
+                self.output_queue.put((res, result_data, end_time - start_time))
+            except queue.Empty:
+                continue
+
+    def submit_task(self, img, engine_instance):
+        self.input_queue.put((img, engine_instance))
+    
+    def get_result(self):
+        try:
+            return self.output_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+
 class AutopauseTimer:
     def __init__(self, timeout):
-        self.stop_event = threading.Event()
         self.timeout = timeout
         self.timer_thread = None
+        self.running = False
 
     def __del__(self):
         self.stop()
 
     def start(self):
         self.stop()
-        self.stop_event.clear()
+        self.running = True
         self.timer_thread = threading.Thread(target=self._countdown)
         self.timer_thread.start()
 
     def stop(self):
-        if not self.stop_event.is_set() and self.timer_thread and self.timer_thread.is_alive():
-            self.stop_event.set()
+        if self.running and self.timer_thread and self.timer_thread.is_alive():
+            self.running = False
             self.timer_thread.join()
 
     def _countdown(self):
         seconds = self.timeout
-        while seconds > 0 and not self.stop_event.is_set() and not terminated:
+        while seconds > 0 and self.running and not terminated:
             time.sleep(1)
             seconds -= 1
-        if not self.stop_event.is_set():
-            self.stop_event.set()
+        if self.running:
+            self.running = False
             if not (paused or terminated):
                 pause_handler(True)
 
@@ -1164,6 +1216,10 @@ class AutopauseTimer:
 class OutputResult:
     def __init__(self):
         self.filtering = TextFiltering()
+        self.second_pass_thread = SecondPassThread()
+
+    def __del__(self):
+        self.second_pass_thread.stop()
 
     def _post_process(self, text, strip_spaces):
         is_cj_text = self.filtering.cj_regex.search(''.join(text))
@@ -1195,6 +1251,7 @@ class OutputResult:
         two_pass_processing_active = False
 
         if filter_text and engine_index_2 != -1 and engine_index_2 != engine_index:
+            self.second_pass_thread.start()
             engine_instance_2 = engine_instances[engine_index_2]
             start_time = time.time()
             res2, result_data_2 = engine_instance_2(img_or_path)
@@ -1212,12 +1269,22 @@ class OutputResult:
                     if output_format != 'json':
                         if changed_regions_image:
                             img_or_path = changed_regions_image
-                else:
-                    return
 
-        start_time = time.time()
-        res, result_data = engine_instance(img_or_path)
-        end_time = time.time()
+                    if engine_instance.threading_support:
+                        self.second_pass_thread.submit_task(img_or_path, engine_instance)
+        else:
+            self.second_pass_thread.stop()
+
+        second_pass_result = self.second_pass_thread.get_result()
+        if second_pass_result:
+            res, result_data, processing_time = second_pass_result
+            two_pass_processing_active = True
+        elif two_pass_processing_active and engine_instance.threading_support:
+            return
+        else:
+            start_time = time.time()
+            res, result_data = engine_instance(img_or_path)
+            end_time = time.time()
 
         if not res:
             logger.opt(ansi=True).warning(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data}')
