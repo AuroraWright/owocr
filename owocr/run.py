@@ -1138,50 +1138,6 @@ class ScreenshotThread(threading.Thread):
             self.windows_window_tracker_instance.join()
 
 
-class SecondPassThread:
-    def __init__(self):
-        self.input_queue = queue.Queue()
-        self.output_queue = queue.Queue()
-        self.ocr_thread = None
-        self.running = False
-
-    def __del__(self):
-        self.stop()
-
-    def start(self):
-        if self.ocr_thread is None or not self.ocr_thread.is_alive():
-            self.running = True
-            self.ocr_thread = threading.Thread(target=self._process_ocr, daemon=True)
-            self.ocr_thread.start()
-    
-    def stop(self):
-        self.running = False
-        if self.ocr_thread and self.ocr_thread.is_alive():
-            self.ocr_thread.join()
-    
-    def _process_ocr(self):
-        while self.running and not terminated:
-            try:
-                img, engine_instance = self.input_queue.get(timeout=0.1)
-
-                start_time = time.time()
-                res, result_data = engine_instance(img)
-                end_time = time.time()
-
-                self.output_queue.put((res, result_data, end_time - start_time))
-            except queue.Empty:
-                continue
-
-    def submit_task(self, img, engine_instance):
-        self.input_queue.put((img, engine_instance))
-    
-    def get_result(self):
-        try:
-            return self.output_queue.get_nowait()
-        except queue.Empty:
-            return None
-
-
 class AutopauseTimer:
     def __init__(self, timeout):
         self.timeout = timeout
@@ -1213,13 +1169,58 @@ class AutopauseTimer:
                 pause_handler(True)
 
 
+class SecondPassThread:
+    def __init__(self):
+        self.input_queue = queue.Queue()
+        self.output_queue = queue.Queue()
+        self.ocr_thread = None
+        self.running = False
+
+    def __del__(self):
+        self.stop()
+
+    def start(self):
+        if self.ocr_thread is None or not self.ocr_thread.is_alive():
+            self.running = True
+            self.ocr_thread = threading.Thread(target=self._process_ocr, daemon=True)
+            self.ocr_thread.start()
+    
+    def stop(self):
+        self.running = False
+        if self.ocr_thread and self.ocr_thread.is_alive():
+            self.ocr_thread.join()
+        while not self.input_queue.empty():
+            self.input_queue.get()
+        while not self.output_queue.empty():
+            self.output_queue.get()
+
+    def _process_ocr(self):
+        while self.running and not terminated:
+            try:
+                img, engine_instance = self.input_queue.get(timeout=0.1)
+
+                start_time = time.time()
+                res, result_data = engine_instance(img)
+                end_time = time.time()
+
+                self.output_queue.put((engine_instance.readable_name, res, result_data, end_time - start_time))
+            except queue.Empty:
+                continue
+
+    def submit_task(self, img, engine_instance):
+        self.input_queue.put((img, engine_instance))
+    
+    def get_result(self):
+        try:
+            return self.output_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+
 class OutputResult:
     def __init__(self):
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
-
-    def __del__(self):
-        self.second_pass_thread.stop()
 
     def _post_process(self, text, strip_spaces):
         is_cj_text = self.filtering.cj_regex.search(''.join(text))
@@ -1249,45 +1250,48 @@ class OutputResult:
         engine_color = config.get_general('engine_color')
         engine_instance = engine_instances[engine_index]
         two_pass_processing_active = False
+        result_data = None
 
-        if filter_text and engine_index_2 != -1 and engine_index_2 != engine_index:
-            self.second_pass_thread.start()
-            engine_instance_2 = engine_instances[engine_index_2]
-            start_time = time.time()
-            res2, result_data_2 = engine_instance_2(img_or_path)
-            end_time = time.time()
-
-            if not res2:
-                logger.opt(ansi=True).warning(f'<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
-            else:
+        if filter_text:
+            if engine_index_2 != -1 and engine_index_2 != engine_index and engine_instance.threading_support:
                 two_pass_processing_active = True
-                changed_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
+                self.second_pass_thread.start()
+                engine_instance_2 = engine_instances[engine_index_2]
+                start_time = time.time()
+                res2, result_data_2 = engine_instance_2(img_or_path)
+                end_time = time.time()
 
-                if changed_lines_count:
-                    logger.opt(ansi=True).info(f"<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> found {changed_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{engine_color}>{engine_instance.readable_name}</{engine_color}>")
+                if not res2:
+                    logger.opt(ansi=True).warning(f'<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
+                else:
+                    changed_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
 
-                    if output_format != 'json':
-                        if changed_regions_image:
-                            img_or_path = changed_regions_image
+                    if changed_lines_count:
+                        logger.opt(ansi=True).info(f"<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> found {changed_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{engine_color}>{engine_instance.readable_name}</{engine_color}>")
 
-                    if engine_instance.threading_support:
+                        if output_format != 'json':
+                            if changed_regions_image:
+                                img_or_path = changed_regions_image
+
                         self.second_pass_thread.submit_task(img_or_path, engine_instance)
-        else:
-            self.second_pass_thread.stop()
 
-        second_pass_result = self.second_pass_thread.get_result()
-        if second_pass_result:
-            res, result_data, processing_time = second_pass_result
-            two_pass_processing_active = True
-        elif two_pass_processing_active and engine_instance.threading_support:
-            return
-        else:
+                second_pass_result = self.second_pass_thread.get_result()
+                if second_pass_result:
+                    engine_name, res, result_data, processing_time = second_pass_result
+                else:
+                    return
+            else:
+                self.second_pass_thread.stop()
+
+        if not result_data:
             start_time = time.time()
             res, result_data = engine_instance(img_or_path)
             end_time = time.time()
+            processing_time = end_time - start_time
+            engine_name = engine_instance.readable_name
 
         if not res:
-            logger.opt(ansi=True).warning(f'<{engine_color}>{engine_instance.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data}')
+            logger.opt(ansi=True).warning(f'<{engine_color}>{engine_name}</{engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
         verbosity = config.get_general('verbosity')
@@ -1327,7 +1331,7 @@ class OutputResult:
             else:
                 log_message_terminal = ': ' + (log_message if len(log_message) <= verbosity else log_message[:verbosity] + '[...]')
 
-            logger.opt(ansi=True).info(f'Text recognized in {end_time - start_time:0.03f}s using <{engine_color}>{engine_instance.readable_name}</{engine_color}>{log_message_terminal}')
+            logger.opt(ansi=True).info(f'Text recognized in {processing_time:0.03f}s using <{engine_color}>{engine_name}</{engine_color}>{log_message_terminal}')
 
         if notify and config.get_general('notifications'):
             notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
