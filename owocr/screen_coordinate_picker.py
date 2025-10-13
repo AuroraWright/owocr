@@ -184,7 +184,7 @@ def get_screen_selection(pil_image, permanent_process):
     result = False
     while (not result) and selector_process.is_alive():
         try:
-            result = result_queue.get(timeout=0.1)  # 60 second timeout
+            result = result_queue.get(timeout=0.1)
         except:
             continue
     if not permanent_process:

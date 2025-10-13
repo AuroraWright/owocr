@@ -291,9 +291,9 @@ class RequestHandler(socketserver.BaseRequestHandler):
 
 
 class TextFiltering:
-    def __init__(self, screen_capture_periodic):
+    def __init__(self):
         self.language = config.get_general('language')
-        self.frame_stabilization = 0 if not screen_capture_periodic else config.get_general('screen_capture_frame_stabilization')
+        self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('screen_capture_furigana_filter')
         self.recovered_lines_count = 0
@@ -1207,9 +1207,9 @@ class SecondPassThread:
 
 
 class OutputResult:
-    def __init__(self, screen_capture_periodic):
-        self.screen_capture_periodic = screen_capture_periodic
-        self.filtering = TextFiltering(screen_capture_periodic)
+    def __init__(self):
+        self.screen_capture_periodic = config.get_general('screen_capture_delay_secs') != -1
+        self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
 
     def _post_process(self, text, strip_spaces):
@@ -1599,7 +1599,7 @@ def run():
         directory_watcher_thread.start()
         read_from_readable.append(f'directory {read_from_path}')
 
-    output_result = OutputResult(screen_capture_periodic)
+    output_result = OutputResult()
 
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
