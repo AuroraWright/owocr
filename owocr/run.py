@@ -296,7 +296,6 @@ class TextFiltering:
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('screen_capture_furigana_filter')
-        self.recovered_lines_count = 0
         self.last_frame_data = [None, None]
         self.last_last_frame_data = [None, None]
         self.stable_frame_data = None
@@ -381,21 +380,21 @@ class TextFiltering:
         if self.frame_stabilization == 0:
             changed_lines = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
             if changed_lines == None:
-                return 0, None
-            changed_lines_total = len(changed_lines)
+                return 0, 0, None
+            changed_lines_count = len(changed_lines)
             self.last_frame_data = (pil_image, copy.deepcopy(current_result))
-            if changed_lines_total and config.get_general('output_format') != 'json':
+            if changed_lines_count and config.get_general('output_format') != 'json':
                 changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
                 if not changed_regions_image:
                     logger.warning('Error occurred while creating the differential image.')
-                    return 0, None
-                return changed_lines_total, changed_regions_image
+                    return 0, 0, None
+                return changed_lines_count, 0, changed_regions_image
             else:
-                return changed_lines_total, None
+                return changed_lines_count, 0, None
 
         changed_lines_stabilization = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
         if changed_lines_stabilization == None:
-            return 0, None
+            return 0, 0, None
 
         frames_match = len(changed_lines_stabilization) == 0
 
@@ -403,21 +402,21 @@ class TextFiltering:
 
         if frames_match:
             if self.processed_stable_frame:
-                return 0, None
+                return 0, 0, None
             if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
-                return 0, None
+                return 0, 0, None
             changed_lines = self._find_changed_lines_impl(current_result, self.stable_frame_data)
             if self.line_recovery and self.last_last_frame_data:
                 logger.debug(f'Checking for missed lines')
                 recovered_lines = self._find_changed_lines_impl(self.last_last_frame_data[1], self.stable_frame_data, current_result)
-                self.recovered_lines_count = len(recovered_lines) if recovered_lines else 0
+                recovered_lines_count = len(recovered_lines) if recovered_lines else 0
             else:
-                self.recovered_lines_count = 0
+                recovered_lines_count = 0
                 recovered_lines = []
             self.processed_stable_frame = True
             self.stable_frame_data = copy.deepcopy(current_result)
-            changed_lines_total = len(changed_lines) + self.recovered_lines_count
-            if changed_lines_total and config.get_general('output_format') != 'json':
+            changed_lines_count = len(changed_lines)
+            if (changed_lines_count or recovered_lines_count) and config.get_general('output_format') != 'json':
                 if recovered_lines:
                     changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, self.last_last_frame_data[0], recovered_lines)
                 else:
@@ -425,17 +424,16 @@ class TextFiltering:
 
                 if not changed_regions_image:
                     logger.warning('Error occurred while creating the differential image.')
-                    return 0, None
-                return changed_lines_total, changed_regions_image
+                    return 0, 0, None
+                return changed_lines_count, recovered_lines_count, changed_regions_image
             else:
-                return changed_lines_total, None
+                return changed_lines_count, recovered_lines_count, None
         else:
             self.last_last_frame_data = self.last_frame_data
             self.last_frame_data = (pil_image, copy.deepcopy(current_result))
-            self.recovered_lines_count = 0
             self.processed_stable_frame = False
             self.frame_stabilization_timestamp = time.time()
-            return 0, None
+            return 0, 0, None
 
     def _find_changed_lines_impl(self, current_result, previous_result, next_result=None):
         if not current_result:
@@ -486,16 +484,16 @@ class TextFiltering:
 
             if not text_similar:
                 if next_result != None:
-                    logger.opt(ansi=True).debug(f"<red>Recovered line: '{current_text}'</red>")
+                    logger.opt(colors=True).debug(f"<red>Recovered line: '{current_text}'</red>")
                 changed_lines.append(current_line)
 
         return changed_lines if processed_valid_line else None
 
-    def _find_changed_lines_text(self, current_result, current_result_ocr, two_pass_processing_active):
+    def _find_changed_lines_text(self, current_result, current_result_ocr, two_pass_processing_active, recovered_lines_count):
         frame_stabilization_active = self.frame_stabilization != 0
 
         if (not frame_stabilization_active) or two_pass_processing_active:
-            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text, None, True, frame_stabilization_active)
+            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text, None, True, recovered_lines_count)
             self.last_frame_text = current_result
             return changed_lines
 
@@ -515,12 +513,12 @@ class TextFiltering:
             if self.line_recovery and self.last_last_frame_text:
                 logger.debug(f'Checking for missed lines')
                 recovered_lines = self._find_changed_lines_text_impl(self.last_last_frame_text, None, self.stable_frame_text, current_result, True, False)
-                self.recovered_lines_count = len(recovered_lines) if recovered_lines else 0
+                recovered_lines_count = len(recovered_lines) if recovered_lines else 0
             else:
-                self.recovered_lines_count = 0
+                recovered_lines_count = 0
                 recovered_lines = []
             recovered_lines.extend(current_result)
-            changed_lines = self._find_changed_lines_text_impl(recovered_lines, current_result_ocr, self.stable_frame_text, None, True, frame_stabilization_active)
+            changed_lines = self._find_changed_lines_text_impl(recovered_lines, current_result_ocr, self.stable_frame_text, None, True, recovered_lines_count)
             self.processed_stable_frame = True
             self.stable_frame_text = current_result
             return changed_lines
@@ -531,7 +529,7 @@ class TextFiltering:
             self.frame_stabilization_timestamp = time.time()
             return []
 
-    def _find_changed_lines_text_impl(self, current_result, current_result_ocr, previous_result, next_result, filtering, skip_recovered_lines):
+    def _find_changed_lines_text_impl(self, current_result, current_result_ocr, previous_result, next_result, filtering, recovered_lines_count):
         if len(current_result) == 0:
             return []
 
@@ -557,7 +555,7 @@ class TextFiltering:
 
         all_previous_text = ''.join(all_previous_text_spliced)
 
-        logger.debug(f"Previous text: '{all_previous_text_spliced}'")
+        logger.opt(colors=True).debug(f"<magenta>Previous text: '{all_previous_text_spliced}'</magenta>")
 
         first = True
         processed_valid_line = False
@@ -573,22 +571,21 @@ class TextFiltering:
             else:
                 text_similar = current_text in all_previous_text
 
-            logger.debug(f"Current line: '{current_text}' Similar: '{text_similar}'")
+            logger.opt(colors=True).debug(f"<magenta>Current line: '{current_text}' Similar: '{text_similar}'</magenta>")
 
             if text_similar:
                 continue
 
-            if skip_recovered_lines and self.recovered_lines_count > 0:
-                # Check if any subsequent lines start with current_text
-                if any(line.startswith(current_text) for line in current_lines[i+1:]):
-                    logger.debug(f"Skipping recovered line: '{current_text}'")
-                    self.recovered_lines_count -= 1
+            if recovered_lines_count > 0:
+                if any(line.startswith(current_text) for line in current_lines):
+                    logger.opt(colors=True).debug(f"<magenta>Skipping recovered line: '{current_text}'</magenta>")
+                    recovered_lines_count -= 1
                     continue
 
             changed_line = current_result[i]
 
             if next_result != None:
-                logger.opt(ansi=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
+                logger.opt(colors=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
 
             if current_lines_ocr:
                 current_line_bbox = current_lines_ocr[i].bounding_box
@@ -605,12 +602,12 @@ class TextFiltering:
                         below_line_bbox = current_lines_ocr[j].bounding_box
                         below_line_text = current_lines[j]
 
-                        logger.debug(f"Furigana check against line: '{below_line_text}'")
+                        logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{below_line_text}'</magenta>")
 
                         # Check if the line is taller
-                        height_threshold = below_line_bbox.height * 0.6
+                        height_threshold = below_line_bbox.height * 0.7
                         is_smaller = current_line_bbox.height < height_threshold
-                        logger.debug(f"Furigana check height: '{height_threshold}' '{current_line_bbox.height}'")
+                        logger.opt(colors=True).debug(f"<magenta>Furigana check height: '{below_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
                         if not is_smaller:
                             continue
 
@@ -619,16 +616,16 @@ class TextFiltering:
                         if not below_has_kanji:
                             continue
 
-                        vertical_threshold = below_line_bbox.height * 0.8
+                        vertical_threshold = below_line_bbox.height + current_line_bbox.height
                         vertical_distance = below_line_bbox.center_y - current_line_bbox.center_y
                         horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, below_line_bbox)
 
-                        logger.debug(f"Furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'")
+                        logger.opt(colors=True).debug(f"<magenta>Furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
 
                         # If vertically close and horizontally aligned, it's likely furigana
-                        if (0 < vertical_distance < vertical_threshold * 2 and horizontal_overlap > 0.3): # At least 30% horizontal overlap
+                        if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.5):
                             is_furigana = True
-                            logger.debug(f"Skipping furigana line: '{current_text}' above line: '{below_line_text}'")
+                            logger.opt(colors=True).debug(f"<magenta>Skipping furigana line: '{current_text}' above line: '{below_line_text}'</magenta>")
                             break
 
                     if is_furigana:
@@ -640,9 +637,9 @@ class TextFiltering:
                 if filtering and all_previous_text:
                     overlap = self._find_overlap(all_previous_text, current_text)
                     if overlap and len(current_text) > len(overlap):
-                        logger.debug(f"Found overlap: '{overlap}'")
+                        logger.opt(colors=True).debug(f"<magenta>Found overlap: '{overlap}'</magenta>")
                         changed_line = self._cut_at_overlap(changed_line, overlap)
-                        logger.debug(f"After cutting: '{changed_line}'")
+                        logger.opt(colors=True).debug(f"<magenta>After cutting: '{changed_line}'</magenta>")
             changed_lines.append(changed_line)
 
         return changed_lines if processed_valid_line else []
@@ -672,7 +669,7 @@ class TextFiltering:
         overlap_pattern = r'.*?'.join(pattern_parts)
         full_pattern = r'^.*?' + overlap_pattern
 
-        logger.debug(f"Cut regex: '{full_pattern}'")
+        logger.opt(colors=True).debug(f"<magenta>Cut regex: '{full_pattern}'</magenta>")
 
         match = re.search(full_pattern, current_line)
         if match:
@@ -813,7 +810,7 @@ class ScreenshotThread(threading.Thread):
 
             if self.screencapture_mode != 0:
                 self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-                logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+                logger.info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
             self.screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             self.window_area_coordinates = None
@@ -853,7 +850,7 @@ class ScreenshotThread(threading.Thread):
                 if self.screen_capture_only_active_windows:
                     self.macos_window_tracker_instance = threading.Thread(target=self.macos_window_tracker)
                     self.macos_window_tracker_instance.start()
-                logger.opt(ansi=True).info(f'Selected window: {window_title}')
+                logger.info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
@@ -864,7 +861,7 @@ class ScreenshotThread(threading.Thread):
 
                 self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
                 self.windows_window_tracker_instance.start()
-                logger.opt(ansi=True).info(f'Selected window: {window_title}')
+                logger.info(f'Selected window: {window_title}')
             else:
                 raise ValueError('Window capture is only currently supported on Windows and macOS')
 
@@ -872,7 +869,7 @@ class ScreenshotThread(threading.Thread):
             if screen_capture_window_area != 'window':    
                 if len(screen_capture_window_area.split(',')) == 4:
                     x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
-                    logger.opt(ansi=True).info(f'Selected window coordinates: {x},{y},{x2},{y2}')
+                    logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
                     self.window_area_coordinates = (img.size, (x, y, x2, y2))
                 elif screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
@@ -1043,7 +1040,7 @@ class ScreenshotThread(threading.Thread):
             if self.window_area_coordinates:
                 if img.size != self.window_area_coordinates[0]:
                     self.window_area_coordinates = None
-                    logger.opt(ansi=True).warning('Window size changed, discarding area selection')
+                    logger.warning('Window size changed, discarding area selection')
                 else:
                     img = img.crop(self.window_area_coordinates[1])
         else:
@@ -1061,17 +1058,17 @@ class ScreenshotThread(threading.Thread):
 
     def launch_coordinate_picker(self, init, must_return):
         if init:
-            logger.opt(ansi=True).info('Preloading screen coordinate picker')
+            logger.info('Preloading screen coordinate picker')
             get_screen_selection(True, True)
             return
         if self.screencapture_mode != 2:
-            logger.opt(ansi=True).info('Launching screen coordinate picker')
+            logger.info('Launching screen coordinate picker')
             screen_selection = get_screen_selection(None, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if on_init:
                     raise ValueError('Picker window was closed or an error occurred')
                 else:
-                    logger.opt(ansi=True).warning('Picker window was closed or an error occurred, leaving settings unchanged')
+                    logger.warning('Picker window was closed or an error occurred, leaving settings unchanged')
                     return
             screen_capture_monitor = screen_selection['monitor']
             x, y, coord_width, coord_height = screen_selection['coordinates']
@@ -1079,29 +1076,29 @@ class ScreenshotThread(threading.Thread):
                 coord_top = screen_capture_monitor['top'] + y
                 coord_left = screen_capture_monitor['left'] + x
             else:
-                logger.opt(ansi=True).info('Selection is empty, selecting whole screen')
+                logger.info('Selection is empty, selecting whole screen')
                 coord_left = screen_capture_monitor['left']
                 coord_top = screen_capture_monitor['top']
                 coord_width = screen_capture_monitor['width']
                 coord_height = screen_capture_monitor['height']
             self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-            logger.opt(ansi=True).info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+            logger.info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
             self.window_area_coordinates = None
             img = self.take_screenshot()
-            logger.opt(ansi=True).info('Launching window coordinate picker')
+            logger.info('Launching window coordinate picker')
             window_selection = get_screen_selection(img, self.coordinate_selector_combo_enabled)
             if not window_selection:
-                logger.opt(ansi=True).warning('Picker window was closed or an error occurred, selecting whole window')
+                logger.warning('Picker window was closed or an error occurred, selecting whole window')
             else:
                 x, y, coord_width, coord_height = window_selection['coordinates']
                 if coord_width > 0 and coord_height > 0:
                     x2 = x + coord_width
                     y2 = y + coord_height
-                    logger.opt(ansi=True).info(f'Selected window coordinates: {x},{y},{x2},{y2}')
+                    logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
                     self.window_area_coordinates = (img.size, (x, y, x2, y2))
                 else:
-                    logger.opt(ansi=True).info('Selection is empty, selecting whole window')
+                    logger.info('Selection is empty, selecting whole window')
 
     def run(self):
         if self.screencapture_mode != 2:
@@ -1186,18 +1183,18 @@ class SecondPassThread:
     def _process_ocr(self):
         while self.running and not terminated:
             try:
-                img, engine_instance = self.input_queue.get(timeout=0.1)
+                img, engine_instance, recovered_lines_count = self.input_queue.get(timeout=30)
 
                 start_time = time.time()
                 res, result_data = engine_instance(img)
                 end_time = time.time()
 
-                self.output_queue.put((engine_instance.readable_name, res, result_data, end_time - start_time))
+                self.output_queue.put((engine_instance.readable_name, res, result_data, end_time - start_time, recovered_lines_count))
             except queue.Empty:
                 continue
 
-    def submit_task(self, img, engine_instance):
-        self.input_queue.put((img, engine_instance))
+    def submit_task(self, img, engine_instance, recovered_lines_count):
+        self.input_queue.put((img, engine_instance, recovered_lines_count))
     
     def get_result(self):
         try:
@@ -1251,23 +1248,23 @@ class OutputResult:
                 end_time = time.time()
 
                 if not res2:
-                    logger.opt(ansi=True).warning(f'<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
+                    logger.opt(colors=True).warning(f'<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
                 else:
-                    changed_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
+                    changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
 
-                    if changed_lines_count:
-                        logger.opt(ansi=True).info(f"<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> found {changed_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{engine_color}>{engine_instance.readable_name}</{engine_color}>")
+                    if changed_lines_count or recovered_lines_count:
+                        logger.opt(colors=True).info(f"<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{engine_color}>{engine_instance.readable_name}</{engine_color}>")
 
                         if output_format != 'json':
                             if changed_regions_image:
                                 img_or_path = changed_regions_image
 
                         self.second_pass_thread.start()
-                        self.second_pass_thread.submit_task(img_or_path, engine_instance)
+                        self.second_pass_thread.submit_task(img_or_path, engine_instance, recovered_lines_count)
 
                 second_pass_result = self.second_pass_thread.get_result()
                 if second_pass_result:
-                    engine_name, res, result_data, processing_time = second_pass_result
+                    engine_name, res, result_data, processing_time, recovered_lines_count = second_pass_result
                 else:
                     return
             else:
@@ -1279,9 +1276,10 @@ class OutputResult:
             end_time = time.time()
             processing_time = end_time - start_time
             engine_name = engine_instance.readable_name
+            recovered_lines_count = 0
 
         if not res:
-            logger.opt(ansi=True).warning(f'<{engine_color}>{engine_name}</{engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
+            logger.opt(colors=True).warning(f'<{engine_color}>{engine_name}</{engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
         verbosity = config.get_general('verbosity')
@@ -1303,7 +1301,7 @@ class OutputResult:
 
         if result_data_text != None:
             if filter_text:
-                text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active)
+                text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
                 if self.screen_capture_periodic and len(text_to_process) == 0:
                     return
                 output_string = self._post_process(text_to_process, True)
@@ -1311,7 +1309,7 @@ class OutputResult:
                 output_string = self._post_process(result_data_text, False)
             log_message = output_string
             if output_format == 'json':
-                logger.warning(f"Engine '{engine_instance.name}' does not support JSON output. Falling back to text.")
+                logger.opt(colors=True).warning(f"<{engine_color}>{engine_name}</{engine_color}> does not support JSON output. Falling back to text.")
 
         if verbosity != 0:
             if verbosity < -1:
@@ -1321,7 +1319,7 @@ class OutputResult:
             else:
                 log_message_terminal = ': ' + (log_message if len(log_message) <= verbosity else log_message[:verbosity] + '[...]')
 
-            logger.opt(ansi=True).info(f'Text recognized in {processing_time:0.03f}s using <{engine_color}>{engine_name}</{engine_color}>{log_message_terminal}')
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{engine_color}>{engine_name}</{engine_color}>{log_message_terminal}')
 
         if notify and config.get_general('notifications'):
             notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
@@ -1373,7 +1371,7 @@ def engine_change_handler(user_input='s', is_combo=True):
         if is_combo:
             notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
         engine_color = config.get_general('engine_color')
-        logger.opt(ansi=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
+        logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
 
 
 def user_input_thread_run():
@@ -1621,7 +1619,7 @@ def run():
         logger.error(f"Please choose one of: {', '.join(supported_engines)}")
         sys.exit(1)
 
-    logger.opt(ansi=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+    logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
 
     while not terminated:
         start_time = time.time()
