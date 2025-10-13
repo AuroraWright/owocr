@@ -1058,7 +1058,7 @@ class ScreenshotThread(threading.Thread):
 
     def launch_coordinate_picker(self, init, must_return):
         if init:
-            logger.info('Preloading screen coordinate picker')
+            logger.info('Preloading coordinate picker')
             get_screen_selection(True, True)
             return
         if self.screencapture_mode != 2:
