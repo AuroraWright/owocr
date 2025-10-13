@@ -291,9 +291,9 @@ class RequestHandler(socketserver.BaseRequestHandler):
 
 
 class TextFiltering:
-    def __init__(self):
+    def __init__(self, screen_capture_periodic):
         self.language = config.get_general('language')
-        self.frame_stabilization = 0 if not periodic_screenshot_queue else config.get_general('screen_capture_frame_stabilization')
+        self.frame_stabilization = 0 if not screen_capture_periodic else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('screen_capture_furigana_filter')
         self.recovered_lines_count = 0
@@ -1207,8 +1207,9 @@ class SecondPassThread:
 
 
 class OutputResult:
-    def __init__(self):
-        self.filtering = TextFiltering()
+    def __init__(self, screen_capture_periodic):
+        self.screen_capture_periodic = screen_capture_periodic
+        self.filtering = TextFiltering(screen_capture_periodic)
         self.second_pass_thread = SecondPassThread()
 
     def _post_process(self, text, strip_spaces):
@@ -1244,7 +1245,7 @@ class OutputResult:
         if filter_text:
             if engine_index_2 != -1 and engine_index_2 != engine_index and engine_instance.threading_support:
                 two_pass_processing_active = True
-                self.second_pass_thread.start()
+                changed_lines_count = 0
                 engine_instance_2 = engine_instances[engine_index_2]
                 start_time = time.time()
                 res2, result_data_2 = engine_instance_2(img_or_path)
@@ -1262,14 +1263,19 @@ class OutputResult:
                             if changed_regions_image:
                                 img_or_path = changed_regions_image
 
-                        self.second_pass_thread.submit_task(img_or_path, engine_instance)
+                        if self.screen_capture_periodic:
+                            self.second_pass_thread.start()
+                            self.second_pass_thread.submit_task(img_or_path, engine_instance)
 
-                second_pass_result = self.second_pass_thread.get_result()
-                if second_pass_result:
-                    engine_name, res, result_data, processing_time = second_pass_result
-                else:
+                if self.screen_capture_periodic:
+                    second_pass_result = self.second_pass_thread.get_result()
+                    if second_pass_result:
+                        engine_name, res, result_data, processing_time = second_pass_result
+                    else:
+                        return
+                elif not changed_lines_count:
                     return
-            else:
+            elif self.screen_capture_periodic:
                 self.second_pass_thread.stop()
 
         if not result_data:
@@ -1504,7 +1510,6 @@ def run():
     global websocket_server_thread
     global screenshot_thread
     global image_queue
-    global periodic_screenshot_queue
     global coordinate_selector_event
     non_path_inputs = ('screencapture', 'clipboard', 'websocket', 'unixsocket')
     read_from = config.get_general('read_from')
@@ -1533,7 +1538,6 @@ def run():
     coordinate_selector_event = threading.Event()
     notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
-    periodic_screenshot_queue = None
     key_combos = {}
 
     if combo_pause != '':
@@ -1559,6 +1563,7 @@ def run():
         if coordinate_selector_combo != '':
             key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
         if screen_capture_delay_secs != -1:
+            global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
@@ -1594,7 +1599,7 @@ def run():
         directory_watcher_thread.start()
         read_from_readable.append(f'directory {read_from_path}')
 
-    output_result = OutputResult()
+    output_result = OutputResult(screen_capture_periodic)
 
     if len(key_combos) > 0:
         key_combo_listener = keyboard.GlobalHotKeys(key_combos)
