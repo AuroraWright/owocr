@@ -493,11 +493,11 @@ class TextFiltering:
         frame_stabilization_active = self.frame_stabilization != 0
 
         if (not frame_stabilization_active) or two_pass_processing_active:
-            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text, None, True, recovered_lines_count)
+            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, None, self.last_frame_text, None, True, recovered_lines_count)
             self.last_frame_text = current_result
             return changed_lines
 
-        changed_lines_stabilization = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text, None, False, False)
+        changed_lines_stabilization = self._find_changed_lines_text_impl(current_result, current_result_ocr, None, self.last_frame_text, None, False, False)
         if changed_lines_stabilization == None:
             return []
 
@@ -512,13 +512,12 @@ class TextFiltering:
                 return []
             if self.line_recovery and self.last_last_frame_text:
                 logger.debug(f'Checking for missed lines')
-                recovered_lines = self._find_changed_lines_text_impl(self.last_last_frame_text, None, self.stable_frame_text, current_result, True, False)
+                recovered_lines = self._find_changed_lines_text_impl(self.last_last_frame_text, None, None, self.stable_frame_text, current_result, True, False)
                 recovered_lines_count = len(recovered_lines) if recovered_lines else 0
             else:
                 recovered_lines_count = 0
                 recovered_lines = []
-            recovered_lines.extend(current_result)
-            changed_lines = self._find_changed_lines_text_impl(recovered_lines, current_result_ocr, self.stable_frame_text, None, True, recovered_lines_count)
+            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, recovered_lines, self.stable_frame_text, None, True, recovered_lines_count)
             self.processed_stable_frame = True
             self.stable_frame_text = current_result
             return changed_lines
@@ -529,7 +528,10 @@ class TextFiltering:
             self.frame_stabilization_timestamp = time.time()
             return []
 
-    def _find_changed_lines_text_impl(self, current_result, current_result_ocr, previous_result, next_result, filtering, recovered_lines_count):
+    def _find_changed_lines_text_impl(self, current_result, current_result_ocr, recovered_lines, previous_result, next_result, filtering, recovered_lines_count):
+        if recovered_lines:
+            current_result = recovered_lines + current_result
+
         if len(current_result) == 0:
             return []
 
@@ -588,48 +590,51 @@ class TextFiltering:
                 logger.opt(colors=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
 
             if current_lines_ocr:
-                current_line_bbox = current_lines_ocr[i].bounding_box
-                # Check if line contains only kana (no kanji)
-                has_kanji = self.kanji_regex.search(current_text)
+                i2 = i if not recovered_lines else i - len(recovered_lines)
+                if i2 >= 0:
+                    current_line_bbox = current_lines_ocr[i2].bounding_box
 
-                if not has_kanji:
-                    for j in range(len(current_lines_ocr)):
-                        if i == j:
+                    # Check if line contains only kana (no kanji)
+                    has_kanji = self.kanji_regex.search(current_text)
+
+                    if not has_kanji:
+                        for j in range(len(current_lines_ocr)):
+                            if i2 == j:
+                                continue
+                            if not current_lines[j]:
+                                continue
+
+                            below_line_bbox = current_lines_ocr[j].bounding_box
+                            below_line_text = current_lines[j]
+
+                            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{below_line_text}'</magenta>")
+
+                            # Check if the line is taller
+                            height_threshold = below_line_bbox.height * 0.7
+                            is_smaller = current_line_bbox.height < height_threshold
+                            logger.opt(colors=True).debug(f"<magenta>Furigana check height: '{below_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
+                            if not is_smaller:
+                                continue
+
+                            # Check if the line has kanji
+                            below_has_kanji = self.kanji_regex.search(below_line_text)
+                            if not below_has_kanji:
+                                continue
+
+                            vertical_threshold = below_line_bbox.height + current_line_bbox.height
+                            vertical_distance = below_line_bbox.center_y - current_line_bbox.center_y
+                            horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, below_line_bbox)
+
+                            logger.opt(colors=True).debug(f"<magenta>Furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
+
+                            # If vertically close and horizontally aligned, it's likely furigana
+                            if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.5):
+                                is_furigana = True
+                                logger.opt(colors=True).debug(f"<magenta>Skipping furigana line: '{current_text}' above line: '{below_line_text}'</magenta>")
+                                break
+
+                        if is_furigana:
                             continue
-                        if not current_lines[j]:
-                            continue
-
-                        below_line_bbox = current_lines_ocr[j].bounding_box
-                        below_line_text = current_lines[j]
-
-                        logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{below_line_text}'</magenta>")
-
-                        # Check if the line is taller
-                        height_threshold = below_line_bbox.height * 0.7
-                        is_smaller = current_line_bbox.height < height_threshold
-                        logger.opt(colors=True).debug(f"<magenta>Furigana check height: '{below_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
-                        if not is_smaller:
-                            continue
-
-                        # Check if the line has kanji
-                        below_has_kanji = self.kanji_regex.search(below_line_text)
-                        if not below_has_kanji:
-                            continue
-
-                        vertical_threshold = below_line_bbox.height + current_line_bbox.height
-                        vertical_distance = below_line_bbox.center_y - current_line_bbox.center_y
-                        horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, below_line_bbox)
-
-                        logger.opt(colors=True).debug(f"<magenta>Furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
-
-                        # If vertically close and horizontally aligned, it's likely furigana
-                        if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.5):
-                            is_furigana = True
-                            logger.opt(colors=True).debug(f"<magenta>Skipping furigana line: '{current_text}' above line: '{below_line_text}'</magenta>")
-                            break
-
-                    if is_furigana:
-                        continue
 
             if first and len(current_text) > 3:
                 first = False
