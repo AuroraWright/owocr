@@ -1242,10 +1242,9 @@ class OutputResult:
         two_pass_processing_active = False
         result_data = None
 
-        if filter_text:
+        if filter_text and self.screen_capture_periodic:
             if engine_index_2 != -1 and engine_index_2 != engine_index and engine_instance.threading_support:
                 two_pass_processing_active = True
-                changed_lines_count = 0
                 engine_instance_2 = engine_instances[engine_index_2]
                 start_time = time.time()
                 res2, result_data_2 = engine_instance_2(img_or_path)
@@ -1263,19 +1262,15 @@ class OutputResult:
                             if changed_regions_image:
                                 img_or_path = changed_regions_image
 
-                        if self.screen_capture_periodic:
-                            self.second_pass_thread.start()
-                            self.second_pass_thread.submit_task(img_or_path, engine_instance)
+                        self.second_pass_thread.start()
+                        self.second_pass_thread.submit_task(img_or_path, engine_instance)
 
-                if self.screen_capture_periodic:
-                    second_pass_result = self.second_pass_thread.get_result()
-                    if second_pass_result:
-                        engine_name, res, result_data, processing_time = second_pass_result
-                    else:
-                        return
-                elif not changed_lines_count:
+                second_pass_result = self.second_pass_thread.get_result()
+                if second_pass_result:
+                    engine_name, res, result_data, processing_time = second_pass_result
+                else:
                     return
-            elif self.screen_capture_periodic:
+            else:
                 self.second_pass_thread.stop()
 
         if not result_data:
@@ -1309,7 +1304,7 @@ class OutputResult:
         if result_data_text != None:
             if filter_text:
                 text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active)
-                if len(text_to_process) == 0:
+                if self.screen_capture_periodic and len(text_to_process) == 0:
                     return
                 output_string = self._post_process(text_to_process, True)
             else:
