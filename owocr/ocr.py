@@ -170,7 +170,7 @@ def pil_image_to_numpy_array(img):
 def limit_image_size(img, max_size):
     img_bytes = pil_image_to_bytes(img)
     if len(img_bytes) <= max_size:
-        return img_bytes, 'png'
+        return img_bytes, 'png', img.size
 
     scaling_factor = 0.60 if any(x > 2000 for x in img.size) else 0.75
     new_w = int(img.width * scaling_factor)
@@ -178,18 +178,18 @@ def limit_image_size(img, max_size):
     resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     resized_img_bytes = pil_image_to_bytes(resized_img)
     if len(resized_img_bytes) <= max_size:
-        return resized_img_bytes, 'png'
+        return resized_img_bytes, 'png', resized_img.size
 
     for _ in range(2):
         jpeg_quality = 80
         while jpeg_quality >= 60:
             img_bytes = pil_image_to_bytes(img, 'jpeg', jpeg_quality=jpeg_quality, optimize=True)
             if len(img_bytes) <= max_size:
-                return img_bytes, 'jpeg'
+                return img_bytes, 'jpeg', img.size
             jpeg_quality -= 5
         img = resized_img
 
-    return False, ''
+    return False, '', (None, None)
 
 
 class MangaOcr:
@@ -603,7 +603,7 @@ class Bing:
         if not img:
             return (False, 'Invalid image provided')
 
-        img_bytes = self._preprocess(img)
+        img_bytes, img_size = self._preprocess(img)
         if not img_bytes:
             return (False, 'Image is too big!')
 
@@ -675,8 +675,9 @@ class Bing:
             return (False, 'Unknown error!')
 
         data = res.json()
-        
-        ocr_result = self._to_generic_result(data, img.width, img.height)
+
+        img_width, img_height = img_size
+        ocr_result = self._to_generic_result(data, img_width, img_height)
         x = (True, ocr_result)
 
         if is_path:
@@ -694,12 +695,12 @@ class Bing:
             new_h = int(img.height * resize_factor)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        img_bytes, _ = limit_image_size(img, max_byte_size)
+        img_bytes, _, img_size = limit_image_size(img, max_byte_size)
 
         if img_bytes:
             res = base64.b64encode(img_bytes).decode('utf-8')
 
-        return res
+        return res, img_size
 
 class AppleVision:
     name = 'avision'
@@ -1053,13 +1054,16 @@ class OneOCR:
             return (False, 'Invalid image provided')
 
         if sys.platform == 'win32':
+            img_processed = self._preprocess_windows(img)
+            img_width, img_height = img_processed.size
             try:
-                raw_res = self.model.recognize_pil(img)
+                raw_res = self.model.recognize_pil(img_processed)
             except RuntimeError as e:
                 return (False, e)
         else:
+            img_processed, img_width, img_height = self._preprocess_notwindows(img)
             try:
-                res = requests.post(self.url, data=self._preprocess(img), timeout=3)
+                res = requests.post(self.url, data=img_processed, timeout=3)
             except requests.exceptions.Timeout:
                 return (False, 'Request timeout!')
             except requests.exceptions.ConnectionError:
@@ -1070,15 +1074,37 @@ class OneOCR:
 
             raw_res = res.json()
 
-        ocr_response = self._to_generic_result(raw_res, img.width, img.height)
+        if 'error' in raw_res:
+            return (False, raw_res['error'])
+
+        ocr_response = self._to_generic_result(raw_res, img_width, img_height)
         x = (True, ocr_response)
 
         if is_path:
             img.close()
         return x
 
-    def _preprocess(self, img):
-        return pil_image_to_bytes(img, png_compression=1)
+    def _preprocess_windows(self, img):
+        min_pixel_size = 50
+        max_pixel_size = 10000
+
+        if any(x < min_pixel_size for x in img.size):
+            resize_factor = max(min_pixel_size / img.width, min_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        if any(x > max_pixel_size for x in img.size):
+            resize_factor = min(max_pixel_size / img.width, max_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        return img
+
+    def _preprocess_notwindows(self, img):
+        img = self._preprocess_windows(img)
+        return pil_image_to_bytes(img, png_compression=1), img.width, img.height
 
 class AzureImageAnalysis:
     name = 'azure'
@@ -1129,8 +1155,17 @@ class AzureImageAnalysis:
         return x
 
     def _preprocess(self, img):
-        if any(x < 50 for x in img.size):
-            resize_factor = max(50 / img.width, 50 / img.height)
+        min_pixel_size = 50
+        max_pixel_size = 10000
+
+        if any(x < min_pixel_size for x in img.size):
+            resize_factor = max(min_pixel_size / img.width, min_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        if any(x > max_pixel_size for x in img.size):
+            resize_factor = min(max_pixel_size / img.width, max_pixel_size / img.height)
             new_w = int(img.width * resize_factor)
             new_h = int(img.height * resize_factor)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
@@ -1286,7 +1321,7 @@ class OCRSpace:
         if not img:
             return (False, 'Invalid image provided')
 
-        img_bytes, img_extension = self._preprocess(img)
+        img_bytes, img_extension, _ = self._preprocess(img)
         if not img_bytes:
             return (False, 'Image is too big!')
 

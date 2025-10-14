@@ -1526,8 +1526,8 @@ def run():
                     engine_secondary = engine_class.key
 
     if len(engine_keys) == 0:
-        msg = 'No engines available!'
-        raise NotImplementedError(msg)
+        logger.error('No engines available!')
+        sys.exit(1)
 
     global engine_index
     global engine_index_2
@@ -1545,12 +1545,12 @@ def run():
     read_from_path = None
     read_from_readable = []
     write_to = config.get_general('write_to')
+    output_format = config.get_general('output_format')
     terminated = threading.Event()
     paused = threading.Event()
     if config.get_general('pause_at_startup'):
         paused.set()
     auto_pause = config.get_general('auto_pause')
-    output_format = config.get_general('output_format')
     clipboard_thread = None
     websocket_server_thread = None
     screenshot_thread = None
@@ -1650,12 +1650,6 @@ def run():
         auto_pause_handler = AutopauseTimer()
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
-
-    if output_format == 'json' and not engine_instances[engine_index].coordinate_support:
-        supported_engines = (engine.name for engine in engine_instances if engine.coordinate_support)
-        logger.error(f"The selected engine '{engine_instances[engine_index].name}' does not support coordinate output.")
-        logger.error(f"Please choose one of: {', '.join(supported_engines)}.")
-        sys.exit(1)
 
     logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
 
