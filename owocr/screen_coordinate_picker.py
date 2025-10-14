@@ -128,10 +128,7 @@ class ScreenSelector:
 
     def start(self):
         while True:
-            try:
-                image = self.command_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
+            image = self.command_queue.get()
 
             if image == False:
                 break

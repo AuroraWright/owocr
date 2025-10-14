@@ -779,7 +779,6 @@ class ScreenshotThread(threading.Thread):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
         self.coordinate_selector_combo_enabled = config.get_general('coordinate_selector_combo') != ''
-        self.is_combo_screenshot = False
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.screencapture_window_active = True
@@ -1063,9 +1062,8 @@ class ScreenshotThread(threading.Thread):
 
         return img
 
-    def write_result(self, result):
-        if self.is_combo_screenshot:
-            self.is_combo_screenshot = False
+    def write_result(self, result, is_combo):
+        if is_combo:
             image_queue.put((result, True))
         else:
             periodic_screenshot_queue.put(result)
@@ -1119,19 +1117,21 @@ class ScreenshotThread(threading.Thread):
         if self.screencapture_mode != 2:
             self.sct = mss.mss()
         while not terminated.is_set():
-            if not screenshot_event.wait(timeout=0.5):
-                if coordinate_selector_event.is_set():
-                    self.launch_coordinate_picker(False, False)
-                    coordinate_selector_event.clear()
+            if coordinate_selector_event.is_set():
+                self.launch_coordinate_picker(False, False)
+                coordinate_selector_event.clear()
+
+            try:
+                is_combo = screenshot_request_queue.get(timeout=0.5)
+            except queue.Empty:
                 continue
 
             img = self.take_screenshot()
             if not img:
-                self.write_result(0)
+                self.write_result(0, is_combo)
                 break
 
-            self.write_result(img)
-            screenshot_event.clear()
+            self.write_result(img, is_combo)
 
         if self.macos_window_tracker_instance:
             self.macos_window_tracker_instance.join()
@@ -1474,8 +1474,7 @@ def on_window_closed(alive):
 
 
 def on_screenshot_combo():
-    screenshot_thread.is_combo_screenshot = True
-    screenshot_event.set()
+    screenshot_request_queue.put(True)
 
 
 def on_coordinate_selector_combo():
@@ -1580,7 +1579,7 @@ def run():
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
-        global screenshot_event
+        global screenshot_request_queue
         screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
         screen_capture_combo = config.get_general('screen_capture_combo')
         coordinate_selector_combo = config.get_general('coordinate_selector_combo')
@@ -1597,7 +1596,7 @@ def run():
         if not (screen_capture_on_combo or screen_capture_periodic):
             logger.error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
             sys.exit(1)
-        screenshot_event = threading.Event()
+        screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
         read_from_readable.append('screen capture')
@@ -1661,8 +1660,8 @@ def run():
     logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
 
     while not terminated.is_set():
-        start_time = time.time()
         img = None
+        skip_waiting = False
         filter_text = False
         auto_pause = True
         notify = False
@@ -1680,12 +1679,14 @@ def run():
 
         if (not img) and screen_capture_periodic:
             if (not paused.is_set()) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
-                screenshot_event.set()
+                if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
+                    screenshot_request_queue.put(False)
                 try:
-                    img = periodic_screenshot_queue.get_nowait()
+                    img = periodic_screenshot_queue.get(timeout=0.5)
                     filter_text = True
                     last_screenshot_time = time.time()
                 except queue.Empty:
+                    skip_waiting = True
                     pass
 
         if img == 0:
@@ -1694,18 +1695,16 @@ def run():
             break
         elif img:
             output_result(img, filter_text, auto_pause, notify)
-            if isinstance(img, Path):
-                if delete_images:
-                    Path.unlink(img)
+            if isinstance(img, Path) and delete_images:
+                Path.unlink(img)
 
-        elapsed_time = time.time() - start_time
-        if (not terminated.is_set()) and elapsed_time < 0.1:
-            time.sleep(0.1 - elapsed_time)
+        if not img and not skip_waiting:
+            time.sleep(0.1)
 
+    terminate_selector_if_running()
     user_input_thread.join()
     auto_pause_handler.stop()
     output_result.second_pass_thread.stop()
-    terminate_selector_if_running()
     if websocket_server_thread:
         websocket_server_thread.stop_server()
         websocket_server_thread.join()
