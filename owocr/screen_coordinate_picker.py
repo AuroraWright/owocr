@@ -50,8 +50,11 @@ class ScreenSelector:
 
         def on_release(event):
             nonlocal start_x, start_y
+            if start_x is None or start_y is None:
+                return
+
             end_x, end_y = event.x, event.y
-            
+
             x1 = min(start_x, end_x) 
             y1 = min(start_y, end_y) 
             x2 = max(start_x, end_x) 
@@ -61,12 +64,21 @@ class ScreenSelector:
             y1 = int(y1 * scale_y)
             x2 = int(x2 * scale_x)
             y2 = int(y2 * scale_y)
-            
+
             self.on_select(monitor, (x1, y1, x2 - x1, y2 - y1))
+
+        def reset_selection(event):
+            nonlocal start_x, start_y, rect
+            if rect:
+                canvas.delete(rect)
+                rect = None
+            start_x = None
+            start_y = None
 
         canvas.bind('<ButtonPress-1>', on_click)
         canvas.bind('<B1-Motion>', on_drag)
         canvas.bind('<ButtonRelease-1>', on_release)
+        canvas.bind('<Leave>', reset_selection)
 
     def _create_selection_window(self, img, geometry, scale_x=1, scale_y=1, monitor=None):
         window = tk.Toplevel(self.root)
@@ -76,13 +88,13 @@ class ScreenSelector:
 
         img_tk = ImageTk.PhotoImage(img)
         canvas = tk.Canvas(window, cursor='cross', highlightthickness=0)
-        
+
         self._setup_selection_canvas(canvas, img_tk, scale_x, scale_y, monitor)
 
     def create_window_from_image(self, img):
         original_width, original_height = img.size
         display_monitor = None
-        
+
         for monitor in self.monitors:
             if (monitor['width'] >= original_width and 
                 monitor['height'] >= original_height):
