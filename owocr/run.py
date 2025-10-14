@@ -27,7 +27,7 @@ from desktop_notifier import DesktopNotifierSync, Urgency
 
 from .ocr import *
 from .config import config
-from .screen_coordinate_picker import get_screen_selection
+from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
 
 try:
     import win32gui
@@ -100,7 +100,7 @@ class ClipboardThread(threading.Thread):
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
         timestamp = time.time()
-        if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused:
+        if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused.is_set():
             self.last_update = timestamp
             while True:
                 try:
@@ -144,8 +144,8 @@ class ClipboardThread(threading.Thread):
             process_clipboard = False
             img = None
 
-            while not terminated:
-                if paused:
+            while not terminated.is_set():
+                if paused.is_set():
                     sleep_time = 0.5
                     process_clipboard = False
                 else:
@@ -173,7 +173,7 @@ class ClipboardThread(threading.Thread):
 
                     process_clipboard = True
 
-                if not terminated:
+                if not terminated.is_set():
                     time.sleep(sleep_time)
 
 
@@ -194,8 +194,8 @@ class DirectoryWatcher(threading.Thread):
             if path.suffix.lower() in self.allowed_extensions:
                 old_paths.add(self.get_path_key(path))
 
-        while not terminated:
-            if paused:
+        while not terminated.is_set():
+            if paused.is_set():
                 sleep_time = 0.5
             else:
                 sleep_time = self.delay_secs
@@ -205,10 +205,10 @@ class DirectoryWatcher(threading.Thread):
                         if path_key not in old_paths:
                             old_paths.add(path_key)
 
-                            if not paused:
+                            if not paused.is_set():
                                 image_queue.put((path, False))
 
-            if not terminated:
+            if not terminated.is_set():
                 time.sleep(sleep_time)
 
 
@@ -233,7 +233,7 @@ class WebsocketServerThread(threading.Thread):
         self.clients.add(websocket)
         try:
             async for message in websocket:
-                if self.read and not paused:
+                if self.read and not paused.is_set():
                     image_queue.put((message, False))
                     try:
                         await websocket.send('True')
@@ -282,7 +282,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
         except TimeoutError:
             pass
 
-        if not paused:
+        if not paused.is_set():
             image_queue.put((img, False))
             conn.sendall(b'True')
         else:
@@ -789,7 +789,8 @@ class ScreenshotThread(threading.Thread):
         elif screen_capture_area.startswith('screen_'):
             parts = screen_capture_area.split('_')
             if len(parts) != 2 or not parts[1].isdigit():
-                raise ValueError('Invalid screen_capture_area')  
+                logger.error('Invalid screen_capture_area')
+                sys.exit(1)
             screen_capture_monitor = int(parts[1])
             self.screencapture_mode = 1
         elif len(screen_capture_area.split(',')) == 4:
@@ -806,7 +807,8 @@ class ScreenshotThread(threading.Thread):
             if self.screencapture_mode == 1:
                 mon = self.sct.monitors
                 if len(mon) <= screen_capture_monitor:
-                    raise ValueError('Invalid monitor number in screen_capture_area')
+                    logger.error('Invalid monitor number in screen_capture_area')
+                    sys.exit(1)
                 coord_left = mon[screen_capture_monitor]['left']
                 coord_top = mon[screen_capture_monitor]['top']
                 coord_width = mon[screen_capture_monitor]['width']
@@ -850,7 +852,8 @@ class ScreenshotThread(threading.Thread):
                             break
 
                 if not window_index:
-                    raise ValueError(area_invalid_error)
+                    logger.error(area_invalid_error)
+                    sys.exit(1)
 
                 self.window_id = window_ids[window_index]
                 window_title = window_titles[window_index]
@@ -863,7 +866,8 @@ class ScreenshotThread(threading.Thread):
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
-                    raise ValueError(area_invalid_error)
+                    logger.error(area_invalid_error)
+                    sys.exit(1)
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
@@ -871,7 +875,8 @@ class ScreenshotThread(threading.Thread):
                 self.windows_window_tracker_instance.start()
                 logger.info(f'Selected window: {window_title}')
             else:
-                raise ValueError('Window capture is only currently supported on Windows and macOS')
+                logger.error('Window capture is only currently supported on Windows and macOS')
+                sys.exit(1)
 
             screen_capture_window_area = config.get_general('screen_capture_window_area')
             if screen_capture_window_area != 'window':    
@@ -882,7 +887,8 @@ class ScreenshotThread(threading.Thread):
                 elif screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
                 else:
-                    raise ValueError('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
+                    logger.error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
+                    sys.exit(1)
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -906,7 +912,7 @@ class ScreenshotThread(threading.Thread):
 
     def windows_window_tracker(self):
         found = True
-        while not terminated:
+        while not terminated.is_set():
             found = win32gui.IsWindow(self.window_handle)
             if not found:
                 break
@@ -914,7 +920,7 @@ class ScreenshotThread(threading.Thread):
                 self.screencapture_window_active = self.window_handle == win32gui.GetForegroundWindow()
             else:
                 self.screencapture_window_visible = not win32gui.IsIconic(self.window_handle)
-            time.sleep(0.2)
+            time.sleep(0.5)
         if not found:
             on_window_closed(False)
 
@@ -965,7 +971,7 @@ class ScreenshotThread(threading.Thread):
 
     def macos_window_tracker(self):
         found = True
-        while found and not terminated:
+        while found and not terminated.is_set():
             found = False
             is_active = False
             with objc.autorelease_pool():
@@ -985,7 +991,7 @@ class ScreenshotThread(threading.Thread):
                         found = True
             if found:
                 self.screencapture_window_active = is_active
-            time.sleep(0.2)
+            time.sleep(0.5)
         if not found:
             on_window_closed(False)
 
@@ -1074,7 +1080,8 @@ class ScreenshotThread(threading.Thread):
             screen_selection = get_screen_selection(None, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if on_init:
-                    raise ValueError('Picker window was closed or an error occurred')
+                    logger.error('Picker window was closed or an error occurred')
+                    sys.exit(1)
                 else:
                     logger.warning('Picker window was closed or an error occurred, leaving settings unchanged')
                     return
@@ -1111,8 +1118,8 @@ class ScreenshotThread(threading.Thread):
     def run(self):
         if self.screencapture_mode != 2:
             self.sct = mss.mss()
-        while not terminated:
-            if not screenshot_event.wait(timeout=0.1):
+        while not terminated.is_set():
+            if not screenshot_event.wait(timeout=0.5):
                 if coordinate_selector_event.is_set():
                     self.launch_coordinate_picker(False, False)
                     coordinate_selector_event.clear()
@@ -1133,34 +1140,50 @@ class ScreenshotThread(threading.Thread):
 
 
 class AutopauseTimer:
-    def __init__(self, timeout):
-        self.timeout = timeout
-        self.timer_thread = None
-        self.running = False
-
-    def __del__(self):
-        self.stop()
-
-    def start(self):
-        self.stop()
-        self.running = True
+    def __init__(self):
+        self.timeout = config.get_general('auto_pause')
         self.timer_thread = threading.Thread(target=self._countdown)
+        self.running = True
+        self.countdown_active = threading.Event()
+        self.allow_auto_pause = threading.Event()
+        self.seconds_remaining = 0
+        self.lock = threading.Lock()
         self.timer_thread.start()
 
+    def start_timer(self):
+        with self.lock:
+            self.seconds_remaining = self.timeout
+        self.allow_auto_pause.set()
+        self.countdown_active.set()
+
+    def stop_timer(self):
+        self.countdown_active.clear()
+        self.allow_auto_pause.set()
+
     def stop(self):
-        if self.running and self.timer_thread and self.timer_thread.is_alive():
-            self.running = False
+        self.running = False
+        self.allow_auto_pause.set()
+        self.countdown_active.set()
+        if self.timer_thread.is_alive():
             self.timer_thread.join()
 
     def _countdown(self):
-        seconds = self.timeout
-        while seconds > 0 and self.running and not terminated:
-            time.sleep(1)
-            seconds -= 1
-        if self.running:
-            self.running = False
-            if not (paused or terminated):
-                pause_handler(True)
+        while self.running:
+            self.countdown_active.wait()
+            if not self.running:
+                break
+
+            while self.running and self.countdown_active.is_set() and self.seconds_remaining > 0:
+                time.sleep(1)
+                with self.lock:
+                    self.seconds_remaining -= 1
+
+            self.allow_auto_pause.wait()
+
+            if self.running and self.countdown_active.is_set() and self.seconds_remaining == 0:
+                self.countdown_active.clear()
+                if not (paused.is_set() or terminated.is_set()):
+                    pause_handler(True)
 
 
 class SecondPassThread:
@@ -1169,9 +1192,6 @@ class SecondPassThread:
         self.output_queue = queue.Queue()
         self.ocr_thread = None
         self.running = False
-
-    def __del__(self):
-        self.stop()
 
     def start(self):
         if self.ocr_thread is None or not self.ocr_thread.is_alive():
@@ -1189,9 +1209,9 @@ class SecondPassThread:
             self.output_queue.get()
 
     def _process_ocr(self):
-        while self.running and not terminated:
+        while self.running:
             try:
-                img, engine_instance, recovered_lines_count = self.input_queue.get(timeout=0.1)
+                img, engine_instance, recovered_lines_count = self.input_queue.get(timeout=0.5)
 
                 start_time = time.time()
                 res, result_data = engine_instance(img)
@@ -1237,10 +1257,8 @@ class OutputResult:
                 lines.append(self.filtering._get_line_text(l))
         return lines
 
-    def __call__(self, img_or_path, filter_text, notify):
-        if auto_pause_handler and not filter_text:
-            auto_pause_handler.stop()
-
+    def __call__(self, img_or_path, filter_text, auto_pause, notify):
+        engine_index_local = engine_index
         output_format = config.get_general('output_format')
         engine_color = config.get_general('engine_color')
         engine_instance = engine_instances[engine_index]
@@ -1248,7 +1266,7 @@ class OutputResult:
         result_data = None
 
         if filter_text and self.screen_capture_periodic:
-            if engine_index_2 != -1 and engine_index_2 != engine_index and engine_instance.threading_support:
+            if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support:
                 two_pass_processing_active = True
                 engine_instance_2 = engine_instances[engine_index_2]
                 start_time = time.time()
@@ -1278,6 +1296,9 @@ class OutputResult:
             else:
                 self.second_pass_thread.stop()
 
+        if auto_pause_handler and auto_pause:
+            auto_pause_handler.allow_auto_pause.clear()
+
         if not result_data:
             start_time = time.time()
             res, result_data = engine_instance(img_or_path)
@@ -1287,6 +1308,8 @@ class OutputResult:
             recovered_lines_count = 0
 
         if not res:
+            if auto_pause_handler and auto_pause:
+                auto_pause_handler.stop_timer()
             logger.opt(colors=True).warning(f'<{engine_color}>{engine_name}</{engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
@@ -1310,7 +1333,9 @@ class OutputResult:
         if result_data_text != None:
             if filter_text:
                 text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
-                if self.screen_capture_periodic and len(text_to_process) == 0:
+                if self.screen_capture_periodic and not text_to_process:
+                    if auto_pause_handler and auto_pause:
+                        auto_pause_handler.allow_auto_pause.set()
                     return
                 output_string = self._post_process(text_to_process, True)
             else:
@@ -1341,8 +1366,11 @@ class OutputResult:
             with Path(write_to).open('a', encoding='utf-8') as f:
                 f.write(output_string + '\n')
 
-        if auto_pause_handler and not paused and not filter_text:
-            auto_pause_handler.start()
+        if auto_pause_handler and auto_pause:
+            if not paused.is_set():
+                auto_pause_handler.start_timer()
+            else:
+                auto_pause_handler.stop_timer()
 
 
 def get_notification_urgency():
@@ -1351,16 +1379,16 @@ def get_notification_urgency():
     return Urgency.Normal
 
 
-def pause_handler(is_combo=True):   
+def pause_handler(is_combo=True):
     global paused
-    message = 'Unpaused!' if paused else 'Paused!'
+    message = 'Unpaused!' if paused.is_set() else 'Paused!'
 
     if auto_pause_handler:
-        auto_pause_handler.stop()
+        auto_pause_handler.stop_timer()
     if is_combo:
         notifier.send(title='owocr', message=message, urgency=get_notification_urgency())
     logger.info(message)
-    paused = not paused
+    paused.clear() if paused.is_set() else paused.set()
 
 
 def engine_change_handler(user_input='s', is_combo=True):
@@ -1386,11 +1414,11 @@ def user_input_thread_run():
     def _terminate_handler():
         global terminated
         logger.info('Terminated!')
-        terminated = True
+        terminated.set()
 
     if sys.platform == 'win32':
         import msvcrt
-        while not terminated:
+        while not terminated.is_set():
             if coordinate_selector_event.is_set():
                 while coordinate_selector_event.is_set():
                     time.sleep(0.1)
@@ -1407,19 +1435,19 @@ def user_input_thread_run():
                 except UnicodeDecodeError:
                     pass
             else:
-                time.sleep(0.1)
+                time.sleep(0.2)
     else:
         import tty, termios, select
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setcbreak(fd)
-            while not terminated:
+            while not terminated.is_set():
                 if coordinate_selector_event.is_set():
                     while coordinate_selector_event.is_set():
                         time.sleep(0.1)
                     tty.setcbreak(fd)
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
                 if rlist:
                     user_input = sys.stdin.read(1)
                     if user_input.lower() in 'tq':
@@ -1435,14 +1463,14 @@ def user_input_thread_run():
 def signal_handler(sig, frame):
     global terminated
     logger.info('Terminated!')
-    terminated = True
+    terminated.set()
 
 
 def on_window_closed(alive):
     global terminated
     if not (alive or terminated):
         logger.info('Window closed or error occurred, terminated!')
-        terminated = True
+        terminated.set()
 
 
 def on_screenshot_combo():
@@ -1518,8 +1546,10 @@ def run():
     read_from_path = None
     read_from_readable = []
     write_to = config.get_general('write_to')
-    terminated = False
-    paused = config.get_general('pause_at_startup')
+    terminated = threading.Event()
+    paused = threading.Event()
+    if config.get_general('pause_at_startup'):
+        paused.set()
     auto_pause = config.get_general('auto_pause')
     output_format = config.get_general('output_format')
     clipboard_thread = None
@@ -1544,10 +1574,7 @@ def run():
     if combo_pause != '':
         key_combos[combo_pause] = pause_handler
     if combo_engine_switch != '':
-        if combo_pause != '':
-            key_combos[combo_engine_switch] = engine_change_handler
-        else:
-            raise ValueError('combo_pause must also be specified')
+        key_combos[combo_engine_switch] = engine_change_handler
 
     if 'websocket' in (read_from, read_from_secondary) or write_to == 'websocket':
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
@@ -1568,7 +1595,8 @@ def run():
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
-            raise ValueError('screen_capture_delay_secs or screen_capture_combo need to be valid values')
+            logger.error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
+            sys.exit(1)
         screenshot_event = threading.Event()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
@@ -1577,7 +1605,8 @@ def run():
         read_from_readable.append('websocket')
     if 'unixsocket' in (read_from, read_from_secondary):
         if sys.platform == 'win32':
-            raise ValueError('"unixsocket" is not currently supported on Windows')
+            logger.error('"unixsocket" is not currently supported on Windows')
+            sys.exit(1)
         socket_path = Path('/tmp/owocr.sock')
         if socket_path.exists():
             socket_path.unlink()
@@ -1591,11 +1620,13 @@ def run():
         read_from_readable.append('clipboard')
     if any(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
         if all(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
-            raise ValueError("read_from and read_from_secondary can't both be directory paths")
+            logger.error("read_from and read_from_secondary can't both be directory paths")
+            sys.exit(1)
         delete_images = config.get_general('delete_images')
         read_from_path = Path(read_from) if read_from not in non_path_inputs else Path(read_from_secondary)
         if not read_from_path.is_dir():
-            raise ValueError('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
+            logger.error('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
+            sys.exit(1)
         directory_watcher_thread = DirectoryWatcher(read_from_path)
         directory_watcher_thread.start()
         read_from_readable.append(f'directory {read_from_path}')
@@ -1610,64 +1641,71 @@ def run():
         write_to_readable = write_to
     else:
         if Path(write_to).suffix.lower() != '.txt':
-            raise ValueError('write_to must be either "websocket", "clipboard" or a path to a text file')
+            logger.error('write_to must be either "websocket", "clipboard" or a path to a text file')
+            sys.exit(1)
         write_to_readable = f'file {write_to}'
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
     signal.signal(signal.SIGINT, signal_handler)
-    if (not screen_capture_periodic) and auto_pause != 0:
-        auto_pause_handler = AutopauseTimer(auto_pause)
+    if auto_pause != 0:
+        auto_pause_handler = AutopauseTimer()
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
 
-    # if json is selected check if engine is compatible
     if output_format == 'json' and not engine_instances[engine_index].coordinate_support:
         supported_engines = (engine.name for engine in engine_instances if engine.coordinate_support)
         logger.error(f"The selected engine '{engine_instances[engine_index].name}' does not support coordinate output.")
-        logger.error(f"Please choose one of: {', '.join(supported_engines)}")
+        logger.error(f"Please choose one of: {', '.join(supported_engines)}.")
         sys.exit(1)
 
-    logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused else ''}")
+    logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
 
-    while not terminated:
+    while not terminated.is_set():
         start_time = time.time()
         img = None
         filter_text = False
+        auto_pause = True
+        notify = False
 
         if process_queue:
             try:
-                img, filter_text = image_queue.get(timeout=0.1)
-                if screen_capture_periodic:
-                    filter_text = False
+                img, is_screen_capture = image_queue.get_nowait()
+                if not screen_capture_periodic and is_screen_capture:
+                    filter_text = True
+                if is_screen_capture:
+                    auto_pause = False
                 notify = True
             except queue.Empty:
                 pass
 
         if (not img) and screen_capture_periodic:
-            if (not paused) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+            if (not paused.is_set()) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
                 screenshot_event.set()
                 try:
-                    img = periodic_screenshot_queue.get(timeout=0.1)
+                    img = periodic_screenshot_queue.get_nowait()
                     filter_text = True
-                    notify = False
                     last_screenshot_time = time.time()
                 except queue.Empty:
                     pass
 
         if img == 0:
             on_window_closed(False)
-            terminated = True
+            terminated.set()
             break
         elif img:
-            output_result(img, filter_text, notify)
+            output_result(img, filter_text, auto_pause, notify)
             if isinstance(img, Path):
                 if delete_images:
                     Path.unlink(img)
 
         elapsed_time = time.time() - start_time
-        if (not terminated) and elapsed_time < 0.1:
+        if (not terminated.is_set()) and elapsed_time < 0.1:
             time.sleep(0.1 - elapsed_time)
 
+    user_input_thread.join()
+    auto_pause_handler.stop()
+    output_result.second_pass_thread.stop()
+    terminate_selector_if_running()
     if websocket_server_thread:
         websocket_server_thread.stop_server()
         websocket_server_thread.join()
@@ -1684,4 +1722,3 @@ def run():
         screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()
-    user_input_thread.join()

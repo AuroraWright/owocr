@@ -1,6 +1,7 @@
 import multiprocessing
 import queue
 import mss
+from loguru import logger
 from PIL import Image
 import sys
 try:
@@ -170,7 +171,8 @@ def get_screen_selection(pil_image, permanent_process):
     global selector_process, result_queue, command_queue
 
     if not selector_available:
-        raise ValueError('tkinter or PIL with tkinter support are not installed, unable to open picker')
+        logger.error('tkinter or PIL with tkinter support are not installed, unable to open picker')
+        sys.exit(1)
 
     if selector_process is None or not selector_process.is_alive():
         result_queue = multiprocessing.Queue()
@@ -188,6 +190,10 @@ def get_screen_selection(pil_image, permanent_process):
         except:
             continue
     if not permanent_process:
+        terminate_selector_if_running()
+    return result
+
+def terminate_selector_if_running():
+    if selector_process and selector_process.is_alive():
         command_queue.put(False)
         selector_process.join()
-    return result
