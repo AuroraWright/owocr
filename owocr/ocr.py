@@ -191,12 +191,78 @@ def limit_image_size(img, max_size):
 
     return False, '', (None, None)
 
+def quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width=None, img_height=None):
+    center_x = (x1 + x2 + x3 + x4) / 4
+    center_y = (y1 + y2 + y3 + y4) / 4
+
+    # Calculate widths using Euclidean distance
+    width1 = sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    width2 = sqrt((x3 - x4)**2 + (y3 - y4)**2)
+    avg_width = (width1 + width2) / 2
+
+    # Calculate heights using Euclidean distance
+    height1 = sqrt((x4 - x1)**2 + (y4 - y1)**2)
+    height2 = sqrt((x3 - x2)**2 + (y3 - y2)**2)
+    avg_height = (height1 + height2) / 2
+
+    # Calculate rotation angle from the first edge
+    dx = x2 - x1
+    dy = y2 - y1
+    angle = atan2(dy, dx)
+
+    if img_width and img_height:
+        center_x = center_x / img_width
+        center_y = center_y / img_height
+        avg_width = avg_width / img_width
+        avg_height = avg_height / img_height
+
+    return BoundingBox(
+        center_x=center_x,
+        center_y=center_y,
+        width=avg_width,
+        height=avg_height,
+        rotation_z=angle
+    )
+
 def merge_bounding_boxes(ocr_element_list):
-    all_bboxes = [e.bounding_box for e in ocr_element_list]
-    min_x = min(b.center_x - b.width / 2 for b in all_bboxes)
-    max_x = max(b.center_x + b.width / 2 for b in all_bboxes)
-    min_y = min(b.center_y - b.height / 2 for b in all_bboxes)
-    max_y = max(b.center_y + b.height / 2 for b in all_bboxes)
+    all_corners = []
+
+    for element in ocr_element_list:
+        bbox = element.bounding_box
+        angle = bbox.rotation_z
+        hw = bbox.width / 2
+        hh = bbox.height / 2
+
+        if not angle:
+            corners = [
+                (bbox.center_x - hw, bbox.center_y - hh),  # Top-left
+                (bbox.center_x + hw, bbox.center_y - hh),  # Top-right  
+                (bbox.center_x + hw, bbox.center_y + hh),  # Bottom-right
+                (bbox.center_x - hw, bbox.center_y + hh)   # Bottom-left
+            ]
+            all_corners.extend(corners)
+        else:
+            local_corners = [
+                (-hw, -hh),  # Top-left
+                ( hw, -hh),  # Top-right
+                ( hw,  hh),  # Bottom-right
+                (-hw,  hh)   # Bottom-left
+            ]
+
+            # Rotate and translate corners
+            cos_angle = cos(angle)
+            sin_angle = sin(angle)
+
+            for x_local, y_local in local_corners:
+                x_rotated = x_local * cos_angle - y_local * sin_angle
+                y_rotated = x_local * sin_angle + y_local * cos_angle
+                x_global = bbox.center_x + x_rotated
+                y_global = bbox.center_y + y_rotated
+                all_corners.append((x_global, y_global))
+
+    xs, ys = zip(*all_corners)
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
 
     return BoundingBox(
         center_x=(min_x + max_x) / 2,
@@ -204,7 +270,6 @@ def merge_bounding_boxes(ocr_element_list):
         width=max_x - min_x,
         height=max_y - min_y
     )
-
 
 class MangaOcr:
     name = 'mangaocr'
@@ -549,19 +614,13 @@ class Bing:
         self.available = True
         logger.info('Bing ready')
 
-    def _quad_to_center_bbox(self, quad):
-        center_x = (quad['topLeft']['x'] + quad['topRight']['x'] + quad['bottomRight']['x'] + quad['bottomLeft']['x']) / 4
-        center_y = (quad['topLeft']['y'] + quad['topRight']['y'] + quad['bottomRight']['y'] + quad['bottomLeft']['y']) / 4
-
-        width1 = sqrt((quad['topRight']['x'] - quad['topLeft']['x'])**2 + (quad['topRight']['y'] - quad['topLeft']['y'])**2)
-        width2 = sqrt((quad['bottomRight']['x'] - quad['bottomLeft']['x'])**2 + (quad['bottomRight']['y'] - quad['bottomLeft']['y'])**2)
-        avg_width = (width1 + width2) / 2
-
-        height1 = sqrt((quad['bottomLeft']['x'] - quad['topLeft']['x'])**2 + (quad['bottomLeft']['y'] - quad['topLeft']['y'])**2)
-        height2 = sqrt((quad['bottomRight']['x'] - quad['topRight']['x'])**2 + (quad['bottomRight']['y'] - quad['topRight']['y'])**2)
-        avg_height = (height1 + height2) / 2
-
-        return BoundingBox(center_x=center_x, center_y=center_y, width=avg_width, height=avg_height)
+    def _convert_bbox(self, quad):
+        return quad_to_bounding_box(
+            quad['topLeft']['x'], quad['topLeft']['y'],
+            quad['topRight']['x'], quad['topRight']['y'],
+            quad['bottomRight']['x'], quad['bottomRight']['y'],
+            quad['bottomLeft']['x'], quad['bottomLeft']['y']
+        )
 
     def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
         paragraphs = []
@@ -586,19 +645,19 @@ class Bing:
                         for w in l.get('words', []):
                             word = Word(
                                 text=w.get('text', ''),
-                                bounding_box=self._quad_to_center_bbox(w['boundingBox'])
+                                bounding_box=self._convert_bbox(w['boundingBox'])
                             )
                             words.append(word)
 
                         line = Line(
                             text=l.get('text', ''),
-                            bounding_box=self._quad_to_center_bbox(l['boundingBox']),
+                            bounding_box=self._convert_bbox(l['boundingBox']),
                             words=words
                         )
                         lines.append(line)
 
                     paragraph = Paragraph(
-                        bounding_box=self._quad_to_center_bbox(p['boundingBox']),
+                        bounding_box=self._convert_bbox(p['boundingBox']),
                         lines=lines
                     )
                     paragraphs.append(paragraph)
@@ -870,11 +929,11 @@ class AppleLiveText:
         if self.result == None:
             return (False, 'Unknown error!')
 
-        ocr_response = OcrResult(
+        ocr_result = OcrResult(
             image_properties=ImageProperties(width=img.width, height=img.height),
             paragraphs=self.result
         )
-        x = (True, ocr_response)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -1070,21 +1129,13 @@ class OneOCR:
             except:
                 logger.warning('Error reading URL from config, OneOCR will not work!')
 
-    def _pixel_quad_to_center_bbox(self, rect, img_width, img_height):
-        x_coords = [rect['x1'], rect['x2'], rect['x3'], rect['x4']]
-        y_coords = [rect['y1'], rect['y2'], rect['y3'], rect['y4']]
-
-        center_x_px = sum(x_coords) / 4
-        center_y_px = sum(y_coords) / 4
-
-        width_px = (abs(rect['x2'] - rect['x1']) + abs(rect['x3'] - rect['x4'])) / 2
-        height_px = (abs(rect['y4'] - rect['y1']) + abs(rect['y3'] - rect['y2'])) / 2
-
-        return BoundingBox(
-            center_x=center_x_px / img_width,
-            center_y=center_y_px / img_height,
-            width=width_px / img_width,
-            height=height_px / img_height
+    def _convert_bbox(self, rect, img_width, img_height):
+        return quad_to_bounding_box(
+            rect['x1'], rect['y1'], 
+            rect['x2'], rect['y2'], 
+            rect['x3'], rect['y3'], 
+            rect['x4'], rect['y4'],
+            img_width, img_height
         )
 
     def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
@@ -1094,13 +1145,13 @@ class OneOCR:
             for i, w in enumerate(l.get('words', [])):
                 word = Word(
                     text=w.get('text', ''),
-                    bounding_box=self._pixel_quad_to_center_bbox(w['bounding_rect'], img_width, img_height)
+                    bounding_box=self._convert_bbox(w['bounding_rect'], img_width, img_height)
                 )
                 words.append(word)
 
             line = Line(
                 text=l.get('text', ''),
-                bounding_box=self._pixel_quad_to_center_bbox(l['bounding_rect'], img_width, img_height),
+                bounding_box=self._convert_bbox(l['bounding_rect'], img_width, img_height),
                 words=words
             )
             lines.append(line)
@@ -1147,8 +1198,8 @@ class OneOCR:
         if 'error' in raw_res:
             return (False, raw_res['error'])
 
-        ocr_response = self._to_generic_result(raw_res, img_width, img_height, img.width, img.height)
-        x = (True, ocr_response)
+        ocr_result = self._to_generic_result(raw_res, img_width, img_height, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -1262,22 +1313,13 @@ class EasyOCR:
             self.available = True
             logger.info('EasyOCR ready')
 
-    def _pixel_quad_to_center_bbox(self, rect, img_width, img_height):
-        x_coords = [float(point[0]) for point in rect]
-        y_coords = [float(point[1]) for point in rect]
+    def _convert_bbox(self, rect, img_width, img_height):
+        x1, y1 = float(rect[0][0]), float(rect[0][1])
+        x2, y2 = float(rect[1][0]), float(rect[1][1])
+        x3, y3 = float(rect[2][0]), float(rect[2][1])
+        x4, y4 = float(rect[3][0]), float(rect[3][1])
 
-        center_x_px = sum(x_coords) / 4
-        center_y_px = sum(y_coords) / 4
-
-        width_px = (abs(float(rect[1][0]) - float(rect[0][0])) + abs(float(rect[2][0]) - float(rect[3][0]))) / 2
-        height_px = (abs(float(rect[3][1]) - float(rect[0][1])) + abs(float(rect[2][1]) - float(rect[1][1]))) / 2
-
-        return BoundingBox(
-            center_x=center_x_px / img_width,
-            center_y=center_y_px / img_height,
-            width=width_px / img_width,
-            height=height_px / img_height
-        )
+        return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
         lines = []
@@ -1286,7 +1328,7 @@ class EasyOCR:
             quad_coords = detection[0]
             text = detection[1]
 
-            bbox = self._pixel_quad_to_center_bbox(quad_coords, img_width, img_height)
+            bbox = self._convert_bbox(quad_coords, img_width, img_height)
             word = Word(text=text, bounding_box=bbox)
             line = Line(bounding_box=bbox, words=[word], text=text)
             lines.append(line)
@@ -1365,22 +1407,13 @@ class RapidOCR:
         else:
             return LangRec.LATIN
 
-    def _pixel_quad_to_center_bbox(self, rect, img_width, img_height):
-        x_coords = [float(point[0]) for point in rect]
-        y_coords = [float(point[1]) for point in rect]
+    def _convert_bbox(self, rect, img_width, img_height):
+        x1, y1 = float(rect[0][0]), float(rect[0][1])
+        x2, y2 = float(rect[1][0]), float(rect[1][1])
+        x3, y3 = float(rect[2][0]), float(rect[2][1])
+        x4, y4 = float(rect[3][0]), float(rect[3][1])
 
-        center_x_px = sum(x_coords) / 4
-        center_y_px = sum(y_coords) / 4
-
-        width_px = (abs(float(rect[1][0]) - float(rect[0][0])) + abs(float(rect[2][0]) - float(rect[3][0]))) / 2
-        height_px = (abs(float(rect[3][1]) - float(rect[0][1])) + abs(float(rect[2][1]) - float(rect[1][1]))) / 2
-
-        return BoundingBox(
-            center_x=center_x_px / img_width,
-            center_y=center_y_px / img_height,
-            width=width_px / img_width,
-            height=height_px / img_height
-        )
+        return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
         lines = []
@@ -1388,7 +1421,7 @@ class RapidOCR:
         for i in range(len(response.boxes)):
             box = response.boxes[i]
             text = response.txts[i]
-            bbox = self._pixel_quad_to_center_bbox(box, img_width, img_height)
+            bbox = self._convert_bbox(box, img_width, img_height)
             word = Word(text=text, bounding_box=bbox)
             line = Line(bounding_box=bbox, words=[word], text=text)
             lines.append(line)
