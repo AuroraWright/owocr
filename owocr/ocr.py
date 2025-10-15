@@ -191,6 +191,20 @@ def limit_image_size(img, max_size):
 
     return False, '', (None, None)
 
+def merge_bounding_boxes(ocr_element_list):
+    all_bboxes = [e.bounding_box for e in ocr_element_list]
+    min_x = min(b.center_x - b.width / 2 for b in all_bboxes)
+    max_x = max(b.center_x + b.width / 2 for b in all_bboxes)
+    min_y = min(b.center_y - b.height / 2 for b in all_bboxes)
+    max_y = max(b.center_y + b.height / 2 for b in all_bboxes)
+
+    return BoundingBox(
+        center_x=(min_x + max_x) / 2,
+        center_y=(min_y + max_y) / 2,
+        width=max_x - min_x,
+        height=max_y - min_y
+    )
+
 
 class MangaOcr:
     name = 'mangaocr'
@@ -744,20 +758,7 @@ class AppleVision:
             lines.append(line)
 
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
-
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
@@ -913,19 +914,7 @@ class AppleLiveText:
 
         # Create a single paragraph to hold all lines
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
@@ -997,19 +986,7 @@ class WinRTOCR:
                 )
                 words.append(word)
 
-            # Approximate line bbox by combining all word bboxes
-            all_word_bboxes = [w.bounding_box for w in words]
-            min_x = min(b.center_x - b.width / 2 for b in all_word_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_word_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_word_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_word_bboxes)
-
-            l_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
+            l_bbox = merge_bounding_boxes(words)
             line = Line(
                 text=l.get('text', ''),
                 bounding_box=l_bbox,
@@ -1019,19 +996,7 @@ class WinRTOCR:
 
         # Create a single paragraph to hold all lines
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
@@ -1142,19 +1107,7 @@ class OneOCR:
 
         # Create a single paragraph to hold all lines
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
@@ -1339,20 +1292,7 @@ class EasyOCR:
             lines.append(line)
 
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
-
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
@@ -1454,20 +1394,7 @@ class RapidOCR:
             lines.append(line)
 
         if lines:
-            # Approximate paragraph bbox by combining all line bboxes
-            all_line_bboxes = [l.bounding_box for l in lines]
-            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
-            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
-            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
-            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-
-            p_bbox = BoundingBox(
-                center_x=(min_x + max_x) / 2,
-                center_y=(min_y + max_y) / 2,
-                width=max_x - min_x,
-                height=max_y - min_y
-            )
-
+            p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
             paragraphs = [paragraph]
         else:
