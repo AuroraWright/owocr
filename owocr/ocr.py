@@ -314,7 +314,7 @@ class GoogleLens:
                                 )
                             )
                             words.append(word)
-                        
+
                         l_bbox = l.get('geometry', {}).get('bounding_box', {})
                         line = Line(
                             bounding_box=BoundingBox(
@@ -538,7 +538,7 @@ class Bing:
     def _quad_to_center_bbox(self, quad):
         center_x = (quad['topLeft']['x'] + quad['topRight']['x'] + quad['bottomRight']['x'] + quad['bottomLeft']['x']) / 4
         center_y = (quad['topLeft']['y'] + quad['topRight']['y'] + quad['bottomRight']['y'] + quad['bottomLeft']['y']) / 4
-        
+
         width1 = sqrt((quad['topRight']['x'] - quad['topLeft']['x'])**2 + (quad['topRight']['y'] - quad['topLeft']['y'])**2)
         width2 = sqrt((quad['bottomRight']['x'] - quad['bottomLeft']['x'])**2 + (quad['bottomRight']['y'] - quad['bottomLeft']['y'])**2)
         avg_width = (width1 + width2) / 2
@@ -546,24 +546,24 @@ class Bing:
         height1 = sqrt((quad['bottomLeft']['x'] - quad['topLeft']['x'])**2 + (quad['bottomLeft']['y'] - quad['topLeft']['y'])**2)
         height2 = sqrt((quad['bottomRight']['x'] - quad['topRight']['x'])**2 + (quad['bottomRight']['y'] - quad['topRight']['y'])**2)
         avg_height = (height1 + height2) / 2
-        
+
         return BoundingBox(center_x=center_x, center_y=center_y, width=avg_width, height=avg_height)
 
-    def _to_generic_result(self, response, img_width, img_height):
+    def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
         paragraphs = []
         text_tag = None
         for tag in response.get('tags', []):
             if tag.get('displayName') == '##TextRecognition':
                 text_tag = tag
                 break
-        
+
         if text_tag:
             text_action = None
             for action in text_tag.get('actions', []):
                 if action.get('_type') == 'ImageKnowledge/TextRecognitionAction':
                     text_action = action
                     break
-            
+
             if text_action:
                 for p in text_action.get('data', {}).get('regions', []):
                     lines = []
@@ -582,10 +582,6 @@ class Bing:
                             words=words
                         )
                         lines.append(line)
-                    
-                    # Bing doesn't provide paragraph-level separators, so we add a newline
-                    if lines and lines[-1].words:
-                        lines[-1].words[-1].separator = '\n'
 
                     paragraph = Paragraph(
                         bounding_box=self._quad_to_center_bbox(p['boundingBox']),
@@ -594,7 +590,7 @@ class Bing:
                     paragraphs.append(paragraph)
 
         return OcrResult(
-            image_properties=ImageProperties(width=img_width, height=img_height),
+            image_properties=ImageProperties(width=og_img_width, height=og_img_height),
             paragraphs=paragraphs
         )
 
@@ -677,7 +673,7 @@ class Bing:
         data = res.json()
 
         img_width, img_height = img_size
-        ocr_result = self._to_generic_result(data, img_width, img_height)
+        ocr_result = self._to_generic_result(data, img_width, img_height, img.width, img.height)
         x = (True, ocr_result)
 
         if is_path:
@@ -709,7 +705,7 @@ class AppleVision:
     available = False
     local = True
     manual_language = True
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, language='ja'):
@@ -721,6 +717,56 @@ class AppleVision:
             self.available = True
             self.language = [language, 'en']
             logger.info('Apple Vision ready')
+
+    def _to_generic_result(self, response, img_width, img_height):
+        lines = []
+        for l in response:
+            bbox_raw = l.boundingBox()
+            bbox = BoundingBox(
+                width=bbox_raw.size.width,
+                height=bbox_raw.size.height,
+                center_x=bbox_raw.origin.x + (bbox_raw.size.width / 2),
+                center_y=(1 - bbox_raw.origin.y - bbox_raw.size.height / 2)
+            )
+
+            word = Word(
+                text=l.text(),
+                bounding_box=bbox
+            )
+            words = [word]
+
+            line = Line(
+                text=l.text(),
+                bounding_box=bbox,
+                words=words
+            )
+
+            lines.append(line)
+
+        if lines:
+            # Approximate paragraph bbox by combining all line bboxes
+            all_line_bboxes = [l.bounding_box for l in lines]
+            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
+
+            p_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
@@ -742,9 +788,8 @@ class AppleVision:
             success = handler.performRequests_error_([req], None)
             res = []
             if success[0]:
-                for result in req.results():
-                    res.append(result.text())
-                x = (True, res)
+                ocr_result = self._to_generic_result(req.results(), img.width, img.height)
+                x = (True, ocr_result)
             else:
                 x = (False, 'Unknown error!')
 
@@ -848,12 +893,11 @@ class AppleLiveText:
                             width=w_bbox.size.width,
                             height=w_bbox.size.height,
                             center_x=w_bbox.origin.x + (w_bbox.size.width / 2),
-                            center_y=w_bbox.origin.y + (w_bbox.size.height / 2),
-                            rotation_z=0.0
+                            center_y=w_bbox.origin.y + (w_bbox.size.height / 2)
                         )
                     )
                     words.append(word)
-                
+
                 l_bbox = l.quad().boundingBox()
                 line = Line(
                     text=l.string(),
@@ -861,8 +905,7 @@ class AppleLiveText:
                         width=l_bbox.size.width,
                         height=l_bbox.size.height,
                         center_x=l_bbox.origin.x + (l_bbox.size.width / 2),
-                        center_y=l_bbox.origin.y + (l_bbox.size.height / 2),
-                        rotation_z=0.0
+                        center_y=l_bbox.origin.y + (l_bbox.size.height / 2)
                     ),
                     words=words
                 )
@@ -876,7 +919,7 @@ class AppleLiveText:
             max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
             min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
             max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-            
+
             p_bbox = BoundingBox(
                 center_x=(min_x + max_x) / 2,
                 center_y=(min_y + max_y) / 2,
@@ -889,7 +932,7 @@ class AppleLiveText:
             paragraphs = []
 
         self.result = paragraphs
-        CFRunLoopStop(CFRunLoopGetCurrent())        
+        CFRunLoopStop(CFRunLoopGetCurrent())
 
     def _preprocess(self, img):
         image_bytes = pil_image_to_bytes(img, 'tiff')
@@ -904,7 +947,7 @@ class WinRTOCR:
     available = False
     local = True
     manual_language = True
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={}, language='ja'):
@@ -926,13 +969,86 @@ class WinRTOCR:
             except:
                 logger.warning('Error reading URL from config, WinRT OCR will not work!')
 
+    def _normalize_bbox(self, rect, img_width, img_height):
+        x_norm = rect['x'] / img_width
+        y_norm = rect['y'] / img_height
+        width_norm = rect['width'] / img_width
+        height_norm = rect['height'] / img_height
+
+        # Calculate center coordinates
+        center_x = x_norm + (width_norm / 2)
+        center_y = y_norm + (height_norm / 2)
+
+        return BoundingBox(
+            center_x=center_x,
+            center_y=center_y,
+            width=width_norm,
+            height=height_norm
+        )
+
+    def _to_generic_result(self, response, img_width, img_height):
+        lines = []
+        for l in response.get('lines', []):
+            words = []
+            for i, w in enumerate(l.get('words', [])):
+                word = Word(
+                    text=w.get('text', ''),
+                    bounding_box=self._normalize_bbox(w['bounding_rect'], img_width, img_height)
+                )
+                words.append(word)
+
+            # Approximate line bbox by combining all word bboxes
+            all_word_bboxes = [w.bounding_box for w in words]
+            min_x = min(b.center_x - b.width / 2 for b in all_word_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_word_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_word_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_word_bboxes)
+
+            l_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+            line = Line(
+                text=l.get('text', ''),
+                bounding_box=l_bbox,
+                words=words
+            )
+            lines.append(line)
+
+        # Create a single paragraph to hold all lines
+        if lines:
+            # Approximate paragraph bbox by combining all line bboxes
+            all_line_bboxes = [l.bounding_box for l in lines]
+            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
+
+            p_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
         if sys.platform == 'win32':
-            res = winocr.recognize_pil_sync(img, lang=self.language)['text']
+            res = winocr.recognize_pil_sync(img, lang=self.language)
         else:
             params = {'lang': self.language}
             try:
@@ -945,9 +1061,10 @@ class WinRTOCR:
             if res.status_code != 200:
                 return (False, 'Unknown error!')
 
-            res = res.json()['text']
+            res = res.json()
 
-        x = (True, res)
+        ocr_result = self._to_generic_result(res, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -994,7 +1111,7 @@ class OneOCR:
 
         center_x_px = sum(x_coords) / 4
         center_y_px = sum(y_coords) / 4
-        
+
         width_px = (abs(rect['x2'] - rect['x1']) + abs(rect['x3'] - rect['x4'])) / 2
         height_px = (abs(rect['y4'] - rect['y1']) + abs(rect['y3'] - rect['y2'])) / 2
 
@@ -1005,7 +1122,7 @@ class OneOCR:
             height=height_px / img_height
         )
 
-    def _to_generic_result(self, response, img_width, img_height):
+    def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
         lines = []
         for l in response.get('lines', []):
             words = []
@@ -1015,7 +1132,7 @@ class OneOCR:
                     bounding_box=self._pixel_quad_to_center_bbox(w['bounding_rect'], img_width, img_height)
                 )
                 words.append(word)
-            
+
             line = Line(
                 text=l.get('text', ''),
                 bounding_box=self._pixel_quad_to_center_bbox(l['bounding_rect'], img_width, img_height),
@@ -1031,7 +1148,7 @@ class OneOCR:
             max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
             min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
             max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
-            
+
             p_bbox = BoundingBox(
                 center_x=(min_x + max_x) / 2,
                 center_y=(min_y + max_y) / 2,
@@ -1044,7 +1161,7 @@ class OneOCR:
             paragraphs = []
 
         return OcrResult(
-            image_properties=ImageProperties(width=img_width, height=img_height),
+            image_properties=ImageProperties(width=og_img_width, height=og_img_height),
             paragraphs=paragraphs
         )
 
@@ -1077,7 +1194,7 @@ class OneOCR:
         if 'error' in raw_res:
             return (False, raw_res['error'])
 
-        ocr_response = self._to_generic_result(raw_res, img_width, img_height)
+        ocr_response = self._to_generic_result(raw_res, img_width, img_height, img.width, img.height)
         x = (True, ocr_response)
 
         if is_path:
@@ -1179,7 +1296,7 @@ class EasyOCR:
     available = False
     local = True
     manual_language = True
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={'gpu': True}, language='ja'):
@@ -1192,17 +1309,68 @@ class EasyOCR:
             self.available = True
             logger.info('EasyOCR ready')
 
+    def _pixel_quad_to_center_bbox(self, rect, img_width, img_height):
+        x_coords = [float(point[0]) for point in rect]
+        y_coords = [float(point[1]) for point in rect]
+
+        center_x_px = sum(x_coords) / 4
+        center_y_px = sum(y_coords) / 4
+
+        width_px = (abs(float(rect[1][0]) - float(rect[0][0])) + abs(float(rect[2][0]) - float(rect[3][0]))) / 2
+        height_px = (abs(float(rect[3][1]) - float(rect[0][1])) + abs(float(rect[2][1]) - float(rect[1][1]))) / 2
+
+        return BoundingBox(
+            center_x=center_x_px / img_width,
+            center_y=center_y_px / img_height,
+            width=width_px / img_width,
+            height=height_px / img_height
+        )
+
+    def _to_generic_result(self, response, img_width, img_height):
+        lines = []
+
+        for detection in response:
+            quad_coords = detection[0]
+            text = detection[1]
+
+            bbox = self._pixel_quad_to_center_bbox(quad_coords, img_width, img_height)
+            word = Word(text=text, bounding_box=bbox)
+            line = Line(bounding_box=bbox, words=[word], text=text)
+            lines.append(line)
+
+        if lines:
+            # Approximate paragraph bbox by combining all line bboxes
+            all_line_bboxes = [l.bounding_box for l in lines]
+            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
+
+            p_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
-        res = []
-        read_result = self.model.readtext(self._preprocess(img), detail=0)
-        for text in read_result:
-            res.append(text)
-
-        x = (True, res)
+        read_results = self.model.readtext(self._preprocess(img))
+        ocr_result = self._to_generic_result(read_results, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -1218,7 +1386,7 @@ class RapidOCR:
     available = False
     local = True
     manual_language = True
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={'high_accuracy_detection': False, 'high_accuracy_recognition': True}, language='ja'):
@@ -1257,18 +1425,67 @@ class RapidOCR:
         else:
             return LangRec.LATIN
 
+    def _pixel_quad_to_center_bbox(self, rect, img_width, img_height):
+        x_coords = [float(point[0]) for point in rect]
+        y_coords = [float(point[1]) for point in rect]
+
+        center_x_px = sum(x_coords) / 4
+        center_y_px = sum(y_coords) / 4
+
+        width_px = (abs(float(rect[1][0]) - float(rect[0][0])) + abs(float(rect[2][0]) - float(rect[3][0]))) / 2
+        height_px = (abs(float(rect[3][1]) - float(rect[0][1])) + abs(float(rect[2][1]) - float(rect[1][1]))) / 2
+
+        return BoundingBox(
+            center_x=center_x_px / img_width,
+            center_y=center_y_px / img_height,
+            width=width_px / img_width,
+            height=height_px / img_height
+        )
+
+    def _to_generic_result(self, response, img_width, img_height):
+        lines = []
+
+        for i in range(len(response.boxes)):
+            box = response.boxes[i]
+            text = response.txts[i]
+            bbox = self._pixel_quad_to_center_bbox(box, img_width, img_height)
+            word = Word(text=text, bounding_box=bbox)
+            line = Line(bounding_box=bbox, words=[word], text=text)
+            lines.append(line)
+
+        if lines:
+            # Approximate paragraph bbox by combining all line bboxes
+            all_line_bboxes = [l.bounding_box for l in lines]
+            min_x = min(b.center_x - b.width / 2 for b in all_line_bboxes)
+            max_x = max(b.center_x + b.width / 2 for b in all_line_bboxes)
+            min_y = min(b.center_y - b.height / 2 for b in all_line_bboxes)
+            max_y = max(b.center_y + b.height / 2 for b in all_line_bboxes)
+
+            p_bbox = BoundingBox(
+                center_x=(min_x + max_x) / 2,
+                center_y=(min_y + max_y) / 2,
+                width=max_x - min_x,
+                height=max_y - min_y
+            )
+
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
-        res = []
         read_results = self.model(self._preprocess(img))
-        if read_results:
-            for read_result in read_results.txts:
-                res.append(read_result)
-
-        x = (True, res)
+        ocr_result = self._to_generic_result(read_results, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -1356,5 +1573,5 @@ class OCRSpace:
             img.close()
         return x
 
-    def _preprocess(self, img):       
+    def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)

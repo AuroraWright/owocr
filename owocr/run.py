@@ -1142,7 +1142,7 @@ class ScreenshotThread(threading.Thread):
 class AutopauseTimer:
     def __init__(self):
         self.timeout = config.get_general('auto_pause')
-        self.timer_thread = threading.Thread(target=self._countdown)
+        self.timer_thread = threading.Thread(target=self._countdown, daemon=True)
         self.running = True
         self.countdown_active = threading.Event()
         self.allow_auto_pause = threading.Event()
