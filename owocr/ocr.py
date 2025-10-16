@@ -417,59 +417,29 @@ class GoogleVision:
             except:
                 logger.warning('Error parsing Google credentials, Google Vision will not work!')
 
-    def __call__(self, img):
-        img, is_path = input_to_pil_image(img)
-        if not img:
-            return (False, 'Invalid image provided')
+    def _break_type_to_char(self, break_type):
+        if break_type == vision.TextAnnotation.DetectedBreak.BreakType.SPACE:
+            return ' '
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.SURE_SPACE:
+            return ' '
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.EOL_SURE_SPACE:
+            return '\n'
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.HYPHEN:
+            return '-'
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.LINE_BREAK:
+            return '\n'
+        return ''
 
-        image_bytes = self._preprocess(img)
-        image = vision.Image(content=image_bytes)
+    def _convert_bbox(self, quad, img_width, img_height):
+        vertices = quad.vertices
 
-        try:
-            response = self.client.document_text_detection(image=image)
-        except ServiceUnavailable:
-            return (False, 'Connection error!')
-        except Exception as e:
-            return (False, 'Unknown error!')
-
-        ocr_result = self._to_generic_result(response.full_text_annotation, img.width, img.height)
-        x = (True, ocr_result)
-
-        if is_path:
-            img.close()
-        return x
-
-    def _to_generic_result(self, full_text_annotation, img_width, img_height):
-        paragraphs = []
-
-        if full_text_annotation:
-            for page in full_text_annotation.pages:
-                if page.width == img_width and page.height == img_height:
-                    for block in page.blocks:
-                        for google_paragraph in block.paragraphs:
-                            p_bbox = self._convert_bbox(google_paragraph.bounding_box, img_width, img_height)
-                            lines = self._create_lines_from_google_paragraph(google_paragraph, img_width, img_height)
-                            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
-                            paragraphs.append(paragraph)
-
-        return OcrResult(
-            image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+        return quad_to_bounding_box(
+            vertices[0].x, vertices[0].y,
+            vertices[1].x, vertices[1].y,
+            vertices[2].x, vertices[2].y,
+            vertices[3].x, vertices[3].y,
+            img_width, img_height
         )
-
-    def _create_lines_from_google_paragraph(self, google_paragraph, img_width, img_height):
-        lines = []
-        words = []
-        for google_word in google_paragraph.words:
-            word = self._create_word_from_google_word(google_word, img_width, img_height)
-            words.append(word)
-            if word.separator == '\n':
-                l_bbox = merge_bounding_boxes(words, True)
-                line = Line(bounding_box=l_bbox, words=words)
-                lines.append(line)
-                words = []
-
-        return lines
 
     def _create_word_from_google_word(self, google_word, img_width, img_height):
         w_bbox = self._convert_bbox(google_word.bounding_box, img_width, img_height)
@@ -497,29 +467,65 @@ class GoogleVision:
             separator=w_separator
         )
 
-    def _break_type_to_char(self, break_type):
-        if break_type == vision.TextAnnotation.DetectedBreak.BreakType.SPACE:
-            return ' '
-        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.SURE_SPACE:
-            return ' '
-        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.EOL_SURE_SPACE:
-            return '\n'
-        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.HYPHEN:
-            return '-'
-        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.LINE_BREAK:
-            return '\n'
-        return ''
+    def _create_lines_from_google_paragraph(self, google_paragraph, p_bbox, img_width, img_height):
+        lines = []
+        words = []
+        for google_word in google_paragraph.words:
+            word = self._create_word_from_google_word(google_word, img_width, img_height)
+            words.append(word)
+            if word.separator == '\n':
+                line = Line(bounding_box=BoundingBox(0,0,0,0), words=words)
+                lines.append(line)
+                words = []
 
-    def _convert_bbox(self, quad, img_width, img_height):
-        vertices = quad.vertices
+        if len(lines) == 1:
+            lines[0].bounding_box = p_bbox
+        else:
+            for line in lines:
+                l_bbox = merge_bounding_boxes(line.words, True)
+                line.bounding_box = l_bbox
 
-        return quad_to_bounding_box(
-            vertices[0].x, vertices[0].y,
-            vertices[1].x, vertices[1].y,
-            vertices[2].x, vertices[2].y,
-            vertices[3].x, vertices[3].y,
-            img_width, img_height
+        return lines
+
+    def _to_generic_result(self, full_text_annotation, img_width, img_height):
+        paragraphs = []
+
+        if full_text_annotation:
+            for page in full_text_annotation.pages:
+                if page.width == img_width and page.height == img_height:
+                    for block in page.blocks:
+                        for google_paragraph in block.paragraphs:
+                            p_bbox = self._convert_bbox(google_paragraph.bounding_box, img_width, img_height)
+                            lines = self._create_lines_from_google_paragraph(google_paragraph, p_bbox, img_width, img_height)
+                            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+                            paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
         )
+
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        image_bytes = self._preprocess(img)
+        image = vision.Image(content=image_bytes)
+
+        try:
+            response = self.client.document_text_detection(image=image)
+        except ServiceUnavailable:
+            return (False, 'Connection error!')
+        except Exception as e:
+            return (False, 'Unknown error!')
+
+        ocr_result = self._to_generic_result(response.full_text_annotation, img.width, img.height)
+        x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x
 
     def _preprocess(self, img):
         return pil_image_to_bytes(img)
@@ -1322,24 +1328,14 @@ class AzureImageAnalysis:
             except:
                 logger.warning('Error parsing Azure credentials, Azure Image Analysis will not work!')
 
-    def __call__(self, img):
-        img, is_path = input_to_pil_image(img)
-        if not img:
-            return (False, 'Invalid image provided')
-
-        try:
-            read_result = self.client.analyze(image_data=self._preprocess(img), visual_features=[VisualFeatures.READ])
-        except ServiceRequestError:
-            return (False, 'Connection error!')
-        except:
-            return (False, 'Unknown error!')
-
-        ocr_result = self._to_generic_result(read_result, img.width, img.height)
-        x = (True, ocr_result)
-
-        if is_path:
-            img.close()
-        return x
+    def _convert_bbox(self, rect, img_width, img_height):
+        return quad_to_bounding_box(
+            rect[0]['x'], rect[0]['y'],
+            rect[1]['x'], rect[1]['y'],
+            rect[2]['x'], rect[2]['y'],
+            rect[3]['x'], rect[3]['y'],
+            img_width, img_height
+        )
 
     def _to_generic_result(self, read_result, img_width, img_height):
         paragraphs = []
@@ -1374,14 +1370,24 @@ class AzureImageAnalysis:
             paragraphs=paragraphs
         )
 
-    def _convert_bbox(self, rect, img_width, img_height):
-        return quad_to_bounding_box(
-            rect[0]['x'], rect[0]['y'],
-            rect[1]['x'], rect[1]['y'],
-            rect[2]['x'], rect[2]['y'],
-            rect[3]['x'], rect[3]['y'],
-            img_width, img_height
-        )
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        try:
+            read_result = self.client.analyze(image_data=self._preprocess(img), visual_features=[VisualFeatures.READ])
+        except ServiceRequestError:
+            return (False, 'Connection error!')
+        except:
+            return (False, 'Unknown error!')
+
+        ocr_result = self._to_generic_result(read_result, img.width, img.height)
+        x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x
 
     def _preprocess(self, img):
         min_pixel_size = 50
@@ -1601,6 +1607,50 @@ class OCRSpace:
         else:
             return 'auto'
 
+    def _convert_bbox(self, word_data, img_width, img_height):
+        left = word_data['Left'] / img_width
+        top = word_data['Top'] / img_height
+        width = word_data['Width'] / img_width
+        height = word_data['Height'] / img_height
+
+        center_x = left + width / 2
+        center_y = top + height / 2
+
+        return BoundingBox(
+            center_x=center_x,
+            center_y=center_y,
+            width=width,
+            height=height
+        )
+
+    def _to_generic_result(self, api_result, img_width, img_height, og_img_width, og_img_height):
+        parsed_result = api_result['ParsedResults'][0]
+        text_overlay = parsed_result.get('TextOverlay', {})
+
+        image_props = ImageProperties(width=og_img_width, height=og_img_height)
+        ocr_result = OcrResult(image_properties=image_props)
+
+        lines_data = text_overlay.get('Lines', [])
+
+        lines = []
+        for line_data in lines_data:
+            words = []
+            for word_data in line_data.get('Words', []):
+                w_bbox = self._convert_bbox(word_data, img_width, img_height)
+                words.append(Word(text=word_data['WordText'], bounding_box=w_bbox))
+
+            l_bbox = merge_bounding_boxes(words)
+            lines.append(Line(bounding_box=l_bbox, words=words))
+
+        if lines:
+            p_bbox = merge_bounding_boxes(lines)
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            ocr_result.paragraphs = [paragraph]
+        else:
+            ocr_result.paragraphs = []
+
+        return ocr_result
+
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
         if not img:
@@ -1643,50 +1693,6 @@ class OCRSpace:
         if is_path:
             img.close()
         return x
-
-    def _to_generic_result(self, api_result, img_width, img_height, og_img_width, og_img_height):
-        parsed_result = api_result['ParsedResults'][0]
-        text_overlay = parsed_result.get('TextOverlay', {})
-
-        image_props = ImageProperties(width=og_img_width, height=og_img_height)
-        ocr_result = OcrResult(image_properties=image_props)
-
-        lines_data = text_overlay.get('Lines', [])
-
-        lines = []
-        for line_data in lines_data:
-            words = []
-            for word_data in line_data.get('Words', []):
-                w_bbox = self._convert_bbox(word_data, img_width, img_height)
-                words.append(Word(text=word_data['WordText'], bounding_box=w_bbox))
-
-            l_bbox = merge_bounding_boxes(words)
-            lines.append(Line(bounding_box=l_bbox, words=words))
-
-        if lines:
-            p_bbox = merge_bounding_boxes(lines)
-            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
-            ocr_result.paragraphs = [paragraph]
-        else:
-            ocr_result.paragraphs = []
-
-        return ocr_result
-
-    def _convert_bbox(self, word_data, img_width, img_height):
-        left = word_data['Left'] / img_width
-        top = word_data['Top'] / img_height
-        width = word_data['Width'] / img_width
-        height = word_data['Height'] / img_height
-
-        center_x = left + width / 2
-        center_y = top + height / 2
-
-        return BoundingBox(
-            center_x=center_x,
-            center_y=center_y,
-            width=width,
-            height=height
-        )
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)
