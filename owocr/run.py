@@ -1435,16 +1435,21 @@ def user_input_thread_run():
             else:
                 time.sleep(0.2)
     else:
-        import tty, termios, select
+        import termios, select
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
+        new_settings = termios.tcgetattr(fd)
+        new_settings[0] &= ~termios.IXON
+        new_settings[3] &= ~(termios.ICANON | termios.ECHO)
+        new_settings[6][termios.VMIN] = 1
+        new_settings[6][termios.VTIME] = 0
         try:
-            tty.setcbreak(fd)
+            termios.tcsetattr(fd, termios.TCSANOW, new_settings)
             while not terminated.is_set():
                 if coordinate_selector_event.is_set():
                     while coordinate_selector_event.is_set():
                         time.sleep(0.1)
-                    tty.setcbreak(fd)
+                    termios.tcsetattr(fd, termios.TCSANOW, new_settings)
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
                 if rlist:
                     user_input = sys.stdin.read(1)
