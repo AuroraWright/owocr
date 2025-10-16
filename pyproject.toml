@@ -61,10 +61,6 @@ lens = [
     "betterproto==2.0.0b7"
 ]
 
-lensweb = [
-    "pyjson5"
-]
-
 gvision = [
     "google-cloud-vision"
 ]

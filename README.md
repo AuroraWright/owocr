@@ -38,7 +38,6 @@ Additionally:
 
 ## Cloud providers
 - Google Lens: Google Vision in disguise (no need for API keys!), install with `pip install owocr[lens]` ("l" key)
-- Google Lens (web): alternative version of Lens (Google webpage version). Results should be the same but it's much slower. Install with `pip install owocr[lensweb]` ("k" key)
 - Bing: Azure in disguise (no need for API keys!) ("b" key)
 - Google Vision: install with `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` ("g" key)
 - Azure Image Analysis: install with `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file ("v" key)

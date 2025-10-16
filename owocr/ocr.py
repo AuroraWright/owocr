@@ -68,11 +68,6 @@ except ImportError:
     pass
 
 try:
-    import pyjson5
-except ImportError:
-    pass
-
-try:
     import betterproto
     from .lens_betterproto import *
     import random
@@ -224,52 +219,145 @@ def quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width=None, img_hei
         rotation_z=angle
     )
 
-def merge_bounding_boxes(ocr_element_list):
-    all_corners = []
+def merge_bounding_boxes(ocr_element_list, rotated=False):
+    def _get_all_corners(ocr_element_list):
+        corners = []
+        for element in ocr_element_list:
+            bbox = element.bounding_box
+            angle = bbox.rotation_z or 0.0
+            hw, hh = bbox.width / 2.0, bbox.height / 2.0
+            cx, cy = bbox.center_x, bbox.center_y
 
-    for element in ocr_element_list:
-        bbox = element.bounding_box
-        angle = bbox.rotation_z
-        hw = bbox.width / 2
-        hh = bbox.height / 2
+            # Local corner offsets
+            local = np.array([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]])
 
-        if not angle:
-            corners = [
-                (bbox.center_x - hw, bbox.center_y - hh),  # Top-left
-                (bbox.center_x + hw, bbox.center_y - hh),  # Top-right  
-                (bbox.center_x + hw, bbox.center_y + hh),  # Bottom-right
-                (bbox.center_x - hw, bbox.center_y + hh)   # Bottom-left
-            ]
-            all_corners.extend(corners)
-        else:
-            local_corners = [
-                (-hw, -hh),  # Top-left
-                ( hw, -hh),  # Top-right
-                ( hw,  hh),  # Bottom-right
-                (-hw,  hh)   # Bottom-left
-            ]
+            if abs(angle) < 1e-12:
+                corners.append(local + [cx, cy])
+            else:
+                # Rotation matrix
+                cos_a, sin_a = np.cos(angle), np.sin(angle)
+                rot = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+                corners.append(local @ rot.T + [cx, cy])
+        
+        return np.vstack(corners) if corners else np.empty((0, 2))
 
-            # Rotate and translate corners
-            cos_angle = cos(angle)
-            sin_angle = sin(angle)
+    def _convex_hull(points):
+        if len(points) <= 3:
+            return points
 
-            for x_local, y_local in local_corners:
-                x_rotated = x_local * cos_angle - y_local * sin_angle
-                y_rotated = x_local * sin_angle + y_local * cos_angle
-                x_global = bbox.center_x + x_rotated
-                y_global = bbox.center_y + y_rotated
-                all_corners.append((x_global, y_global))
+        pts = np.unique(points, axis=0)
+        pts = pts[np.lexsort((pts[:, 1], pts[:, 0]))]
 
-    xs, ys = zip(*all_corners)
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+        if len(pts) <= 1:
+            return pts
+
+        def cross(o, a, b):
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+        lower, upper = [], []
+        for p in pts:
+            while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+                lower.pop()
+            lower.append(p)
+        for p in pts[::-1]:
+            while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+                upper.pop()
+            upper.append(p)
+
+        return np.array(lower[:-1] + upper[:-1])
+
+    all_corners = _get_all_corners(ocr_element_list)
+
+    # Axis-aligned case
+    if not rotated:
+        min_pt, max_pt = all_corners.min(axis=0), all_corners.max(axis=0)
+        center = (min_pt + max_pt) / 2
+        size = max_pt - min_pt
+        return BoundingBox(
+            center_x=center[0],
+            center_y=center[1],
+            width=size[0],
+            height=size[1]
+        )
+
+    hull = _convex_hull(all_corners)
+    m = len(hull)
+
+    # Trivial cases
+    if m == 1:
+        return BoundingBox(
+            center_x=hull[0, 0],
+            center_y=hull[0, 1], 
+            width=0.0,
+            height=0.0,
+            rotation_z=0.0
+        )
+
+    if m == 2:
+        diff = hull[1] - hull[0]
+        length = np.linalg.norm(diff)
+        center = hull.mean(axis=0)
+        return BoundingBox(
+            center_x=center[0],
+            center_y=center[1], 
+            width=length,
+            height=0.0,
+            rotation_z=np.arctan2(diff[1], diff[0])
+        )
+
+    # Test each edge orientation
+    edges = np.roll(hull, -1, axis=0) - hull
+    edge_lengths = np.linalg.norm(edges, axis=1)
+    valid = edge_lengths > 1e-12
+
+    if not valid.any():
+        # Fallback to axis-aligned
+        min_pt, max_pt = all_corners.min(axis=0), all_corners.max(axis=0)
+        center = (min_pt + max_pt) / 2
+        size = max_pt - min_pt
+        return BoundingBox(
+            center_x=center[0],
+            center_y=center[1],
+            width=size[0],
+            height=size[1]
+        )
+
+    angles = np.arctan2(edges[valid, 1], edges[valid, 0])
+    best_area, best_idx = np.inf, -1
+
+    for idx, angle in enumerate(angles):
+        # Rotation matrix (rotate by -angle)
+        cos_a, sin_a = np.cos(angle), np.sin(angle)
+        rot = np.array([[cos_a, sin_a], [-sin_a, cos_a]])
+        rotated = hull @ rot.T
+
+        min_pt, max_pt = rotated.min(axis=0), rotated.max(axis=0)
+        area = np.prod(max_pt - min_pt)
+
+        if area < best_area:
+            best_area, best_idx = area, idx
+            best_bounds = (min_pt, max_pt, angle)
+
+    min_pt, max_pt, angle = best_bounds
+    width, height = max_pt - min_pt
+    center_rot = (min_pt + max_pt) / 2
+
+    # Rotate center back to global coordinates
+    cos_a, sin_a = np.cos(angle), np.sin(angle)
+    rot_back = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+    center = rot_back @ center_rot
+
+    # Normalize angle to [-π, π]
+    angle = np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
     return BoundingBox(
-        center_x=(min_x + max_x) / 2,
-        center_y=(min_y + max_y) / 2,
-        width=max_x - min_x,
-        height=max_y - min_y
+        center_x=center[0],
+        center_y=center[1],
+        width=width,
+        height=height,
+        rotation_z=angle
     )
+
 
 class MangaOcr:
     name = 'mangaocr'
@@ -312,7 +400,7 @@ class GoogleVision:
     available = False
     local = False
     manual_language = False
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self):
@@ -336,19 +424,102 @@ class GoogleVision:
 
         image_bytes = self._preprocess(img)
         image = vision.Image(content=image_bytes)
+
         try:
-            response = self.client.text_detection(image=image)
+            response = self.client.document_text_detection(image=image)
         except ServiceUnavailable:
             return (False, 'Connection error!')
-        except:
+        except Exception as e:
             return (False, 'Unknown error!')
-        texts = response.text_annotations
-        res = texts[0].description if len(texts) > 0 else ''
-        x = (True, res)
+
+        ocr_result = self._to_generic_result(response.full_text_annotation, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
         return x
+
+    def _to_generic_result(self, full_text_annotation, img_width, img_height):
+        paragraphs = []
+
+        if full_text_annotation:
+            for page in full_text_annotation.pages:
+                if page.width == img_width and page.height == img_height:
+                    for block in page.blocks:
+                        for google_paragraph in block.paragraphs:
+                            p_bbox = self._convert_bbox(google_paragraph.bounding_box, img_width, img_height)
+                            lines = self._create_lines_from_google_paragraph(google_paragraph, img_width, img_height)
+                            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+                            paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
+    def _create_lines_from_google_paragraph(self, google_paragraph, img_width, img_height):
+        lines = []
+        words = []
+        for google_word in google_paragraph.words:
+            word = self._create_word_from_google_word(google_word, img_width, img_height)
+            words.append(word)
+            if word.separator == '\n':
+                l_bbox = merge_bounding_boxes(words, True)
+                line = Line(bounding_box=l_bbox, words=words)
+                lines.append(line)
+                words = []
+
+        return lines
+
+    def _create_word_from_google_word(self, google_word, img_width, img_height):
+        w_bbox = self._convert_bbox(google_word.bounding_box, img_width, img_height)
+
+        w_separator = ''
+        w_text_parts = []
+        for i, symbol in enumerate(google_word.symbols):
+            separator = None
+            if hasattr(symbol, 'property') and hasattr(symbol.property, 'detected_break'):
+                detected_break = symbol.property.detected_break
+                detected_separator = self._break_type_to_char(detected_break.type_)
+                if i == len(google_word.symbols) - 1:
+                    w_separator = detected_separator
+                else:
+                    separator = detected_separator
+            symbol_text = symbol.text
+            w_text_parts.append(symbol_text)
+            if separator:
+                w_text_parts.append(separator)
+        word_text = ''.join(w_text_parts)
+
+        return Word(
+            text=word_text,
+            bounding_box=w_bbox,
+            separator=w_separator
+        )
+
+    def _break_type_to_char(self, break_type):
+        if break_type == vision.TextAnnotation.DetectedBreak.BreakType.SPACE:
+            return ' '
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.SURE_SPACE:
+            return ' '
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.EOL_SURE_SPACE:
+            return '\n'
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.HYPHEN:
+            return '-'
+        elif break_type == vision.TextAnnotation.DetectedBreak.BreakType.LINE_BREAK:
+            return '\n'
+        return ''
+
+    def _convert_bbox(self, quad, img_width, img_height):
+        vertices = quad.vertices
+
+        return quad_to_bounding_box(
+            vertices[0].x, vertices[0].y,
+            vertices[1].x, vertices[1].y,
+            vertices[2].x, vertices[2].y,
+            vertices[3].x, vertices[3].y,
+            img_width, img_height
+        )
 
     def _preprocess(self, img):
         return pil_image_to_bytes(img)
@@ -500,104 +671,6 @@ class GoogleLens:
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return (pil_image_to_bytes(img), img.width, img.height)
-
-class GoogleLensWeb:
-    name = 'glensweb'
-    readable_name = 'Google Lens (web)'
-    key = 'k'
-    available = False
-    local = False
-    manual_language = False
-    coordinate_support = False
-    threading_support = True
-
-    def __init__(self):
-        if 'pyjson5' not in sys.modules:
-            logger.warning('pyjson5 not available, Google Lens (web) will not work!')
-        else:
-            self.requests_session = requests.Session()
-            self.available = True
-            logger.info('Google Lens (web) ready')
-
-    def __call__(self, img):
-        img, is_path = input_to_pil_image(img)
-        if not img:
-            return (False, 'Invalid image provided')
-
-        url = 'https://lens.google.com/v3/upload'
-        files = {'encoded_image': ('image.png', self._preprocess(img), 'image/png')}
-        headers = {
-            'Host': 'lens.google.com',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'ja-JP;q=0.6,ja;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br, zstd',
-            'Referer': 'https://www.google.com/',
-            'Origin': 'https://www.google.com',
-            'Alt-Used': 'lens.google.com',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-site',
-            'Priority': 'u=0, i',
-            'TE': 'trailers'
-        }
-        cookies = {'SOCS': 'CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg'}
-
-        try:
-            res = self.requests_session.post(url, files=files, headers=headers, cookies=cookies, timeout=20, allow_redirects=False)
-        except requests.exceptions.Timeout:
-            return (False, 'Request timeout!')
-        except requests.exceptions.ConnectionError:
-            return (False, 'Connection error!')
-
-        if res.status_code != 303:
-            return (False, 'Unknown error!')
-
-        redirect_url = res.headers.get('Location')
-        if not redirect_url:
-            return (False, 'Error getting redirect URL!')
-
-        parsed_url = urlparse(redirect_url)
-        query_params = parse_qs(parsed_url.query)
-
-        if ('vsrid' not in query_params) or ('gsessionid' not in query_params):
-            return (False, 'Unknown error!')
-
-        try:
-            res = self.requests_session.get(f"https://lens.google.com/qfmetadata?vsrid={query_params['vsrid'][0]}&gsessionid={query_params['gsessionid'][0]}", timeout=20)
-        except requests.exceptions.Timeout:
-            return (False, 'Request timeout!')
-        except requests.exceptions.ConnectionError:
-            return (False, 'Connection error!')
-
-        if (len(res.text.splitlines()) != 3):
-            return (False, 'Unknown error!')
-
-        lens_object = pyjson5.loads(res.text.splitlines()[2])
-
-        res = []
-        text = lens_object[0][2][0][0]
-        for paragraph in text:
-            for line in paragraph[1]:
-                for word in line[0]:
-                    res.append(word[1] + word[2])
-
-        x = (True, res)
-
-        if is_path:
-            img.close()
-        return x
-
-    def _preprocess(self, img):
-        if img.width * img.height > 3000000:
-            aspect_ratio = img.width / img.height
-            new_w = int(sqrt(3000000 * aspect_ratio))
-            new_h = int(new_w / aspect_ratio)
-            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-
-        return pil_image_to_bytes(img)
 
 class Bing:
     name = 'bing'
@@ -1131,9 +1204,9 @@ class OneOCR:
 
     def _convert_bbox(self, rect, img_width, img_height):
         return quad_to_bounding_box(
-            rect['x1'], rect['y1'], 
-            rect['x2'], rect['y2'], 
-            rect['x3'], rect['y3'], 
+            rect['x1'], rect['y1'],
+            rect['x2'], rect['y2'],
+            rect['x3'], rect['y3'],
             rect['x4'], rect['y4'],
             img_width, img_height
         )
@@ -1234,7 +1307,7 @@ class AzureImageAnalysis:
     available = False
     local = False
     manual_language = False
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={}):
@@ -1261,19 +1334,54 @@ class AzureImageAnalysis:
         except:
             return (False, 'Unknown error!')
 
-        res = []
-        if read_result.read:
-            for block in read_result.read.blocks:
-                for line in block.lines:
-                    res.append(line.text)
-        else:
-            return (False, 'Unknown error!')
-
-        x = (True, res)
+        ocr_result = self._to_generic_result(read_result, img.width, img.height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
         return x
+
+    def _to_generic_result(self, read_result, img_width, img_height):
+        paragraphs = []
+        if read_result.read:
+            for block in read_result.read.blocks:
+                lines = []
+                for azure_line in block.lines:
+                    l_bbox = self._convert_bbox(azure_line.bounding_polygon, img_width, img_height)
+
+                    words = []
+                    for azure_word in azure_line.words:
+                        w_bbox = self._convert_bbox(azure_word.bounding_polygon, img_width, img_height)
+                        word = Word(
+                            text=azure_word.text,
+                            bounding_box=w_bbox
+                        )
+                        words.append(word)
+
+                    line = Line(
+                        bounding_box=l_bbox,
+                        words=words,
+                        text=azure_line.text
+                    )
+                    lines.append(line)
+
+                p_bbox = merge_bounding_boxes(lines)
+                paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+                paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
+    def _convert_bbox(self, rect, img_width, img_height):
+        return quad_to_bounding_box(
+            rect[0]['x'], rect[0]['y'],
+            rect[1]['x'], rect[1]['y'],
+            rect[2]['x'], rect[2]['y'],
+            rect[3]['x'], rect[3]['y'],
+            img_width, img_height
+        )
 
     def _preprocess(self, img):
         min_pixel_size = 50
@@ -1461,7 +1569,7 @@ class OCRSpace:
     available = False
     local = False
     manual_language = True
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={}, language='ja'):
@@ -1498,14 +1606,16 @@ class OCRSpace:
         if not img:
             return (False, 'Invalid image provided')
 
-        img_bytes, img_extension, _ = self._preprocess(img)
+        og_img_width, og_img_height = img.size
+        img_bytes, img_extension, img_size = self._preprocess(img)
         if not img_bytes:
             return (False, 'Image is too big!')
 
         data = {
             'apikey': self.api_key,
             'language': self.language,
-            'OCREngine': str(self.engine_version)
+            'OCREngine': str(self.engine_version),
+            'isOverlayRequired': 'True'
         }
         files = {'file': ('image.' + img_extension, img_bytes, 'image/' + img_extension)}
 
@@ -1526,12 +1636,57 @@ class OCRSpace:
         if res['IsErroredOnProcessing']:
             return (False, res['ErrorMessage'])
 
-        res = res['ParsedResults'][0]['ParsedText']
-        x = (True, res)
+        img_width, img_height = img_size
+        ocr_result = self._to_generic_result(res, img_width, img_height, og_img_width, og_img_height)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
         return x
+
+    def _to_generic_result(self, api_result, img_width, img_height, og_img_width, og_img_height):
+        parsed_result = api_result['ParsedResults'][0]
+        text_overlay = parsed_result.get('TextOverlay', {})
+
+        image_props = ImageProperties(width=og_img_width, height=og_img_height)
+        ocr_result = OcrResult(image_properties=image_props)
+
+        lines_data = text_overlay.get('Lines', [])
+
+        lines = []
+        for line_data in lines_data:
+            words = []
+            for word_data in line_data.get('Words', []):
+                w_bbox = self._convert_bbox(word_data, img_width, img_height)
+                words.append(Word(text=word_data['WordText'], bounding_box=w_bbox))
+
+            l_bbox = merge_bounding_boxes(words)
+            lines.append(Line(bounding_box=l_bbox, words=words))
+
+        if lines:
+            p_bbox = merge_bounding_boxes(lines)
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            ocr_result.paragraphs = [paragraph]
+        else:
+            ocr_result.paragraphs = []
+
+        return ocr_result
+
+    def _convert_bbox(self, word_data, img_width, img_height):
+        left = word_data['Left'] / img_width
+        top = word_data['Top'] / img_height
+        width = word_data['Width'] / img_width
+        height = word_data['Height'] / img_height
+
+        center_x = left + width / 2
+        center_y = top + height / 2
+
+        return BoundingBox(
+            center_x=center_x,
+            center_y=center_y,
+            width=width,
+            height=height
+        )
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)

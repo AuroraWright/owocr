@@ -434,7 +434,7 @@ class TextFiltering:
             self.frame_stabilization_timestamp = time.time()
             return 0, 0, None
 
-    def _find_changed_lines_impl(self, current_result, previous_result, next_result = None):
+    def _find_changed_lines_impl(self, current_result, previous_result, next_result=None):
         if not current_result:
             return None
 
@@ -1341,8 +1341,6 @@ class OutputResult:
             else:
                 output_string = self._post_process(result_data_text, False)
             log_message = output_string
-            if output_format == 'json':
-                logger.opt(colors=True).warning(f"<{engine_color}>{engine_name}</{engine_color}> does not support JSON output. Falling back to text.")
 
         if verbosity != 0:
             if verbosity < -1:
@@ -1494,6 +1492,7 @@ def run():
 
     global engine_instances
     global engine_keys
+    output_format = config.get_general('output_format')
     engine_instances = []
     config_engines = []
     engine_keys = []
@@ -1506,6 +1505,11 @@ def run():
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
+
+            if output_format == 'json' and not engine_class.coordinate_support:
+                logger.warning(f"Skipping {engine_class.readable_name} as it does not support JSON output.")
+                continue
+
             if config.get_engine(engine_class.name) == None:
                 if engine_class.manual_language:
                     engine_instance = engine_class(language=config.get_general('language'))
@@ -1545,7 +1549,6 @@ def run():
     read_from_path = None
     read_from_readable = []
     write_to = config.get_general('write_to')
-    output_format = config.get_general('output_format')
     terminated = threading.Event()
     paused = threading.Event()
     if config.get_general('pause_at_startup'):

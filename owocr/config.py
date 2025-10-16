@@ -25,7 +25,7 @@ parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.S
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
-                    help='OCR engine to use. Available: "mangaocr", "glens", "glensweb", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
+                    help='OCR engine to use. Available: "mangaocr", "glens", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
 parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
                     help='OCR engine to use for two-pass processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -62,6 +62,10 @@ parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code for filtering screencapture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
+parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
+                    help='Websocket port to use if reading or writing to websocket.')
+parser.add_argument('-ds', '--delay_seconds', type=float, default=argparse.SUPPRESS,
+                    help='Delay (in seconds) between checks when reading from clipboard (on macOS/Linux) or a directory.')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,
                     help='Terminal window verbosity. Can be -2 (all recognized text is showed whole, default), -1 (only timestamps are shown), 0 (nothing is shown but errors), or larger than 0 to cut displayed text to that amount of characters.')
 parser.add_argument('--uwu', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
