@@ -369,16 +369,18 @@ class MangaOcr:
     coordinate_support = False
     threading_support = True
 
-    def __init__(self, config={'pretrained_model_name_or_path':'kha-white/manga-ocr-base','force_cpu': False}):
+    def __init__(self, config={}):
         if 'manga_ocr' not in sys.modules:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
         else:
+            pretrained_model_name_or_path = config.get('pretrained_model_name_or_path', 'kha-white/manga-ocr-base')
+            force_cpu = config.get('force_cpu', False)
             logger.disable('manga_ocr')
             logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
             from manga_ocr import ocr
             ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
-            self.model = MOCR(config['pretrained_model_name_or_path'], config['force_cpu'])
+            self.model = MOCR(pretrained_model_name_or_path, force_cpu)
             self.available = True
             logger.info('Manga OCR ready')
 
@@ -860,12 +862,14 @@ class AppleVision:
     coordinate_support = True
     threading_support = True
 
-    def __init__(self, language='ja'):
+    def __init__(self, language='ja', config={}):
         if sys.platform != 'darwin':
             logger.warning('Apple Vision is not supported on non-macOS platforms!')
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
         else:
+            self.recognition_level = Vision.VNRequestTextRecognitionLevelFast if config.get('fast_mode', False) else Vision.VNRequestTextRecognitionLevelAccurate
+            self.language_correction = config.get('language_correction', True)
             self.available = True
             self.language = [language, 'en']
             logger.info('Apple Vision ready')
@@ -916,8 +920,8 @@ class AppleVision:
             req = Vision.VNRecognizeTextRequest.alloc().init()
 
             req.setRevision_(Vision.VNRecognizeTextRequestRevision3)
-            req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-            req.setUsesLanguageCorrection_(True)
+            req.setRecognitionLevel_(self.recognition_level)
+            req.setUsesLanguageCorrection_(self.language_correction)
             req.setRecognitionLanguages_(self.language)
 
             handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(
@@ -1050,7 +1054,6 @@ class AppleLiveText:
                 )
                 lines.append(line)
 
-        # Create a single paragraph to hold all lines
         if lines:
             p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
@@ -1132,7 +1135,6 @@ class WinRTOCR:
             )
             lines.append(line)
 
-        # Create a single paragraph to hold all lines
         if lines:
             p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
@@ -1235,7 +1237,6 @@ class OneOCR:
             )
             lines.append(line)
 
-        # Create a single paragraph to hold all lines
         if lines:
             p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
@@ -1417,13 +1418,14 @@ class EasyOCR:
     coordinate_support = True
     threading_support = True
 
-    def __init__(self, config={'gpu': True}, language='ja'):
+    def __init__(self, config={}, language='ja'):
         if 'easyocr' not in sys.modules:
             logger.warning('easyocr not available, EasyOCR will not work!')
         else:
             logger.info('Loading EasyOCR model')
+            gpu = config.get('gpu', True)
             logging.getLogger('easyocr.easyocr').setLevel(logging.ERROR)
-            self.model = easyocr.Reader([language,'en'], gpu=config['gpu'])
+            self.model = easyocr.Reader([language,'en'], gpu=gpu)
             self.available = True
             logger.info('EasyOCR ready')
 
@@ -1485,20 +1487,22 @@ class RapidOCR:
     coordinate_support = True
     threading_support = True
 
-    def __init__(self, config={'high_accuracy_detection': False, 'high_accuracy_recognition': True}, language='ja'):
+    def __init__(self, config={}, language='ja'):
         if 'rapidocr' not in sys.modules:
             logger.warning('rapidocr not available, RapidOCR will not work!')
         else:
             logger.info('Loading RapidOCR model')
+            high_accuracy_detection = config.get('high_accuracy_detection', False)
+            high_accuracy_recognition = config.get('high_accuracy_recognition', True)
             lang_rec = self.language_to_model_language(language)
             self.model = ROCR(params={
                 'Det.engine_type': EngineType.ONNXRUNTIME,
                 'Det.lang_type': LangDet.CH,
-                'Det.model_type': ModelType.SERVER if config['high_accuracy_detection'] else ModelType.MOBILE,
+                'Det.model_type': ModelType.SERVER if high_accuracy_detection else ModelType.MOBILE,
                 'Det.ocr_version': OCRVersion.PPOCRV5,
                 'Rec.engine_type': EngineType.ONNXRUNTIME,
                 'Rec.lang_type': lang_rec,
-                'Rec.model_type': ModelType.SERVER if config['high_accuracy_recognition'] else ModelType.MOBILE,
+                'Rec.model_type': ModelType.SERVER if high_accuracy_recognition else ModelType.MOBILE,
                 'Rec.ocr_version': OCRVersion.PPOCRV5,
                 'Global.log_level': 'error'
             })
@@ -1626,10 +1630,6 @@ class OCRSpace:
     def _to_generic_result(self, api_result, img_width, img_height, og_img_width, og_img_height):
         parsed_result = api_result['ParsedResults'][0]
         text_overlay = parsed_result.get('TextOverlay', {})
-
-        image_props = ImageProperties(width=og_img_width, height=og_img_height)
-        ocr_result = OcrResult(image_properties=image_props)
-
         lines_data = text_overlay.get('Lines', [])
 
         lines = []
@@ -1645,11 +1645,14 @@ class OCRSpace:
         if lines:
             p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
-            ocr_result.paragraphs = [paragraph]
+            paragraphs = [paragraph]
         else:
-            ocr_result.paragraphs = []
+            paragraphs = []
 
-        return ocr_result
+        return OcrResult(
+            image_properties=ImageProperties(width=og_img_width, height=og_img_height),
+            paragraphs=paragraphs
+        )
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)

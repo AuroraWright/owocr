@@ -294,7 +294,7 @@ class TextFiltering:
         self.language = config.get_general('language')
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = config.get_general('screen_capture_line_recovery')
-        self.furigana_filter = config.get_general('screen_capture_furigana_filter')
+        self.furigana_filter = self.language == 'ja' and config.get_general('furigana_filter')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
         self.stable_frame_data = None
@@ -549,7 +549,7 @@ class TextFiltering:
         if all(not current_text_line for current_text_line in current_lines):
             return None
 
-        if self.furigana_filter and self.language == 'ja' and isinstance(current_result_ocr, OcrResult):
+        if self.furigana_filter and isinstance(current_result_ocr, OcrResult):
             for p in current_result_ocr.paragraphs:
                 current_lines_ocr.extend(p.lines)
 
@@ -607,34 +607,57 @@ class TextFiltering:
                             if not current_lines[j]:
                                 continue
 
-                            below_line_bbox = current_lines_ocr[j].bounding_box
-                            below_line_text = current_lines[j]
+                            other_line_bbox = current_lines_ocr[j].bounding_box
+                            other_line_text = current_lines[j]
 
-                            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{below_line_text}'</magenta>")
+                            if len(current_text) <= len(other_line_text):
+                                is_vertical = other_line_bbox.height > other_line_bbox.width
+                            else:
+                                is_vertical = current_line_bbox.height > current_line_bbox.width
 
-                            # Check if the line is taller
-                            height_threshold = below_line_bbox.height * 0.7
-                            is_smaller = current_line_bbox.height < height_threshold
-                            logger.opt(colors=True).debug(f"<magenta>Furigana check height: '{below_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
+                            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}'</magenta>")
+
+                            if is_vertical:
+                                width_threshold = other_line_bbox.width * 0.7
+                                is_smaller = current_line_bbox.width < width_threshold
+                                logger.opt(colors=True).debug(f"<magenta>Vertical furigana check width: '{other_line_bbox.width}' '{current_line_bbox.width}'</magenta>")
+                            else:
+                                height_threshold = other_line_bbox.height * 0.7
+                                is_smaller = current_line_bbox.height < height_threshold
+                                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana check height: '{other_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
+
                             if not is_smaller:
                                 continue
 
                             # Check if the line has kanji
-                            below_has_kanji = self.kanji_regex.search(below_line_text)
-                            if not below_has_kanji:
+                            other_has_kanji = self.kanji_regex.search(other_line_text)
+                            if not other_has_kanji:
                                 continue
 
-                            vertical_threshold = below_line_bbox.height + current_line_bbox.height
-                            vertical_distance = below_line_bbox.center_y - current_line_bbox.center_y
-                            horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, below_line_bbox)
+                            if is_vertical:
+                                horizontal_threshold = current_line_bbox.width + other_line_bbox.width
+                                horizontal_distance = current_line_bbox.center_x - other_line_bbox.center_x
+                                vertical_overlap = self._check_vertical_overlap(current_line_bbox, other_line_bbox)
 
-                            logger.opt(colors=True).debug(f"<magenta>Furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
+                                logger.opt(colors=True).debug(f"<magenta>Vertical furigana check position: '{horizontal_threshold}' '{horizontal_distance}' '{vertical_overlap}'</magenta>")
 
-                            # If vertically close and horizontally aligned, it's likely furigana
-                            if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.5):
-                                is_furigana = True
-                                logger.opt(colors=True).debug(f"<magenta>Skipping furigana line: '{current_text}' above line: '{below_line_text}'</magenta>")
-                                break
+                                # If horizontally close and vertically aligned, it's likely furigana
+                                if (0 < horizontal_distance < horizontal_threshold and vertical_overlap > 0.5):
+                                    is_furigana = True
+                                    logger.opt(colors=True).debug(f"<magenta>Skipping vertical furigana line: '{current_text}' next to line: '{other_line_text}'</magenta>")
+                                    break
+                            else:
+                                vertical_threshold = other_line_bbox.height + current_line_bbox.height
+                                vertical_distance = other_line_bbox.center_y - current_line_bbox.center_y
+                                horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, other_line_bbox)
+
+                                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
+
+                                # If vertically close and horizontally aligned, it's likely furigana
+                                if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.5):
+                                    is_furigana = True
+                                    logger.opt(colors=True).debug(f"<magenta>Skipping horizontal furigana line: '{current_text}' above line: '{other_line_text}'</magenta>")
+                                    break
 
                         if is_furigana:
                             continue
@@ -651,6 +674,9 @@ class TextFiltering:
             changed_lines.append(changed_line)
 
         return changed_lines
+
+    def _standalone_furigana_filter(self, result, result_ocr):
+        return self._find_changed_lines_text_impl(result, result_ocr, 0, [], None, False, 0)
 
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
@@ -704,6 +730,25 @@ class TextFiltering:
         smaller_width = min(bbox1.width, bbox2.width)
 
         return overlap_width / smaller_width if smaller_width > 0 else 0.0
+
+    def _check_vertical_overlap(self, bbox1, bbox2):
+        # Calculate top and bottom boundaries for both boxes
+        top1 = bbox1.center_y - bbox1.height / 2
+        bottom1 = bbox1.center_y + bbox1.height / 2
+        top2 = bbox2.center_y - bbox2.height / 2
+        bottom2 = bbox2.center_y + bbox2.height / 2
+
+        # Calculate overlap
+        overlap_top = max(top1, top2)
+        overlap_bottom = min(bottom1, bottom2)
+
+        if overlap_bottom <= overlap_top:
+            return 0.0
+
+        overlap_height = overlap_bottom - overlap_top
+        smaller_height = min(bbox1.height, bbox2.height)
+
+        return overlap_height / smaller_height if smaller_height > 0 else 0.0
 
     def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
         def crop_image(image, lines):
@@ -1339,6 +1384,8 @@ class OutputResult:
                     return
                 output_string = self._post_process(text_to_process, True)
             else:
+                if self.filtering.furigana_filter and isinstance(result_data, OcrResult):
+                    result_data_text = self.filtering._standalone_furigana_filter(result_data_text, result_data)
                 output_string = self._post_process(result_data_text, False)
             log_message = output_string
 
