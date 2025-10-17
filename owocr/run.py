@@ -927,6 +927,7 @@ class ScreenshotThread(threading.Thread):
                 if len(screen_capture_window_area.split(',')) == 4:
                     x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
                     logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
+                    img = self.take_screenshot()
                     self.window_area_coordinates = (img.size, (x, y, x2, y2))
                 elif screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
