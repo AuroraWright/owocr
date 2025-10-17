@@ -676,7 +676,10 @@ class TextFiltering:
         return changed_lines
 
     def _standalone_furigana_filter(self, result, result_ocr):
-        return self._find_changed_lines_text_impl(result, result_ocr, None, [], None, False, 0)
+        result = self._find_changed_lines_text_impl(result, result_ocr, None, [], None, False, 0)
+        if result == None:
+            result = []
+        return result
 
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
@@ -826,8 +829,11 @@ class ScreenshotThread(threading.Thread):
         self.coordinate_selector_combo_enabled = config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
-        self.screencapture_window_active = True
-        self.screencapture_window_visible = True
+        self.window_active = True
+        self.window_visible = True
+        self.window_closed = False
+        self.window_size = None
+
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -875,6 +881,7 @@ class ScreenshotThread(threading.Thread):
                     self.old_macos_screenshot_api = True
                 else:
                     self.old_macos_screenshot_api = False
+                    self.window_stream_configuration = None
                     self.screencapturekit_queue = queue.Queue()
                     CGMainDisplayID()
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
@@ -913,7 +920,11 @@ class ScreenshotThread(threading.Thread):
                     logger.error(area_invalid_error)
                     sys.exit(1)
 
-                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+                self.window_visible = not win32gui.IsIconic(self.window_handle)
+                self.windows_window_mfc_dc = None
+                self.windows_window_save_dc = None
+                self.windows_window_save_bitmap = None
 
                 self.windows_window_tracker_instance = threading.Thread(target=self.windows_window_tracker)
                 self.windows_window_tracker_instance.start()
@@ -927,8 +938,7 @@ class ScreenshotThread(threading.Thread):
                 if len(screen_capture_window_area.split(',')) == 4:
                     x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
                     logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
-                    img = self.take_screenshot()
-                    self.window_area_coordinates = (img.size, (x, y, x2, y2))
+                    self.window_area_coordinates = (x, y, x2, y2)
                 elif screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
                 else:
@@ -962,12 +972,11 @@ class ScreenshotThread(threading.Thread):
             if not found:
                 break
             if self.screen_capture_only_active_windows:
-                self.screencapture_window_active = self.window_handle == win32gui.GetForegroundWindow()
-            else:
-                self.screencapture_window_visible = not win32gui.IsIconic(self.window_handle)
+                self.window_active = self.window_handle == win32gui.GetForegroundWindow()
+            self.window_visible = not win32gui.IsIconic(self.window_handle)
             time.sleep(0.5)
         if not found:
-            on_window_closed(False)
+            self.window_closed = True
 
     def capture_macos_window_screenshot(self, window_id):
         def shareable_content_completion_handler(shareable_content, error):
@@ -985,22 +994,26 @@ class ScreenshotThread(threading.Thread):
                 self.screencapturekit_queue.put(None)
                 return
 
+            if not self.window_stream_configuration:
+                self.window_stream_configuration = SCStreamConfiguration.alloc().init()
+                self.window_stream_configuration.setShowsCursor_(False)
+                self.window_stream_configuration.setCaptureResolution_(SCCaptureResolutionNominal)
+                self.window_stream_configuration.setIgnoreGlobalClipSingleWindow_(True)
+
             with objc.autorelease_pool():
                 content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
-
                 frame = content_filter.contentRect()
                 width = frame.size.width
                 height = frame.size.height
-                configuration = SCStreamConfiguration.alloc().init()
-                configuration.setSourceRect_(CGRectMake(0, 0, width, height))
-                configuration.setWidth_(width)
-                configuration.setHeight_(height)
-                configuration.setShowsCursor_(False)
-                configuration.setCaptureResolution_(SCCaptureResolutionNominal)
-                configuration.setIgnoreGlobalClipSingleWindow_(True)
+                current_size = (width, height)
+
+                if current_size != self.window_size:
+                    self.window_stream_configuration.setSourceRect_(CGRectMake(0, 0, width, height))
+                    self.window_stream_configuration.setWidth_(width)
+                    self.window_stream_configuration.setHeight_(height)
 
                 SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
-                    content_filter, configuration, capture_image_completion_handler
+                    content_filter, self.window_stream_configuration, capture_image_completion_handler
                 )
 
         def capture_image_completion_handler(image, error):
@@ -1013,6 +1026,10 @@ class ScreenshotThread(threading.Thread):
         SCShareableContent.getShareableContentWithCompletionHandler_(
             shareable_content_completion_handler
         )
+        try:
+            return self.screencapturekit_queue.get(timeout=5)
+        except queue.Empty:
+            return None
 
     def macos_window_tracker(self):
         found = True
@@ -1035,29 +1052,38 @@ class ScreenshotThread(threading.Thread):
                     if len(window_list) > 0:
                         found = True
             if found:
-                self.screencapture_window_active = is_active
+                self.window_active = is_active
             time.sleep(0.5)
         if not found:
-            on_window_closed(False)
+            self.window_closed = True
 
-    def take_screenshot(self):
+    def take_screenshot(self, ignore_active_status):
         if self.screencapture_mode == 2:
+            if self.window_closed:
+                return False
+            if not ignore_active_status and not self.window_active:
+                return None
+            if not self.window_visible:
+                return None
+
+            self.window_size_changed = False
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
                         cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
                     else:
-                        self.capture_macos_window_screenshot(self.window_id)
-                        try:
-                            cg_image = self.screencapturekit_queue.get(timeout=0.5)
-                        except queue.Empty:
-                            cg_image = None
+                        cg_image = self.capture_macos_window_screenshot(self.window_id)
                     if not cg_image:
-                        return None
+                        return False
                     width = CGImageGetWidth(cg_image)
                     height = CGImageGetHeight(cg_image)
                     raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
                     bpr = CGImageGetBytesPerRow(cg_image)
+                    current_size = (width, height)
+                    if self.window_size != current_size:
+                        if self.window_size:
+                            self.window_size_changed = True
+                        self.window_size = current_size
                 img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
             else:
                 try:
@@ -1065,48 +1091,68 @@ class ScreenshotThread(threading.Thread):
                     coord_width = right - coord_left
                     coord_height = bottom - coord_top
 
-                    hwnd_dc = win32gui.GetWindowDC(self.window_handle)
-                    mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                    save_dc = mfc_dc.CreateCompatibleDC()
+                    current_size = (coord_width, coord_height)
+                    if self.window_size != current_size:
+                        if self.window_size:
+                            window_size_changed = True
+                            self.reset_windows_window()
 
-                    save_bitmap = win32ui.CreateBitmap()
-                    save_bitmap.CreateCompatibleBitmap(mfc_dc, coord_width, coord_height)
-                    save_dc.SelectObject(save_bitmap)
+                        hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+                        self.windows_window_mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+                        self.windows_window_save_dc = self.windows_window_mfc_dc.CreateCompatibleDC()
+                        self.windows_window_save_bitmap = win32ui.CreateBitmap()
+                        self.windows_window_save_bitmap.CreateCompatibleBitmap(self.windows_window_mfc_dc, coord_width, coord_height)
+                        self.windows_window_save_dc.SelectObject(self.windows_window_save_bitmap)
 
-                    result = ctypes.windll.user32.PrintWindow(self.window_handle, save_dc.GetSafeHdc(), 2)
+                        self.window_size = current_size
+                        win32gui.ReleaseDC(self.window_handle, hwnd_dc)
 
-                    bmpinfo = save_bitmap.GetInfo()
-                    bmpstr = save_bitmap.GetBitmapBits(True)
+                    result = ctypes.windll.user32.PrintWindow(self.window_handle, self.windows_window_save_dc.GetSafeHdc(), 2)
+
+                    bmpinfo = self.windows_window_save_bitmap.GetInfo()
+                    bmpstr = self.windows_window_save_bitmap.GetBitmapBits(True)
+
+                    img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+                    return img
                 except pywintypes.error:
                     return None
-                img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-                try:
-                    win32gui.DeleteObject(save_bitmap.GetHandle())
-                except:
-                    pass
-                try:
-                    save_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    mfc_dc.DeleteDC()
-                except:
-                    pass
-                try:
-                    win32gui.ReleaseDC(self.window_handle, hwnd_dc)
-                except:
-                    pass
+
             if self.window_area_coordinates:
-                if img.size != self.window_area_coordinates[0]:
+                if self.window_size_changed:
                     self.window_area_coordinates = None
                     logger.warning('Window size changed, discarding area selection')
                 else:
-                    img = img.crop(self.window_area_coordinates[1])
+                    img = img.crop(self.window_area_coordinates)
         else:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
 
         return img
+
+    def cleanup_window_screen_capture(self):
+        if sys.platform == 'win32':
+            try:
+                if self.windows_window_save_bitmap:
+                    win32gui.DeleteObject(self.windows_window_save_bitmap.GetHandle())
+                    self.windows_window_save_bitmap = None
+            except:
+                pass
+            try:
+                if self.windows_window_save_dc:
+                    self.windows_window_save_dc.DeleteDC()
+                    self.windows_window_save_dc = None
+            except:
+                pass
+            try:
+                if self.windows_window_mfc_dc:
+                    self.windows_window_mfc_dc.DeleteDC()
+                    self.windows_window_mfc_dc = None
+            except:
+                pass
+        elif not self.old_macos_screenshot_api:
+            if self.window_stream_configuration:
+                self.window_stream_configuration.dealloc()
+                self.window_stream_configuration = None
 
     def write_result(self, result, is_combo):
         if is_combo:
@@ -1144,9 +1190,12 @@ class ScreenshotThread(threading.Thread):
             logger.info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
             self.window_area_coordinates = None
-            img = self.take_screenshot()
             logger.info('Launching window coordinate picker')
-            window_selection = get_screen_selection(img, self.coordinate_selector_combo_enabled)
+            img = self.take_screenshot(True)
+            if not img:
+                window_selection = False
+            else:
+                window_selection = get_screen_selection(img, self.coordinate_selector_combo_enabled)
             if not window_selection:
                 logger.warning('Picker window was closed or an error occurred, selecting whole window')
             else:
@@ -1155,7 +1204,7 @@ class ScreenshotThread(threading.Thread):
                     x2 = x + coord_width
                     y2 = y + coord_height
                     logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
-                    self.window_area_coordinates = (img.size, (x, y, x2, y2))
+                    self.window_area_coordinates = (x, y, x2, y2)
                 else:
                     logger.info('Selection is empty, selecting whole window')
 
@@ -1172,13 +1221,14 @@ class ScreenshotThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            img = self.take_screenshot()
-            if not img:
-                self.write_result(0, is_combo)
-                break
-
+            img = self.take_screenshot(False)
             self.write_result(img, is_combo)
 
+            if img == False:
+                break
+
+        if self.screencapture_mode == 2:
+            self.cleanup_window_screen_capture()
         if self.macos_window_tracker_instance:
             self.macos_window_tracker_instance.join()
         elif self.windows_window_tracker_instance:
@@ -1280,6 +1330,11 @@ class SecondPassThread:
 class OutputResult:
     def __init__(self):
         self.screen_capture_periodic = config.get_general('screen_capture_delay_secs') != -1
+        self.output_format = config.get_general('output_format')
+        self.engine_color = config.get_general('engine_color')
+        self.verbosity = config.get_general('verbosity')
+        self.notifications = config.get_general('notifications')
+        self.write_to = config.get_general('write_to')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
 
@@ -1305,8 +1360,6 @@ class OutputResult:
 
     def __call__(self, img_or_path, filter_text, auto_pause, notify):
         engine_index_local = engine_index
-        output_format = config.get_general('output_format')
-        engine_color = config.get_general('engine_color')
         engine_instance = engine_instances[engine_index]
         two_pass_processing_active = False
         result_data = None
@@ -1320,14 +1373,15 @@ class OutputResult:
                 end_time = time.time()
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
+                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
-                        logger.opt(colors=True).info(f"<{engine_color}>{engine_instance_2.readable_name}</{engine_color}> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{engine_color}>{engine_instance.readable_name}</{engine_color}>")
+                        if self.verbosity != 0:
+                            logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</{self.engine_color}>")
 
-                        if output_format != 'json':
+                        if self.output_format != 'json':
                             if changed_regions_image:
                                 img_or_path = changed_regions_image
 
@@ -1356,10 +1410,9 @@ class OutputResult:
         if not res:
             if auto_pause_handler and auto_pause:
                 auto_pause_handler.stop_timer()
-            logger.opt(colors=True).warning(f'<{engine_color}>{engine_name}</{engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
+            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</{self.engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
-        verbosity = config.get_general('verbosity')
         output_string = ''
         log_message = ''
         result_data_text = None
@@ -1367,7 +1420,7 @@ class OutputResult:
         if isinstance(result_data, OcrResult):
             unprocessed_text = self._extract_lines_from_result(result_data)
 
-            if output_format == 'json':
+            if self.output_format == 'json':
                 result_dict = asdict(result_data)
                 output_string = json.dumps(result_dict, ensure_ascii=False)
                 log_message = self._post_process(unprocessed_text, False)
@@ -1390,26 +1443,25 @@ class OutputResult:
                 output_string = self._post_process(result_data_text, False)
             log_message = output_string
 
-        if verbosity != 0:
-            if verbosity < -1:
+        if self.verbosity != 0:
+            if self.verbosity < -1:
                 log_message_terminal = ': ' + log_message
-            elif verbosity == -1:
+            elif self.verbosity == -1:
                 log_message_terminal = ''
             else:
-                log_message_terminal = ': ' + (log_message if len(log_message) <= verbosity else log_message[:verbosity] + '[...]')
+                log_message_terminal = ': ' + (log_message if len(log_message) <= self.verbosity else log_message[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{engine_color}>{engine_name}</{engine_color}>{log_message_terminal}')
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</{self.engine_color}>{log_message_terminal}')
 
-        if notify and config.get_general('notifications'):
+        if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
 
-        write_to = config.get_general('write_to')
-        if write_to == 'websocket':
+        if self.write_to == 'websocket':
             websocket_server_thread.send_text(output_string)
-        elif write_to == 'clipboard':
+        elif self.write_to == 'clipboard':
             pyperclipfix.copy(output_string)
         else:
-            with Path(write_to).open('a', encoding='utf-8') as f:
+            with Path(self.write_to).open('a', encoding='utf-8') as f:
                 f.write(output_string + '\n')
 
         if auto_pause_handler and auto_pause:
@@ -1456,12 +1508,13 @@ def engine_change_handler(user_input='s', is_combo=True):
         logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
 
 
-def user_input_thread_run():
-    def _terminate_handler():
-        global terminated
-        logger.info('Terminated!')
-        terminated.set()
+def terminate_handler(sig=None, frame=None):
+    global terminated
+    logger.info('Terminated!')
+    terminated.set()
 
+
+def user_input_thread_run():
     if sys.platform == 'win32':
         import msvcrt
         while not terminated.is_set():
@@ -1473,7 +1526,7 @@ def user_input_thread_run():
                     user_input_bytes = msvcrt.getch()
                     user_input = user_input_bytes.decode()
                     if user_input.lower() in 'tq':
-                        _terminate_handler()
+                        terminate_handler()
                     elif user_input.lower() == 'p':
                         pause_handler(False)
                     else:
@@ -1502,26 +1555,13 @@ def user_input_thread_run():
                 if rlist:
                     user_input = sys.stdin.read(1)
                     if user_input.lower() in 'tq':
-                        _terminate_handler()
+                        terminate_handler()
                     elif user_input.lower() == 'p':
                         pause_handler(False)
                     else:
                         engine_change_handler(user_input, False)
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-
-def signal_handler(sig, frame):
-    global terminated
-    logger.info('Terminated!')
-    terminated.set()
-
-
-def on_window_closed(alive):
-    global terminated
-    if not (alive or terminated):
-        logger.info('Window closed or error occurred, terminated!')
-        terminated.set()
 
 
 def on_screenshot_combo():
@@ -1701,7 +1741,7 @@ def run():
         write_to_readable = f'file {write_to}'
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
-    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, terminate_handler)
     if auto_pause != 0:
         auto_pause_handler = AutopauseTimer()
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
@@ -1727,8 +1767,8 @@ def run():
             except queue.Empty:
                 pass
 
-        if (not img) and screen_capture_periodic:
-            if (not paused.is_set()) and screenshot_thread.screencapture_window_active and screenshot_thread.screencapture_window_visible and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+        if img == None and screen_capture_periodic:
+            if (not paused.is_set()) and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
                 try:
@@ -1739,8 +1779,8 @@ def run():
                     skip_waiting = True
                     pass
 
-        if img == 0:
-            on_window_closed(False)
+        if img == False:
+            logger.info('The window was closed or an error occurred, terminated!')
             terminated.set()
             break
         elif img:
@@ -1753,8 +1793,9 @@ def run():
 
     terminate_selector_if_running()
     user_input_thread.join()
-    auto_pause_handler.stop()
     output_result.second_pass_thread.stop()
+    if auto_pause_handler:
+        auto_pause_handler.stop()
     if websocket_server_thread:
         websocket_server_thread.stop_server()
         websocket_server_thread.join()
