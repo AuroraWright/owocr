@@ -46,8 +46,9 @@ try:
     import platform
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
     from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
-                       CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowName, kCGNullWindowID, \
-                       CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, kCGWindowImageNominalResolution
+                       CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
+                       kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
+                       kCGWindowImageNominalResolution
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
 except ImportError:
     pass
@@ -882,6 +883,7 @@ class ScreenshotThread(threading.Thread):
                 else:
                     self.old_macos_screenshot_api = False
                     self.window_stream_configuration = None
+                    self.window_content_filter = None
                     self.screencapturekit_queue = queue.Queue()
                     CGMainDisplayID()
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
@@ -990,32 +992,8 @@ class ScreenshotThread(threading.Thread):
                     target_window = window
                     break
 
-            if not target_window:
-                self.screencapturekit_queue.put(None)
-                return
-
-            if not self.window_stream_configuration:
-                self.window_stream_configuration = SCStreamConfiguration.alloc().init()
-                self.window_stream_configuration.setShowsCursor_(False)
-                self.window_stream_configuration.setCaptureResolution_(SCCaptureResolutionNominal)
-                self.window_stream_configuration.setIgnoreGlobalClipSingleWindow_(True)
-
-            with objc.autorelease_pool():
-                content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(target_window)
-                frame = content_filter.contentRect()
-                width = frame.size.width
-                height = frame.size.height
-                current_size = (width, height)
-
-                if current_size != self.window_size:
-                    self.window_stream_configuration.setSourceRect_(CGRectMake(0, 0, width, height))
-                    self.window_stream_configuration.setWidth_(width)
-                    self.window_stream_configuration.setHeight_(height)
-
-                SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
-                    content_filter, self.window_stream_configuration, capture_image_completion_handler
-                )
-
+            self.screencapturekit_queue.put(target_window)
+        
         def capture_image_completion_handler(image, error):
             if error:
                 self.screencapturekit_queue.put(None)
@@ -1023,9 +1001,49 @@ class ScreenshotThread(threading.Thread):
 
             self.screencapturekit_queue.put(image)
 
-        SCShareableContent.getShareableContentWithCompletionHandler_(
-            shareable_content_completion_handler
+        window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, window_id)
+        if not window_list or len(window_list) == 0:
+            return None
+        window_info = window_list[0]
+        bounds = window_info.get('kCGWindowBounds')
+        if not bounds:
+            return None
+
+        width = bounds['Width']
+        height = bounds['Height']
+        current_size = (width, height)
+
+        if self.window_size != current_size:
+            SCShareableContent.getShareableContentWithCompletionHandler_(
+                shareable_content_completion_handler
+            )
+
+            try:
+                result = self.screencapturekit_queue.get(timeout=0.5)
+            except queue.Empty:
+                return None
+            if not result:
+                return None
+
+            if self.window_content_filter:
+                self.window_content_filter.dealloc()
+            self.window_content_filter = SCContentFilter.alloc().initWithDesktopIndependentWindow_(result)
+
+        if not self.window_stream_configuration:
+            self.window_stream_configuration = SCStreamConfiguration.alloc().init()
+            self.window_stream_configuration.setShowsCursor_(False)
+            self.window_stream_configuration.setCaptureResolution_(SCCaptureResolutionNominal)
+            self.window_stream_configuration.setIgnoreGlobalClipSingleWindow_(True)
+
+        if self.window_size != current_size:
+            self.window_stream_configuration.setSourceRect_(CGRectMake(0, 0, width, height))
+            self.window_stream_configuration.setWidth_(width)
+            self.window_stream_configuration.setHeight_(height)
+
+        SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_(
+            self.window_content_filter, self.window_stream_configuration, capture_image_completion_handler
         )
+
         try:
             return self.screencapturekit_queue.get(timeout=5)
         except queue.Empty:
@@ -1153,6 +1171,9 @@ class ScreenshotThread(threading.Thread):
             if self.window_stream_configuration:
                 self.window_stream_configuration.dealloc()
                 self.window_stream_configuration = None
+            if self.window_content_filter:
+                self.window_content_filter.dealloc()
+                self.window_content_filter = None
 
     def write_result(self, result, is_combo):
         if is_combo:
