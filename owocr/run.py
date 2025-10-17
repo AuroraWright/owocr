@@ -676,7 +676,7 @@ class TextFiltering:
         return changed_lines
 
     def _standalone_furigana_filter(self, result, result_ocr):
-        return self._find_changed_lines_text_impl(result, result_ocr, 0, [], None, False, 0)
+        return self._find_changed_lines_text_impl(result, result_ocr, None, [], None, False, 0)
 
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
