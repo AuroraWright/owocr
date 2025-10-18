@@ -293,8 +293,9 @@ class RequestHandler(socketserver.BaseRequestHandler):
 class TextFiltering:
     def __init__(self):
         self.language = config.get_general('language')
+        self.json_output = config.get_general('output_format') == 'json'
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
-        self.line_recovery = config.get_general('screen_capture_line_recovery')
+        self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
         self.furigana_filter = self.language == 'ja' and config.get_general('furigana_filter')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
@@ -383,7 +384,7 @@ class TextFiltering:
                 return 0, 0, None
             changed_lines_count = len(changed_lines)
             self.last_frame_data = (pil_image, current_result)
-            if changed_lines_count and config.get_general('output_format') != 'json':
+            if changed_lines_count and not self.json_output:
                 changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
                 if not changed_regions_image:
                     logger.warning('Error occurred while creating the differential image.')
@@ -416,7 +417,7 @@ class TextFiltering:
             self.processed_stable_frame = True
             self.stable_frame_data = current_result
             changed_lines_count = len(changed_lines)
-            if (changed_lines_count or recovered_lines_count) and config.get_general('output_format') != 'json':
+            if (changed_lines_count or recovered_lines_count) and not self.json_output:
                 if recovered_lines:
                     changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, self.last_last_frame_data[0], recovered_lines)
                 else:
@@ -1354,7 +1355,7 @@ class SecondPassThread:
 class OutputResult:
     def __init__(self):
         self.screen_capture_periodic = config.get_general('screen_capture_delay_secs') != -1
-        self.output_format = config.get_general('output_format')
+        self.json_output = config.get_general('output_format') == 'json'
         self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
@@ -1405,9 +1406,8 @@ class OutputResult:
                         if self.verbosity != 0:
                             logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</{self.engine_color}>")
 
-                        if self.output_format != 'json':
-                            if changed_regions_image:
-                                img_or_path = changed_regions_image
+                        if changed_regions_image:
+                            img_or_path = changed_regions_image
 
                         self.second_pass_thread.start()
                         self.second_pass_thread.submit_task(img_or_path, engine_instance, recovered_lines_count)
@@ -1437,48 +1437,40 @@ class OutputResult:
             logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</{self.engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
-        output_string = ''
-        log_message = ''
-        result_data_text = None
-
         if isinstance(result_data, OcrResult):
-            unprocessed_text = self._extract_lines_from_result(result_data)
-
-            if self.output_format == 'json':
-                result_dict = asdict(result_data)
-                output_string = json.dumps(result_dict, ensure_ascii=False)
-                log_message = self._post_process(unprocessed_text, False)
-            else:
-                result_data_text = unprocessed_text
+            result_data_text = self._extract_lines_from_result(result_data)
         else:
             result_data_text = result_data
 
-        if result_data_text != None:
-            if filter_text:
-                text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
-                if self.screen_capture_periodic and not text_to_process:
-                    if auto_pause_handler and auto_pause:
-                        auto_pause_handler.allow_auto_pause.set()
-                    return
-                output_string = self._post_process(text_to_process, True)
-            else:
-                if self.filtering.furigana_filter and isinstance(result_data, OcrResult):
-                    result_data_text = self.filtering._standalone_furigana_filter(result_data_text, result_data)
-                output_string = self._post_process(result_data_text, False)
-            log_message = output_string
+        if filter_text:
+            text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
+            if self.screen_capture_periodic and not text_to_process:
+                if auto_pause_handler and auto_pause:
+                    auto_pause_handler.allow_auto_pause.set()
+                return
+            output_text = self._post_process(text_to_process, True)
+        else:
+            if self.filtering.furigana_filter and isinstance(result_data, OcrResult):
+                result_data_text = self.filtering._standalone_furigana_filter(result_data_text, result_data)
+            output_text = self._post_process(result_data_text, False)
+
+        if self.json_output:
+            output_string = json.dumps(asdict(result_data), ensure_ascii=False)
+        else:
+            output_string = output_text
 
         if self.verbosity != 0:
             if self.verbosity < -1:
-                log_message_terminal = ': ' + log_message
+                log_message = ': ' + output_text
             elif self.verbosity == -1:
-                log_message_terminal = ''
+                log_message = ''
             else:
-                log_message_terminal = ': ' + (log_message if len(log_message) <= self.verbosity else log_message[:self.verbosity] + '[...]')
+                log_message = ': ' + (output_text if len(output_text) <= self.verbosity else output_text[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</{self.engine_color}>{log_message_terminal}')
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</{self.engine_color}>{log_message}')
 
         if notify and self.notifications:
-            notifier.send(title='owocr', message='Text recognized: ' + log_message, urgency=get_notification_urgency())
+            notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
 
         if self.write_to == 'websocket':
             websocket_server_thread.send_text(output_string)
