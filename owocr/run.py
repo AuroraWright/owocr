@@ -1000,12 +1000,15 @@ class ScreenshotThread(threading.Thread):
                 return
 
             with objc.autorelease_pool():
-                width = CGImageGetWidth(image)
-                height = CGImageGetHeight(image)
-                raw_data = CGDataProviderCopyData(CGImageGetDataProvider(image))
-                bpr = CGImageGetBytesPerRow(image)
-                img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
-                self.screencapturekit_queue.put(img)
+                try:
+                    width = CGImageGetWidth(image)
+                    height = CGImageGetHeight(image)
+                    raw_data = CGDataProviderCopyData(CGImageGetDataProvider(image))
+                    bpr = CGImageGetBytesPerRow(image)
+                    img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                    self.screencapturekit_queue.put(img)
+                except:
+                    self.screencapturekit_queue.put(None)
 
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, window_id)
         if not window_list or len(window_list) == 0:
@@ -1092,12 +1095,15 @@ class ScreenshotThread(threading.Thread):
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
-                        cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
-                        width = CGImageGetWidth(cg_image)
-                        height = CGImageGetHeight(cg_image)
-                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                        bpr = CGImageGetBytesPerRow(cg_image)
-                        img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                        try:
+                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
+                            width = CGImageGetWidth(cg_image)
+                            height = CGImageGetHeight(cg_image)
+                            raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                            bpr = CGImageGetBytesPerRow(cg_image)
+                            img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                        except:
+                            img = None
                     else:
                         img = self.capture_macos_window_screenshot(self.window_id)
                 if not img:
@@ -1241,6 +1247,8 @@ class ScreenshotThread(threading.Thread):
             self.write_result(img, is_combo)
 
             if img == False:
+                logger.info('The window was closed or an error occurred.')
+                terminate_handler()
                 break
 
         if self.screencapture_mode == 2:
@@ -1795,11 +1803,7 @@ def run():
                     skip_waiting = True
                     pass
 
-        if img == False:
-            logger.info('The window was closed or an error occurred, terminated!')
-            terminated.set()
-            break
-        elif img:
+        if img:
             output_result(img, filter_text, auto_pause, notify)
             if isinstance(img, Path) and delete_images:
                 Path.unlink(img)

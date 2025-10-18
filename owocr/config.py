@@ -102,7 +102,7 @@ class Config:
         'furigana_filter': True,
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',
-        'screen_capture_old_macos_api': False,
+        'screen_capture_old_macos_api': True,
         'language': 'ja',
         'output_format': 'text',
         'verbosity': -2,
