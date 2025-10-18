@@ -389,7 +389,7 @@ class MangaOcr:
         if not img:
             return (False, 'Invalid image provided')
 
-        x = (True, self.model(img))
+        x = (True, [self.model(img)])
 
         if is_path:
             img.close()
