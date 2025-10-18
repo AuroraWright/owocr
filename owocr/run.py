@@ -936,7 +936,7 @@ class ScreenshotThread(threading.Thread):
                 sys.exit(1)
 
             screen_capture_window_area = config.get_general('screen_capture_window_area')
-            if screen_capture_window_area != 'window':    
+            if screen_capture_window_area != 'window':
                 if len(screen_capture_window_area.split(',')) == 4:
                     x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
                     logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
@@ -993,13 +993,19 @@ class ScreenshotThread(threading.Thread):
                     break
 
             self.screencapturekit_queue.put(target_window)
-        
+
         def capture_image_completion_handler(image, error):
             if error:
                 self.screencapturekit_queue.put(None)
                 return
 
-            self.screencapturekit_queue.put(image)
+            with objc.autorelease_pool():
+                width = CGImageGetWidth(image)
+                height = CGImageGetHeight(image)
+                raw_data = CGDataProviderCopyData(CGImageGetDataProvider(image))
+                bpr = CGImageGetBytesPerRow(image)
+                img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                self.screencapturekit_queue.put(img)
 
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, window_id)
         if not window_list or len(window_list) == 0:
@@ -1083,26 +1089,19 @@ class ScreenshotThread(threading.Thread):
                 return None
             if not self.window_visible:
                 return None
-
-            self.window_size_changed = False
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
                         cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
+                        width = CGImageGetWidth(cg_image)
+                        height = CGImageGetHeight(cg_image)
+                        raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
+                        bpr = CGImageGetBytesPerRow(cg_image)
+                        img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
                     else:
-                        cg_image = self.capture_macos_window_screenshot(self.window_id)
-                    if not cg_image:
-                        return False
-                    width = CGImageGetWidth(cg_image)
-                    height = CGImageGetHeight(cg_image)
-                    raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                    bpr = CGImageGetBytesPerRow(cg_image)
-                    current_size = (width, height)
-                    if self.window_size != current_size:
-                        if self.window_size:
-                            self.window_size_changed = True
-                        self.window_size = current_size
-                img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
+                        img = self.capture_macos_window_screenshot(self.window_id)
+                if not img:
+                    return False
             else:
                 try:
                     coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
@@ -1111,32 +1110,28 @@ class ScreenshotThread(threading.Thread):
 
                     current_size = (coord_width, coord_height)
                     if self.window_size != current_size:
-                        if self.window_size:
-                            window_size_changed = True
-                            self.reset_windows_window()
-
+                        self.cleanup_window_screen_capture()
                         hwnd_dc = win32gui.GetWindowDC(self.window_handle)
                         self.windows_window_mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
                         self.windows_window_save_dc = self.windows_window_mfc_dc.CreateCompatibleDC()
                         self.windows_window_save_bitmap = win32ui.CreateBitmap()
                         self.windows_window_save_bitmap.CreateCompatibleBitmap(self.windows_window_mfc_dc, coord_width, coord_height)
                         self.windows_window_save_dc.SelectObject(self.windows_window_save_bitmap)
-
-                        self.window_size = current_size
                         win32gui.ReleaseDC(self.window_handle, hwnd_dc)
 
                     result = ctypes.windll.user32.PrintWindow(self.window_handle, self.windows_window_save_dc.GetSafeHdc(), 2)
-
                     bmpinfo = self.windows_window_save_bitmap.GetInfo()
                     bmpstr = self.windows_window_save_bitmap.GetBitmapBits(True)
-
                     img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-                    return img
                 except pywintypes.error:
-                    return None
-
+                    return False
+            window_size_changed = False
+            if self.window_size != img.size:
+                if self.window_size:
+                    window_size_changed = True
+                self.window_size = img.size
             if self.window_area_coordinates:
-                if self.window_size_changed:
+                if window_size_changed:
                     self.window_area_coordinates = None
                     logger.warning('Window size changed, discarding area selection')
                 else:
@@ -1315,7 +1310,7 @@ class SecondPassThread:
             self.running = True
             self.ocr_thread = threading.Thread(target=self._process_ocr, daemon=True)
             self.ocr_thread.start()
-    
+
     def stop(self):
         self.running = False
         if self.ocr_thread and self.ocr_thread.is_alive():
@@ -1340,7 +1335,7 @@ class SecondPassThread:
 
     def submit_task(self, img, engine_instance, recovered_lines_count):
         self.input_queue.put((img, engine_instance, recovered_lines_count))
-    
+
     def get_result(self):
         try:
             return self.output_queue.get_nowait()
