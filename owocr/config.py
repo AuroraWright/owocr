@@ -58,6 +58,8 @@ parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=arg
                     help='When reading with screen capture, combo to wait on for invoking the coordinate picker to change the screen/window area. Example value: "<ctrl>+<shift>+c". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code for filtering screencapture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
+parser.add_argument('-j', '--join_lines', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help="Display lines in the text output without a space between them.")
 parser.add_argument('-f', '--furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="Try to filter furigana lines for Japanese.")
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
@@ -99,6 +101,7 @@ class Config:
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
         'screen_capture_line_recovery': True,
+        'join_lines': False,
         'furigana_filter': True,
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',

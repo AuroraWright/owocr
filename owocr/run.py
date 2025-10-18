@@ -1332,8 +1332,9 @@ class SecondPassThread:
     def _process_ocr(self):
         while self.running:
             try:
-                img, engine_instance, recovered_lines_count = self.input_queue.get(timeout=0.5)
+                img, engine_index_local, recovered_lines_count = self.input_queue.get(timeout=0.5)
 
+                engine_instance = engine_instances[engine_index_local]
                 start_time = time.time()
                 res, result_data = engine_instance(img)
                 end_time = time.time()
@@ -1359,13 +1360,14 @@ class OutputResult:
         self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
+        self.line_separator = '' if config.get_general('join_lines') else ' '
         self.write_to = config.get_general('write_to')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
 
     def _post_process(self, text, strip_spaces):
         is_cj_text = self.filtering.cj_regex.search(''.join(text))
-        line_separator = '' if strip_spaces else ' '
+        line_separator = '' if strip_spaces else self.line_separator
         if is_cj_text:
             text = line_separator.join([''.join(i.split()) for i in text])
         else:
@@ -1385,7 +1387,7 @@ class OutputResult:
 
     def __call__(self, img_or_path, filter_text, auto_pause, notify):
         engine_index_local = engine_index
-        engine_instance = engine_instances[engine_index]
+        engine_instance = engine_instances[engine_index_local]
         two_pass_processing_active = False
         result_data = None
 
@@ -1410,7 +1412,7 @@ class OutputResult:
                             img_or_path = changed_regions_image
 
                         self.second_pass_thread.start()
-                        self.second_pass_thread.submit_task(img_or_path, engine_instance, recovered_lines_count)
+                        self.second_pass_thread.submit_task(img_or_path, engine_index_local, recovered_lines_count)
 
                 second_pass_result = self.second_pass_thread.get_result()
                 if second_pass_result:
