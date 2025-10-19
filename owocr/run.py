@@ -18,6 +18,7 @@ import mss
 import psutil
 import asyncio
 import websockets
+import socket
 import socketserver
 
 from PIL import Image, UnidentifiedImageError
@@ -268,7 +269,6 @@ class WebsocketServerThread(threading.Thread):
             self.server = start_server = websockets.serve(self.server_handler, '0.0.0.0', websocket_port, max_size=1000000000)
             try:
                 async with start_server:
-                    logger.info(f"Started websocket server on port {websocket_port}")
                     await stop_event.wait()
             except OSError:
                 logger.error(f"Couldn't start websocket server. Make sure port {websocket_port} is not already in use")
@@ -276,7 +276,7 @@ class WebsocketServerThread(threading.Thread):
         asyncio.run(main())
 
 
-class RequestHandler(socketserver.BaseRequestHandler):
+class UnixSocketRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
         conn = self.request
         conn.settimeout(3)
@@ -292,11 +292,14 @@ class RequestHandler(socketserver.BaseRequestHandler):
         except TimeoutError:
             pass
 
-        if not paused.is_set():
-            image_queue.put((img, False))
-            conn.sendall(b'True')
-        else:
-            conn.sendall(b'False')
+        try:
+            if not paused.is_set():
+                image_queue.put((img, False))
+                conn.sendall(b'True')
+            else:
+                conn.sendall(b'False')
+        except:
+            pass
 
 
 class TextFiltering:
@@ -1536,8 +1539,9 @@ def engine_change_handler(user_input='s', is_combo=True):
 
 def terminate_handler(sig=None, frame=None):
     global terminated
-    logger.info('Terminated!')
-    terminated.set()
+    if not terminated.is_set():
+        logger.info('Terminated!')
+        terminated.set()
 
 
 def user_input_thread_run():
@@ -1708,6 +1712,8 @@ def run():
         key_combos[combo_engine_switch] = engine_change_handler
 
     if 'websocket' in (read_from, read_from_secondary) or write_to == 'websocket':
+        websocket_port = config.get_general('websocket_port')
+        logger.info(f"Starting websocket server on port {websocket_port}")
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
@@ -1727,6 +1733,7 @@ def run():
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
             logger.error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
+            terminate_handler()
             sys.exit(1)
         screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
@@ -1737,11 +1744,20 @@ def run():
     if 'unixsocket' in (read_from, read_from_secondary):
         if sys.platform == 'win32':
             logger.error('"unixsocket" is not currently supported on Windows')
+            terminate_handler()
             sys.exit(1)
         socket_path = Path('/tmp/owocr.sock')
         if socket_path.exists():
-            socket_path.unlink()
-        unix_socket_server = socketserver.ThreadingUnixStreamServer(str(socket_path), RequestHandler)
+            try:
+                test_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                test_socket.connect(str(socket_path))
+                test_socket.close()
+                logger.error('Unix domain socket is already in use')
+                terminate_handler()
+                sys.exit(1)
+            except ConnectionRefusedError:
+                socket_path.unlink()
+        unix_socket_server = socketserver.ThreadingUnixStreamServer(str(socket_path), UnixSocketRequestHandler)
         unix_socket_server_thread = threading.Thread(target=unix_socket_server.serve_forever, daemon=True)
         unix_socket_server_thread.start()
         read_from_readable.append('unix socket')
@@ -1752,11 +1768,13 @@ def run():
     if any(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
         if all(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
             logger.error("read_from and read_from_secondary can't both be directory paths")
+            terminate_handler()
             sys.exit(1)
         delete_images = config.get_general('delete_images')
         read_from_path = Path(read_from) if read_from not in non_path_inputs else Path(read_from_secondary)
         if not read_from_path.is_dir():
             logger.error('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
+            terminate_handler()
             sys.exit(1)
         directory_watcher_thread = DirectoryWatcher(read_from_path)
         directory_watcher_thread.start()
@@ -1773,6 +1791,7 @@ def run():
     else:
         if Path(write_to).suffix.lower() != '.txt':
             logger.error('write_to must be either "websocket", "clipboard" or a path to a text file')
+            terminate_handler()
             sys.exit(1)
         write_to_readable = f'file {write_to}'
 
