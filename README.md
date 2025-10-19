@@ -65,8 +65,10 @@ The command-line options/config file allow you to configure OCR providers, hotke
 
 This uses code from/references these people/projects:
 - Viola for working on the Google Lens implementation (twice!) and helping with the pyobjc VisionKit code!
-- @ronaldoussoren for helping with the pyobjc VisionKit code
+- @rtr46 for contributing a big overhaul allowing for coordinate support and JSON output
+- @bpwhelan for contributing code for other language support and for his ideas (like two pass processing) originally implemented in the Game Sentence Miner fork of owocr
 - @bropines for the Bing code ([Github issue](https://github.com/AuroraWright/owocr/issues/10))
+- @ronaldoussoren for helping with the pyobjc VisionKit code
 - [Manga OCR](https://github.com/kha-white/manga-ocr) for inspiring and being the project owocr was originally derived from
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
