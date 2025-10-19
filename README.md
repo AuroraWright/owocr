@@ -28,7 +28,7 @@ This default behavior monitors the clipboard for images and outputs recognized t
 
 - Write text to a file: `owocr -w=<txt file path>`
 - Read images from a folder: `owocr -r=<folder path>`
-- Write text to a websocket: `owocr -w=websocket`
+- Write text to a websocket: `owocr -w=websocket` (default websocket port is 7331)
 - Read from the screen or a portion of the screen (opens the automatic drag and drop selector): `owocr -r=screencapture`
 - Read from a window having "Notepad" in the title: `owocr -r=screencapture -sa=Notepad`
 - Read from a portion of a window having "Notepad" in the title (opens the automatic drag and drop selector): `owocr -r=screencapture -sa=Notepad -swa`

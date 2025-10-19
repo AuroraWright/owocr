@@ -268,6 +268,7 @@ class WebsocketServerThread(threading.Thread):
             self.server = start_server = websockets.serve(self.server_handler, '0.0.0.0', websocket_port, max_size=1000000000)
             try:
                 async with start_server:
+                    logger.info(f"Started websocket server on port {websocket_port}")
                     await stop_event.wait()
             except OSError:
                 logger.error(f"Couldn't start websocket server. Make sure port {websocket_port} is not already in use")
