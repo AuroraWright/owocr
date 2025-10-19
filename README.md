@@ -1,56 +1,73 @@
 # OwOCR
 
-Command line client for several OCR providers derived from [Manga OCR](https://github.com/kha-white/manga-ocr), with a focus on Japanese text.
+OwOCR is a command-line text recognition tool that continuously scans for images and performs OCR (Optical Character Recognition) on them. Its main focus is Japanese, but it works for many other languages.
 
-# Installation
+## Installation
 
-This has been tested with Python 3.11, 3.12 and 3.13. It can be installed with `pip install owocr`.
+OwOCR has been tested on Python 3.11, 3.12 and 3.13. It can be installed with `pip install owocr` after you install Python. You also need to have one or more OCR engines, check the list below for instructions. I recommend installing at least Google Lens on any operating system, and OneOCR if you are on Windows. Bing is pre-installed, Apple Vision and Live Text come pre-installed on macOS.
 
-# Usage
+## Basic usage
 
-Basic usage is comparable to Manga OCR as in, `owocr` keeps scanning for images and performing text recognition on them. Similarly, by default it will read images from the clipboard and write text back to the clipboard (or optionally, read images from a folder and/or write text to a .txt file if you specify `-r=<folder path>` or `-w=<txt file path>`).
+```
+owocr
+```
 
-Additionally:
-- Scanning the clipboard takes basically zero system resources on macOS and Windows
-- Supports reading images and/or writing text to a websocket with the `-r=websocket` and/or `-w=websocket` parameters (the port is 7331 by default, and is configurable in the config file)
-- On macOS and Linux, supports reading images from a Unix domain socket (`/tmp/owocr.sock`) with `-r=unixsocket`
-- On Windows and macOS, supports capturing from the screen directly or from a specific window with `-r=screencapture`. By default it will open a coordinate picker so you can select an area of the screen and then read from it without delays, but you can change it to screenshot the whole screen, a manual set of coordinates `x,y,width,height` or just a specific window (with the window title) or a specific area of the window. You can also change the delay between screenshots or specify a keyboard combo if you don't want screenshots to be taken periodically. Refer to the config file or to `owocr --help` for more details about the screen capture settings
-- You can read images from another source at the same time with `-rs=`, the arguments are the same as `-r`
-- You can pause/unpause the image processing by pressing "p" or terminate the script with "t" or "q" inside the terminal window
-- You can switch between OCR providers pressing their corresponding keyboard key inside the terminal window (refer to the list of keys in the providers list below)
-- You can start the script paused with the `-p` option or with a specific provider with the `-e` option (refer to `owocr -h` for the list)
-- You can specify keyboard combos in the config file to pause/unpause and switch the OCR provider from anywhere (refer to the config file or `owocr -h`)
-- You can auto pause the script after a successful text recognition with the `-a=seconds` option. 0 (the default) disables it.
-- You can enable notifications in the config file or with `-n` to show the text with a native OS notification if you're not using screen capture with automatic screenshots. **Important for macOS users:** if you use Python from brew, you need to enter this command in your terminal before the first notification: `codesign -f -s - $(brew --cellar python)/3.*/Frameworks/Python.framework` (works on Ventura/Sonoma). Older macOS versions might require Python to be installed from the [official website](https://www.python.org/downloads/). Nothing can be done about this unfortunately.
-- Optionally, you can speed up the online providers by installing fpng-py: `pip install owocr[faster-png]` (requires setting up a developer environment on most operating systems/Python versions)
-- A config file (which will be automatically created in `user directory/.config/owocr_config.ini`, on Windows `user directory` is the `C:\Users\yourusername` folder) can be used to configure the script, as an example to limit providers (to reduce clutter/memory usage) as well as specifying provider settings such as api keys etc. A sample config file is also provided [here](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
+This default behavior monitors the clipboard for images and outputs recognized text back to the clipboard.
 
-# Supported providers
+## Main features
 
-## Local providers
-- [Manga OCR](https://github.com/kha-white/manga-ocr): install with `pip install owocr[mangaocr]` ("m" key)
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR): install with `pip install owocr[easyocr]` ("e" key)
-- [RapidOCR](https://github.com/RapidAI/RapidOCR): install with `pip install owocr[rapidocr]` ("r" key)
-- Apple Vision framework: this will work on macOS Ventura or later. In my experience, the best of the local providers for horizontal text ("a" key)
-- Apple Live Text (VisionKit framework): this will work on macOS Ventura or later. It should be the same as Vision except that in Sonoma Apple added vertical text reading ("d" key)
-- WinRT OCR: install with `pip install owocr[winocr]` on Windows 10 and later. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file ("w" key)
-- OneOCR: install with `pip install owocr[oneocr]` on Windows 10 and later. In my experience it's pretty good, though not as much as the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file ("z" key)
+- Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
+- Multiple output destinations: clipboard, text files, and websockets
+- Pause/unpause with `p` or terminate with `t`/`q` in the terminal, switch between engines with `s` or the engine-specific keys (from the engine list below)
+- Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine with the `-es` option: `-es=oneocr` on Windows and `-es=alivetext` on macOS. With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
+- Multiple configurable keyboard combinations to control owocr from anywhere, including pausing, switching engines, taking a screenshot of the selected screen/window and running the automatic tool to re-select an area of the screen/window via drag and drop
+- Read from a unix domain socket `/tmp/owocr.sock` on macOS/Linux
+- Furigana filter, works by default with Japanese text (both vertical and horizontal)
 
-## Cloud providers
-- Google Lens: Google Vision in disguise (no need for API keys!), install with `pip install owocr[lens]` ("l" key)
-- Bing: Azure in disguise (no need for API keys!) ("b" key)
-- Google Vision: install with `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` ("g" key)
-- Azure Image Analysis: install with `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file ("v" key)
-- OCRSpace: you need to specify an api key in the config file ("o" key)
+## Common option examples
+
+- Write text to a file: `owocr -w=<txt file path>`
+- Read images from a folder: `owocr -r=<folder path>`
+- Write text to a websocket: `owocr -w=websocket`
+- Read from the screen or a portion of the screen (opens the automatic drag and drop selector): `owocr -r=screencapture`
+- Read from a window having "Notepad" in the title: `owocr -r=screencapture -sa=Notepad`
+- Read from a portion of a window having "Notepad" in the title (opens the automatic drag and drop selector): `owocr -r=screencapture -sa=Notepad -swa`
+
+## Configuration
+
+There are many more options and customization features. For complete documentation of all available settings:
+
+- View all command-line options and their descriptions: `owocr -h`
+- Check the automatically generated config file at `~/.config/owocr_config.ini` on Linux/macOS, or `C:\Users\yourusername\.config\owocr_config.ini` on Windows
+- See a sample config file: [owocr_config.ini](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
+
+The command-line options/config file allow you to configure OCR providers, hotkeys, screen capture settings, notifications, and much more.
+
+# Supported engines
+
+## Local
+- [Manga OCR](https://github.com/kha-white/manga-ocr) - install: `pip install owocr[mangaocr]` → key: `m`
+- [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install owocr[easyocr]` → key: `e`
+- [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install owocr[rapidocr]` → key: `r`
+- Apple Vision framework - Probably the best local engine to date. **macOS only - Recommended (pre-installed)** → key: `a`
+- Apple Live Text (VisionKit framework) - It should be the same as Vision except that in Sonoma Apple added vertical text reading. **macOS only - Recommended (pre-installed)** → key: `d`
+- WinRT OCR: install: `pip install owocr[winocr]`. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only** → key: `w`
+- OneOCR - install: `pip install owocr[oneocr]`. Close second local best to the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only - Recommended** → key: `z`
+
+## Cloud
+- Google Lens - install: `pip install owocr[lens]`. Arguably the best OCR engine to date. **Recommended** → key: `l`
+- Bing - Close second best. **Recommended (pre-installed)** → key: `b`
+- Google Vision: install: `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` → key: `g`
+- Azure Image Analysis: install: `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file → key: `v`
+- OCRSpace: you need to specify an api key in the config file → key: `o`
 
 # Acknowledgments
 
-This uses code from/references these projects:
+This uses code from/references these people/projects:
 - Viola for working on the Google Lens implementation (twice!) and helping with the pyobjc VisionKit code!
-- [google-lens-ocr](https://github.com/dimdenGD/chrome-lens-ocr) for additional Lens reverse engineering and the headers/URL parameters I currently use
 - @ronaldoussoren for helping with the pyobjc VisionKit code
 - @bropines for the Bing code ([Github issue](https://github.com/AuroraWright/owocr/issues/10))
-- [Manga OCR](https://github.com/kha-white/manga-ocr)
+- [Manga OCR](https://github.com/kha-white/manga-ocr) for inspiring and being the project owocr was originally derived from
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code

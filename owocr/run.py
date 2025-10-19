@@ -254,16 +254,24 @@ class WebsocketServerThread(threading.Thread):
         return asyncio.run_coroutine_threadsafe(self.send_text_coroutine(text), self.loop)
 
     def stop_server(self):
-        self.loop.call_soon_threadsafe(self._stop_event.set)
+        try:
+            self.loop.call_soon_threadsafe(self._stop_event.set)
+        except RuntimeError:
+            pass
 
     def run(self):
         async def main():
             self._loop = asyncio.get_running_loop()
             self._stop_event = stop_event = asyncio.Event()
             self._event.set()
-            self.server = start_server = websockets.serve(self.server_handler, '0.0.0.0', config.get_general('websocket_port'), max_size=1000000000)
-            async with start_server:
-                await stop_event.wait()
+            websocket_port = config.get_general('websocket_port')
+            self.server = start_server = websockets.serve(self.server_handler, '0.0.0.0', websocket_port, max_size=1000000000)
+            try:
+                async with start_server:
+                    await stop_event.wait()
+            except OSError:
+                logger.error(f"Couldn't start websocket server. Make sure port {websocket_port} is not already in use")
+                terminate_handler()
         asyncio.run(main())
 
 
@@ -387,7 +395,7 @@ class TextFiltering:
             if changed_lines_count and not self.json_output:
                 changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
                 if not changed_regions_image:
-                    logger.warning('Error occurred while creating the differential image.')
+                    logger.warning('Error occurred while creating the differential image')
                     return 0, 0, None
                 return changed_lines_count, 0, changed_regions_image
             else:
@@ -424,7 +432,7 @@ class TextFiltering:
                     changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
 
                 if not changed_regions_image:
-                    logger.warning('Error occurred while creating the differential image.')
+                    logger.warning('Error occurred while creating the differential image')
                     return 0, 0, None
                 return changed_lines_count, recovered_lines_count, changed_regions_image
             else:
@@ -876,7 +884,6 @@ class ScreenshotThread(threading.Thread):
         else:
             self.screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             self.window_area_coordinates = None
-            area_invalid_error = '"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name'
 
             if sys.platform == 'darwin':
                 if config.get_general('screen_capture_old_macos_api') or int(platform.mac_ver()[0].split('.')[0]) < 14:
@@ -906,7 +913,7 @@ class ScreenshotThread(threading.Thread):
                             break
 
                 if not window_index:
-                    logger.error(area_invalid_error)
+                    logger.error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
                     sys.exit(1)
 
                 self.window_id = window_ids[window_index]
@@ -920,7 +927,7 @@ class ScreenshotThread(threading.Thread):
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
-                    logger.error(area_invalid_error)
+                    logger.error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
                     sys.exit(1)
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -1248,7 +1255,7 @@ class ScreenshotThread(threading.Thread):
             self.write_result(img, is_combo)
 
             if img == False:
-                logger.info('The window was closed or an error occurred.')
+                logger.info('The window was closed or an error occurred')
                 terminate_handler()
                 break
 
@@ -1597,52 +1604,62 @@ def run():
     if config.has_config:
         logger.info('Parsed config file')
     else:
-        logger.warning('No config file, defaults will be used.')
+        logger.warning('No config file, defaults will be used')
         if config.downloaded_config:
             logger.info(f'A default config file has been downloaded to {config.config_path}')
 
     global engine_instances
     global engine_keys
     output_format = config.get_general('output_format')
+    engines_setting = config.get_general('engines')
+    default_engine_setting = config.get_general('engine')
+    secondary_engine_setting = config.get_general('engine_secondary')
+    language = config.get_general('language')
     engine_instances = []
     config_engines = []
     engine_keys = []
     default_engine = ''
     engine_secondary = ''
 
-    if len(config.get_general('engines')) > 0:
-        for config_engine in config.get_general('engines').split(','):
+    if len(engines_setting) > 0:
+        for config_engine in engines_setting.split(','):
             config_engines.append(config_engine.strip().lower())
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
 
             if output_format == 'json' and not engine_class.coordinate_support:
-                logger.warning(f"Skipping {engine_class.readable_name} as it does not support JSON output.")
+                logger.warning(f"Skipping {engine_class.readable_name} as it does not support JSON output")
                 continue
 
             if config.get_engine(engine_class.name) == None:
                 if engine_class.manual_language:
-                    engine_instance = engine_class(language=config.get_general('language'))
+                    engine_instance = engine_class(language=language)
                 else:
                     engine_instance = engine_class()
             else:
                 if engine_class.manual_language:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.name), language=config.get_general('language'))
+                    engine_instance = engine_class(config=config.get_engine(engine_class.name), language=language)
                 else:
                     engine_instance = engine_class(config=config.get_engine(engine_class.name))
 
             if engine_instance.available:
                 engine_instances.append(engine_instance)
                 engine_keys.append(engine_class.key)
-                if config.get_general('engine') == engine_class.name:
+                if default_engine_setting == engine_class.name:
                     default_engine = engine_class.key
-                if config.get_general('engine_secondary') == engine_class.name and engine_class.local and engine_class.coordinate_support:
+                if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
                     engine_secondary = engine_class.key
 
     if len(engine_keys) == 0:
         logger.error('No engines available!')
         sys.exit(1)
+
+    if default_engine_setting and not default_engine:
+        logger.warning("Couldn't find selected engine, using the first one in the list")
+
+    if secondary_engine_setting and not engine_secondary:
+        logger.warning("Couldn't find selected secondary engine, make sure it's enabled, local and has JSON format support. Disabling two pass processing")
 
     global engine_index
     global engine_index_2
@@ -1765,7 +1782,8 @@ def run():
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
 
-    logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
+    if not terminated.is_set():
+        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
 
     while not terminated.is_set():
         img = None

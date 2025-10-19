@@ -27,7 +27,7 @@ parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
                     help='OCR engine to use. Available: "mangaocr", "glens", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
 parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
-                    help='OCR engine to use for two-pass processing.')
+                    help='Local OCR engine to use for two-pass screen capture processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Pause at startup.')
 parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
