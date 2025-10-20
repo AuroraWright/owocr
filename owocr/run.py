@@ -307,7 +307,7 @@ class TextFiltering:
         self.json_output = config.get_general('output_format') == 'json'
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
-        self.furigana_filter = self.language == 'ja' and config.get_general('furigana_filter')
+        self.furigana_filter = config.get_general('furigana_filter')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
         self.stable_frame_data = None
@@ -562,7 +562,7 @@ class TextFiltering:
         if all(not current_text_line for current_text_line in current_lines):
             return None
 
-        if self.furigana_filter and isinstance(current_result_ocr, OcrResult):
+        if self.furigana_filter and self.language == 'ja' and isinstance(current_result_ocr, OcrResult):
             for p in current_result_ocr.paragraphs:
                 current_lines_ocr.extend(p.lines)
 
@@ -700,7 +700,9 @@ class TextFiltering:
         lines_ocr = []
 
         for line in result:
-            text_line = self._normalize_line_for_comparison(line)
+            if not line:
+                lines.append(line)
+            text_line = ''.join(self.cj_regex.findall(line))
             lines.append(text_line)
         if all(not text_line for text_line in lines):
             return result
@@ -711,11 +713,11 @@ class TextFiltering:
         for i, text in enumerate(lines):
             filtered_line = result[i]
 
-            logger.opt(colors=True).debug(f"<magenta>Line: '{text}'</magenta>")
-
             if not text:
                 filtered_lines.append(filtered_line)
                 continue
+
+            logger.opt(colors=True).debug(f"<magenta>Line: '{text}'</magenta>")
 
             is_furigana = self._furigana_filter(lines, lines_ocr, text, i)
             if is_furigana:
