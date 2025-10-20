@@ -271,8 +271,7 @@ class WebsocketServerThread(threading.Thread):
                 async with start_server:
                     await stop_event.wait()
             except OSError:
-                logger.error(f"Couldn't start websocket server. Make sure port {websocket_port} is not already in use")
-                terminate_handler()
+                exit_with_error(f"Couldn't start websocket server. Make sure port {websocket_port} is not already in use")
         asyncio.run(main())
 
 
@@ -853,8 +852,7 @@ class ScreenshotThread(threading.Thread):
         elif screen_capture_area.startswith('screen_'):
             parts = screen_capture_area.split('_')
             if len(parts) != 2 or not parts[1].isdigit():
-                logger.error('Invalid screen_capture_area')
-                sys.exit(1)
+                exit_with_error('Invalid screen_capture_area')
             screen_capture_monitor = int(parts[1])
             self.screencapture_mode = 1
         elif len(screen_capture_area.split(',')) == 4:
@@ -871,8 +869,7 @@ class ScreenshotThread(threading.Thread):
             if self.screencapture_mode == 1:
                 mon = self.sct.monitors
                 if len(mon) <= screen_capture_monitor:
-                    logger.error('Invalid monitor number in screen_capture_area')
-                    sys.exit(1)
+                    exit_with_error('Invalid monitor number in screen_capture_area')
                 coord_left = mon[screen_capture_monitor]['left']
                 coord_top = mon[screen_capture_monitor]['top']
                 coord_width = mon[screen_capture_monitor]['width']
@@ -917,8 +914,7 @@ class ScreenshotThread(threading.Thread):
                             break
 
                 if not window_index:
-                    logger.error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
-                    sys.exit(1)
+                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
 
                 self.window_id = window_ids[window_index]
                 window_title = window_titles[window_index]
@@ -931,8 +927,7 @@ class ScreenshotThread(threading.Thread):
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
-                    logger.error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
-                    sys.exit(1)
+                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
                 self.window_visible = not win32gui.IsIconic(self.window_handle)
@@ -944,8 +939,7 @@ class ScreenshotThread(threading.Thread):
                 self.windows_window_tracker_instance.start()
                 logger.info(f'Selected window: {window_title}')
             else:
-                logger.error('Window capture is only currently supported on Windows and macOS')
-                sys.exit(1)
+                exit_with_error('Window capture is only currently supported on Windows and macOS')
 
             screen_capture_window_area = config.get_general('screen_capture_window_area')
             if screen_capture_window_area != 'window':
@@ -956,8 +950,7 @@ class ScreenshotThread(threading.Thread):
                 elif screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
                 else:
-                    logger.error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
-                    sys.exit(1)
+                    exit_with_error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -1204,8 +1197,7 @@ class ScreenshotThread(threading.Thread):
             screen_selection = get_screen_selection(None, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if on_init:
-                    logger.error('Picker window was closed or an error occurred')
-                    sys.exit(1)
+                    exit_with_error('Picker window was closed or an error occurred')
                 else:
                     logger.warning('Picker window was closed or an error occurred, leaving settings unchanged')
                     return
@@ -1544,6 +1536,12 @@ def terminate_handler(sig=None, frame=None):
         terminated.set()
 
 
+def exit_with_error(error):
+    logger.error(error)
+    terminate_handler()
+    sys.exit(1)
+
+
 def user_input_thread_run():
     if sys.platform == 'win32':
         import msvcrt
@@ -1657,8 +1655,7 @@ def run():
                     engine_secondary = engine_class.key
 
     if len(engine_keys) == 0:
-        logger.error('No engines available!')
-        sys.exit(1)
+        exit_with_error('No engines available!')
 
     if default_engine_setting and not default_engine:
         logger.warning("Couldn't find selected engine, using the first one in the list")
@@ -1732,9 +1729,7 @@ def run():
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
-            logger.error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
-            terminate_handler()
-            sys.exit(1)
+            exit_with_error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
         screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
@@ -1743,18 +1738,14 @@ def run():
         read_from_readable.append('websocket')
     if 'unixsocket' in (read_from, read_from_secondary):
         if sys.platform == 'win32':
-            logger.error('"unixsocket" is not currently supported on Windows')
-            terminate_handler()
-            sys.exit(1)
+            exit_with_error('"unixsocket" is not currently supported on Windows')
         socket_path = Path('/tmp/owocr.sock')
         if socket_path.exists():
             try:
                 test_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 test_socket.connect(str(socket_path))
                 test_socket.close()
-                logger.error('Unix domain socket is already in use')
-                terminate_handler()
-                sys.exit(1)
+                exit_with_error('Unix domain socket is already in use')
             except ConnectionRefusedError:
                 socket_path.unlink()
         unix_socket_server = socketserver.ThreadingUnixStreamServer(str(socket_path), UnixSocketRequestHandler)
@@ -1767,15 +1758,11 @@ def run():
         read_from_readable.append('clipboard')
     if any(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
         if all(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
-            logger.error("read_from and read_from_secondary can't both be directory paths")
-            terminate_handler()
-            sys.exit(1)
+            exit_with_error("read_from and read_from_secondary can't both be directory paths")
         delete_images = config.get_general('delete_images')
         read_from_path = Path(read_from) if read_from not in non_path_inputs else Path(read_from_secondary)
         if not read_from_path.is_dir():
-            logger.error('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
-            terminate_handler()
-            sys.exit(1)
+            exit_with_error('read_from and read_from_secondary must be either "websocket", "unixsocket", "clipboard", "screencapture", or a path to a directory')
         directory_watcher_thread = DirectoryWatcher(read_from_path)
         directory_watcher_thread.start()
         read_from_readable.append(f'directory {read_from_path}')
@@ -1790,9 +1777,7 @@ def run():
         write_to_readable = write_to
     else:
         if Path(write_to).suffix.lower() != '.txt':
-            logger.error('write_to must be either "websocket", "clipboard" or a path to a text file')
-            terminate_handler()
-            sys.exit(1)
+            exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
