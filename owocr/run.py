@@ -579,6 +579,7 @@ class TextFiltering:
 
         first = True
         changed_lines_count = 0
+        len_recovered_lines = 0 if not recovered_lines else len(recovered_lines)
         for i, current_text in enumerate(current_lines):
             changed_line = current_result[i]
 
@@ -598,7 +599,7 @@ class TextFiltering:
             if text_similar:
                 continue
 
-            i2 = i if not recovered_lines else i - len(recovered_lines)
+            i2 = i - len_recovered_lines
 
             if (recovered_lines == None or i2 < 0) and recovered_lines_count > 0:
                 if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
@@ -611,7 +612,7 @@ class TextFiltering:
 
             if current_lines_ocr:
                 if i2 >= 0:
-                    is_furigana = self._furigana_filter(current_lines, current_lines_ocr, current_text, i2)
+                    is_furigana = self._furigana_filter(current_lines[len_recovered_lines:], current_lines_ocr, current_text, i2)
                     if is_furigana:
                         continue
 
@@ -643,8 +644,8 @@ class TextFiltering:
             if not current_lines[j].replace('\n', ''):
                 continue
 
-            other_line_bbox = current_lines_ocr[j].bounding_box
             other_line_text = current_lines[j]
+            other_line_bbox = current_lines_ocr[j].bounding_box
 
             if len(current_text) <= len(other_line_text):
                 is_vertical = other_line_bbox.height > other_line_bbox.width
