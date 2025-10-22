@@ -641,7 +641,7 @@ class TextFiltering:
         for j in range(len(current_lines_ocr)):
             if i == j:
                 continue
-            if not current_lines[j].replace('\n', ''):
+            if not current_lines[j]:
                 continue
 
             other_line_text = current_lines[j]
