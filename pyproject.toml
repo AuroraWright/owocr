@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.18.7"
+version = "1.19"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
     {name = "AuroraWright", email = "fallingluma@gmail.com"}
 ]
-license = "Apache-2.0"
+license = "GPL-3.0-only"
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
@@ -46,7 +46,14 @@ rapidocr = [
 ]
 
 mangaocr = [
-    "manga-ocr"
+    "manga-ocr",
+    "setuptools<80",
+    "scipy",
+    "pyclipper",
+    "torchvision",
+    "torch-summary",
+    "opencv-python",
+    "shapely"
 ]
 
 winocr = [
@@ -79,4 +86,7 @@ owocr = "owocr.__main__:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["owocr", "owocr.*"]
+include = ["owocr*", "comic_text_detector*"]
+
+[tool.setuptools.package-data]
+comic_text_detector = ["LICENSE"]

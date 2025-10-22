@@ -46,7 +46,7 @@ The command-line options/config file allow you to configure OCR providers, hotke
 # Supported engines
 
 ## Local
-- [Manga OCR](https://github.com/kha-white/manga-ocr) - install: `pip install owocr[mangaocr]` → key: `m`
+- [Manga OCR](https://github.com/kha-white/manga-ocr) (with [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install owocr[mangaocr]` → key: `m`
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install owocr[easyocr]` → key: `e`
 - [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install owocr[rapidocr]` → key: `r`
 - Apple Vision framework - Probably the best local engine to date. **macOS only - Recommended (pre-installed)** → key: `a`
@@ -70,6 +70,7 @@ This uses code from/references these people/projects:
 - @bropines for the Bing code ([Github issue](https://github.com/AuroraWright/owocr/issues/10))
 - @ronaldoussoren for helping with the pyobjc VisionKit code
 - [Manga OCR](https://github.com/kha-white/manga-ocr) for inspiring and being the project owocr was originally derived from
+- [Mokuro](https://github.com/kha-white/mokuro) for the comic text detector integration code
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code

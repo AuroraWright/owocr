@@ -8,6 +8,7 @@ import logging
 from math import sqrt, sin, cos, atan2
 import json
 import base64
+import urllib
 from urllib.parse import urlparse, parse_qs
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
@@ -20,6 +21,10 @@ import requests
 
 try:
     from manga_ocr import MangaOcr as MOCR
+    from comic_text_detector.inference import TextDetector
+    from scipy.signal.windows import gaussian
+    import torch
+    import cv2
 except ImportError:
     pass
 
@@ -366,30 +371,179 @@ class MangaOcr:
     available = False
     local = True
     manual_language = False
-    coordinate_support = False
+    coordinate_support = True
     threading_support = True
 
     def __init__(self, config={}):
         if 'manga_ocr' not in sys.modules:
             logger.warning('manga-ocr not available, Manga OCR will not work!')
+        elif 'scipy' not in sys.modules:
+            logger.warning('scipy not available, Manga OCR will not work!')
         else:
+            comic_text_detector_path = Path.home() / ".cache" / "manga-ocr"
+            comic_text_detector_file = comic_text_detector_path / "comictextdetector.pt"
+
+            if not comic_text_detector_file.exists():
+                comic_text_detector_path.mkdir(parents=True, exist_ok=True)
+                logger.info('Downloading comic text detector model ' + str(comic_text_detector_file))
+                try:
+                    urllib.request.urlretrieve('https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.3/comictextdetector.pt', str(comic_text_detector_file))
+                except:
+                    logger.warning('Download failed. Manga OCR will not work!')
+                    return
+
             pretrained_model_name_or_path = config.get('pretrained_model_name_or_path', 'kha-white/manga-ocr-base')
             force_cpu = config.get('force_cpu', False)
+
             logger.disable('manga_ocr')
             logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
             from manga_ocr import ocr
             ocr.post_process = empty_post_process
             logger.info(f'Loading Manga OCR model')
             self.model = MOCR(pretrained_model_name_or_path, force_cpu)
+
+            if not force_cpu and torch.cuda.is_available():
+                device = 'cuda'
+            elif not force_cpu and torch.backends.mps.is_available():
+                device = 'mps'
+            else:
+                device = 'cpu'
+            logger.info(f'Loading comic text detector model, using device {device}')
+            self.text_detector_model = TextDetector(model_path=comic_text_detector_file, input_size=1024, device=device, act='leaky')
+
             self.available = True
             logger.info('Manga OCR ready')
+
+    def _convert_line_bbox(self, rect, img_width, img_height):
+        x1, y1 = float(rect[0][0]), float(rect[0][1])
+        x2, y2 = float(rect[1][0]), float(rect[1][1])
+        x3, y3 = float(rect[2][0]), float(rect[2][1])
+        x4, y4 = float(rect[3][0]), float(rect[3][1])
+
+        return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
+
+    def _convert_box_bbox(self, rect, img_width, img_height):
+        x1, y1, x2, y2 = rect
+
+        width_px = x2 - x1
+        height_px = y2 - y1
+
+        center_x_px = (x1 + x2) / 2
+        center_y_px = (y1 + y2) / 2
+
+        width_norm = width_px / img_width
+        height_norm = height_px / img_height
+        center_x_norm = center_x_px / img_width
+        center_y_norm = center_y_px / img_height
+
+        return BoundingBox(
+            center_x=float(center_x_norm),
+            center_y=float(center_y_norm),
+            width=float(width_norm),
+            height=float(height_norm)
+        )
+
+    # from https://github.com/kha-white/mokuro/blob/master/mokuro/manga_page_ocr.py
+    def _split_into_chunks(self, img, mask_refined, blk, line_idx, textheight, max_ratio, anchor_window):
+        line_crop = blk.get_transformed_region(img, line_idx, textheight)
+
+        h, w, *_ = line_crop.shape
+        ratio = w / h
+
+        if ratio <= max_ratio:
+            return [line_crop], []
+        else:
+            k = gaussian(textheight * 2, textheight / 8)
+
+            line_mask = blk.get_transformed_region(mask_refined, line_idx, textheight)
+            num_chunks = int(np.ceil(ratio / max_ratio))
+
+            anchors = np.linspace(0, w, num_chunks + 1)[1:-1]
+
+            line_density = line_mask.sum(axis=0)
+            line_density = np.convolve(line_density, k, 'same')
+            line_density /= line_density.max()
+
+            anchor_window *= textheight
+
+            cut_points = []
+            for anchor in anchors:
+                anchor = int(anchor)
+
+                n0 = np.clip(anchor - anchor_window // 2, 0, w)
+                n1 = np.clip(anchor + anchor_window // 2, 0, w)
+
+                p = line_density[n0:n1].argmin()
+                p += n0
+
+                cut_points.append(p)
+
+            return np.split(line_crop, cut_points, axis=1), cut_points
+
+    # derived from https://github.com/kha-white/mokuro/blob/master/mokuro/manga_page_ocr.py
+    def _to_generic_result(self, mask_refined, blk_list, img_np, img_height, img_width):
+        paragraphs = []
+        for blk_idx, blk in enumerate(blk_list):
+            lines = []
+            for line_idx, line in enumerate(blk.lines_array()):
+                if blk.vertical:
+                    max_ratio = 16
+                else:
+                    max_ratio = 8
+
+                line_crops, cut_points = self._split_into_chunks(
+                    img_np,
+                    mask_refined,
+                    blk,
+                    line_idx,
+                    textheight=64,
+                    max_ratio=max_ratio,
+                    anchor_window=2,
+                )
+
+                l_text = ''
+                for line_crop in line_crops:
+                    if blk.vertical:
+                        line_crop = cv2.rotate(line_crop, cv2.ROTATE_90_CLOCKWISE)
+                    l_text += self.model(Image.fromarray(line_crop))
+                l_bbox = self._convert_line_bbox(line.tolist(), img_width, img_height)
+
+                word = Word(
+                    text=l_text,
+                    bounding_box=l_bbox
+                )
+                words = [word]
+
+                line = Line(
+                    text=l_text,
+                    bounding_box=l_bbox,
+                    words=words
+                )
+
+                lines.append(line)
+
+            p_bbox = self._convert_box_bbox(list(blk.xyxy), img_width, img_height)
+            writing_direction = 'TOP_TO_BOTTOM' if blk.vertical else None
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines, writing_direction=writing_direction)
+
+            paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
 
     def __call__(self, img):
         img, is_path = input_to_pil_image(img)
         if not img:
             return (False, 'Invalid image provided')
 
-        x = (True, [self.model(img)])
+        img_np = pil_image_to_numpy_array(img)
+        img_width, img_height = img.size
+
+        _, mask_refined, blk_list = self.text_detector_model(img_np, refine_mode=1, keep_undetected_mask=True)
+        ocr_result = self._to_generic_result(mask_refined, blk_list, img_np, img_height, img_width)
+        x = (True, ocr_result)
 
         if is_path:
             img.close()
@@ -631,10 +785,10 @@ class GoogleLens:
         filter.filter_type = LensOverlayFilterType.AUTO_FILTER
         request.objects_request.request_context.client_context.client_filters.filter.append(filter)
 
-        image_data = self._preprocess(img)
-        request.objects_request.image_data.payload.image_bytes = image_data[0]
-        request.objects_request.image_data.image_metadata.width = image_data[1]
-        request.objects_request.image_data.image_metadata.height = image_data[2]
+        img_bytes, img_width, img_height = self._preprocess(img)
+        request.objects_request.image_data.payload.image_bytes = img_bytes
+        request.objects_request.image_data.image_metadata.width = img_width
+        request.objects_request.image_data.image_metadata.height = img_height
 
         payload = request.SerializeToString()
 
@@ -678,7 +832,7 @@ class GoogleLens:
             new_h = int(new_w / aspect_ratio)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        return (pil_image_to_bytes(img), img.width, img.height)
+        return pil_image_to_bytes(img), img.width, img.height
 
 class Bing:
     name = 'bing'

@@ -318,7 +318,7 @@ class TextFiltering:
         self.frame_stabilization_timestamp = 0
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E01-\u9FFF]')
         self.kanji_regex = re.compile(r'[\u4E00-\u9FFF]')
-        self.regex = self.get_regex()
+        self.regex = self._get_regex()
         self.kana_variants = {
             'ぁ': ['ぁ', 'あ'], 'あ': ['ぁ', 'あ'],
             'ぃ': ['ぃ', 'い'], 'い': ['ぃ', 'い'],
@@ -342,7 +342,7 @@ class TextFiltering:
             'ヮ': ['ヮ', 'ワ'], 'ワ': ['ヮ', 'ワ']
         }
 
-    def get_regex(self):
+    def _get_regex(self):
         if self.language == 'ja':
             return self.cj_regex
         elif self.language == 'zh':
@@ -364,11 +364,11 @@ class TextFiltering:
             return re.compile(
             r'[a-zA-Z\u00C0-\u00FF\u0100-\u017F\u0180-\u024F\u0250-\u02AF\u1D00-\u1D7F\u1D80-\u1DBF\u1E00-\u1EFF\u2C60-\u2C7F\uA720-\uA7FF\uAB30-\uAB6F]')
 
-    def convert_small_kana_to_big(self, text):
+    def _convert_small_kana_to_big(self, text):
         converted_text = ''.join(self.kana_variants.get(char, [char])[-1] for char in text)
         return converted_text
 
-    def _get_line_text(self, line):
+    def get_line_text(self, line):
         if line.text is not None:
             return line.text
         text_parts = []
@@ -381,14 +381,14 @@ class TextFiltering:
         return ''.join(text_parts)
 
     def _normalize_line_for_comparison(self, line_text):
-        if not line_text:
+        if not line_text.replace('\n', ''):
             return ''
         filtered_text = ''.join(self.regex.findall(line_text))
         if self.language == 'ja':
-            filtered_text = self.convert_small_kana_to_big(filtered_text)
+            filtered_text = self._convert_small_kana_to_big(filtered_text)
         return filtered_text
 
-    def _find_changed_lines(self, pil_image, current_result):
+    def find_changed_lines(self, pil_image, current_result):
         if self.frame_stabilization == 0:
             changed_lines = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
             if changed_lines == None:
@@ -463,7 +463,7 @@ class TextFiltering:
             return None
 
         for current_line in current_lines:
-            current_text_line = self._get_line_text(current_line)
+            current_text_line = self.get_line_text(current_line)
             current_text_line = self._normalize_line_for_comparison(current_text_line)
             current_text.append(current_text_line)
         if all(not current_text_line for current_text_line in current_lines):
@@ -477,7 +477,7 @@ class TextFiltering:
                     previous_lines.extend(p.lines)
 
             for previous_line in previous_lines:
-                previous_text_line = self._get_line_text(previous_line)
+                previous_text_line = self.get_line_text(previous_line)
                 previous_text_line = self._normalize_line_for_comparison(previous_text_line)
                 previous_text.append(previous_text_line)
 
@@ -503,53 +503,52 @@ class TextFiltering:
 
         return changed_lines
 
-    def _find_changed_lines_text(self, current_result, current_result_ocr, two_pass_processing_active, recovered_lines_count):
+    def find_changed_lines_text(self, current_result, current_result_ocr, two_pass_processing_active, recovered_lines_count):
         frame_stabilization_active = self.frame_stabilization != 0
 
         if (not frame_stabilization_active) or two_pass_processing_active:
-            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, recovered_lines_count, True)
+            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, recovered_lines_count, True)
             if changed_lines == None:
-                return []
+                return [], 0
             self.last_frame_text = (current_result, current_result_ocr)
-            return changed_lines
+            return changed_lines, changed_lines_count
 
-        changed_lines_stabilization = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, 0, False)
+        changed_lines_stabilization, changed_lines_stabilization_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, 0, False)
         if changed_lines_stabilization == None:
-            return []
+            return [], 0
 
-        frames_match = len(changed_lines_stabilization) == 0
+        frames_match = changed_lines_stabilization_count == 0
 
         logger.debug(f"Frames match: '{frames_match}'")
 
         if frames_match:
             if self.processed_stable_frame:
-                return []
+                return [], 0
             if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
-                return []
+                return [], 0
             if self.line_recovery and self.last_last_frame_text[0]:
                 logger.debug(f'Checking for missed lines')
-                recovered_lines = self._find_changed_lines_text_impl(self.last_last_frame_text[0], self.last_last_frame_text[1], self.stable_frame_text, current_result, None, 0, False)
-                recovered_lines_count = len(recovered_lines) if recovered_lines else 0
+                recovered_lines, recovered_lines_count = self._find_changed_lines_text_impl(self.last_last_frame_text[0], self.last_last_frame_text[1], self.stable_frame_text, current_result, None, 0, False)
             else:
                 recovered_lines_count = 0
                 recovered_lines = []
-            changed_lines = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.stable_frame_text, None, recovered_lines, recovered_lines_count, True)
+            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.stable_frame_text, None, recovered_lines, recovered_lines_count, True)
             self.processed_stable_frame = True
             self.stable_frame_text = current_result
-            return changed_lines
+            return changed_lines, changed_lines_count
         else:
             self.last_last_frame_text = self.last_frame_text
             self.last_frame_text = (current_result, current_result_ocr)
             self.processed_stable_frame = False
             self.frame_stabilization_timestamp = time.time()
-            return []
+            return [], 0
 
     def _find_changed_lines_text_impl(self, current_result, current_result_ocr, previous_result, next_result, recovered_lines, recovered_lines_count, regex_filter):
         if recovered_lines:
             current_result = recovered_lines + current_result
 
         if len(current_result) == 0:
-            return None
+            return None, 0
 
         changed_lines = []
         current_lines = []
@@ -560,11 +559,12 @@ class TextFiltering:
             current_text_line = self._normalize_line_for_comparison(current_line)
             current_lines.append(current_text_line)
         if all(not current_text_line for current_text_line in current_lines):
-            return None
+            return None, 0
 
         if self.furigana_filter and self.language == 'ja' and isinstance(current_result_ocr, OcrResult):
             for p in current_result_ocr.paragraphs:
                 current_lines_ocr.extend(p.lines)
+                current_lines_ocr.append('\n')
 
         for prev_line in previous_result:
             prev_text = self._normalize_line_for_comparison(prev_line)
@@ -578,7 +578,13 @@ class TextFiltering:
         logger.opt(colors=True).debug(f"<magenta>Previous text: '{previous_text}'</magenta>")
 
         first = True
+        changed_lines_count = 0
         for i, current_text in enumerate(current_lines):
+            changed_line = current_result[i]
+
+            if changed_line == '\n':
+                changed_lines.append(changed_line)
+                continue
             if not current_text:
                 continue
 
@@ -592,19 +598,18 @@ class TextFiltering:
             if text_similar:
                 continue
 
-            if recovered_lines_count > 0:
+            i2 = i if not recovered_lines else i - len(recovered_lines)
+
+            if (recovered_lines == None or i2 < 0) and recovered_lines_count > 0:
                 if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
                     logger.opt(colors=True).debug(f"<magenta>Skipping recovered line: '{current_text}'</magenta>")
                     recovered_lines_count -= 1
                     continue
 
-            changed_line = current_result[i]
-
             if next_result != None:
                 logger.opt(colors=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
 
             if current_lines_ocr:
-                i2 = i if not recovered_lines else i - len(recovered_lines)
                 if i2 >= 0:
                     is_furigana = self._furigana_filter(current_lines, current_lines_ocr, current_text, i2)
                     if is_furigana:
@@ -620,8 +625,9 @@ class TextFiltering:
                         changed_line = self._cut_at_overlap(changed_line, overlap)
                         logger.opt(colors=True).debug(f"<magenta>After cutting: '{changed_line}'</magenta>")
             changed_lines.append(changed_line)
+            changed_lines_count += 1
 
-        return changed_lines
+        return changed_lines, changed_lines_count
 
     def _furigana_filter(self, current_lines, current_lines_ocr, current_text, i):
         has_kanji = self.kanji_regex.search(current_text)
@@ -691,7 +697,7 @@ class TextFiltering:
 
         return is_furigana
 
-    def _standalone_furigana_filter(self, result, result_ocr):
+    def standalone_furigana_filter(self, result, result_ocr):
         if len(result) == 0:
             return result
 
@@ -700,8 +706,9 @@ class TextFiltering:
         lines_ocr = []
 
         for line in result:
-            if not line:
-                lines.append(line)
+            if not line.replace('\n', ''):
+                lines.append('')
+                continue
             text_line = ''.join(self.cj_regex.findall(line))
             lines.append(text_line)
         if all(not text_line for text_line in lines):
@@ -709,6 +716,7 @@ class TextFiltering:
 
         for p in result_ocr.paragraphs:
             lines_ocr.extend(p.lines)
+            lines_ocr.append('\n')
 
         for i, text in enumerate(lines):
             filtered_line = result[i]
@@ -1397,6 +1405,7 @@ class OutputResult:
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
         self.line_separator = '' if config.get_general('join_lines') else ' '
+        self.paragraph_separator = '' if config.get_general('join_paragraphs') else ' '
         self.write_to = config.get_general('write_to')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
@@ -1404,22 +1413,27 @@ class OutputResult:
     def _post_process(self, text, strip_spaces):
         lines = []
         for line in text:
+            if line == '\n':
+                lines.append(self.paragraph_separator)
+                continue
             line = line.replace('…', '...')
             line = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', line)
             is_cj_text = self.filtering.cj_regex.search(line)
             if is_cj_text:
                 lines.append(jaconv.h2z(''.join(line.split()), ascii=True, digit=True))
             else:
-                lines.append(re.sub(r'\s+', ' ', line).strip())
+                lines.append(line.strip())
         line_separator = '' if strip_spaces else self.line_separator
         text = line_separator.join(lines)
+        text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def _extract_lines_from_result(self, result_data):
         lines = []
         for p in result_data.paragraphs:
             for l in p.lines:
-                lines.append(self.filtering._get_line_text(l))
+                lines.append(self.filtering.get_line_text(l))
+            lines.append('\n')
         return lines
 
     def __call__(self, img_or_path, filter_text, auto_pause, notify):
@@ -1439,7 +1453,7 @@ class OutputResult:
                 if not res2:
                     logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
                 else:
-                    changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering._find_changed_lines(img_or_path, result_data_2)
+                    changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
@@ -1482,15 +1496,15 @@ class OutputResult:
             result_data_text = result_data
 
         if filter_text:
-            text_to_process = self.filtering._find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
-            if self.screen_capture_periodic and not text_to_process:
+            changed_lines, changed_lines_count = self.filtering.find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
+            if self.screen_capture_periodic and not changed_lines_count:
                 if auto_pause_handler and auto_pause:
                     auto_pause_handler.allow_auto_pause.set()
                 return
-            output_text = self._post_process(text_to_process, True)
+            output_text = self._post_process(changed_lines, True)
         else:
             if self.filtering.furigana_filter and isinstance(result_data, OcrResult):
-                result_data_text = self.filtering._standalone_furigana_filter(result_data_text, result_data)
+                result_data_text = self.filtering.standalone_furigana_filter(result_data_text, result_data)
             output_text = self._post_process(result_data_text, False)
 
         if self.json_output:
