@@ -85,6 +85,8 @@ try:
 except:
     optimized_png_encode = False
 
+manga_ocr_model = None
+
 
 @dataclass
 class BoundingBox:
@@ -132,8 +134,18 @@ class OcrResult:
     paragraphs: List[Paragraph] = field(default_factory=list)
 
 
-def empty_post_process(text):
-    return text
+def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
+    def empty_post_process(text):
+        return text
+
+    global manga_ocr_model
+    if not manga_ocr_model:
+        logger.disable('manga_ocr')
+        logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
+        from manga_ocr import ocr
+        ocr.post_process = empty_post_process
+        logger.info(f'Loading Manga OCR model')
+        manga_ocr_model = MOCR(pretrained_model_name_or_path, force_cpu)
 
 def input_to_pil_image(img):
     is_path = False
@@ -243,7 +255,7 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
                 cos_a, sin_a = np.cos(angle), np.sin(angle)
                 rot = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
                 corners.append(local @ rot.T + [cx, cy])
-        
+
         return np.vstack(corners) if corners else np.empty((0, 2))
 
     def _convex_hull(points):
@@ -364,10 +376,10 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
     )
 
 
-class MangaOcr:
-    name = 'mangaocr'
-    readable_name = 'Manga OCR'
-    key = 'm'
+class MangaOcrSegmented:
+    name = 'mangaocrs'
+    readable_name = 'Manga OCR (segmented)'
+    key = 'n'
     available = False
     local = True
     manual_language = False
@@ -376,9 +388,9 @@ class MangaOcr:
 
     def __init__(self, config={}):
         if 'manga_ocr' not in sys.modules:
-            logger.warning('manga-ocr not available, Manga OCR will not work!')
+            logger.warning('manga-ocr not available, Manga OCR (segmented) will not work!')
         elif 'scipy' not in sys.modules:
-            logger.warning('scipy not available, Manga OCR will not work!')
+            logger.warning('scipy not available, Manga OCR (segmented) will not work!')
         else:
             comic_text_detector_path = Path.home() / ".cache" / "manga-ocr"
             comic_text_detector_file = comic_text_detector_path / "comictextdetector.pt"
@@ -389,18 +401,12 @@ class MangaOcr:
                 try:
                     urllib.request.urlretrieve('https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.3/comictextdetector.pt', str(comic_text_detector_file))
                 except:
-                    logger.warning('Download failed. Manga OCR will not work!')
+                    logger.warning('Download failed. Manga OCR (segmented) will not work!')
                     return
 
             pretrained_model_name_or_path = config.get('pretrained_model_name_or_path', 'kha-white/manga-ocr-base')
             force_cpu = config.get('force_cpu', False)
-
-            logger.disable('manga_ocr')
-            logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
-            from manga_ocr import ocr
-            ocr.post_process = empty_post_process
-            logger.info(f'Loading Manga OCR model')
-            self.model = MOCR(pretrained_model_name_or_path, force_cpu)
+            initialize_manga_ocr(pretrained_model_name_or_path, force_cpu)
 
             if not force_cpu and torch.cuda.is_available():
                 device = 'cuda'
@@ -412,7 +418,7 @@ class MangaOcr:
             self.text_detector_model = TextDetector(model_path=comic_text_detector_file, input_size=1024, device=device, act='leaky')
 
             self.available = True
-            logger.info('Manga OCR ready')
+            logger.info('Manga OCR (segmented) ready')
 
     def _convert_line_bbox(self, rect, img_width, img_height):
         x1, y1 = float(rect[0][0]), float(rect[0][1])
@@ -505,7 +511,7 @@ class MangaOcr:
                 for line_crop in line_crops:
                     if blk.vertical:
                         line_crop = cv2.rotate(line_crop, cv2.ROTATE_90_CLOCKWISE)
-                    l_text += self.model(Image.fromarray(line_crop))
+                    l_text += manga_ocr_model(Image.fromarray(line_crop))
                 l_bbox = self._convert_line_bbox(line.tolist(), img_width, img_height)
 
                 word = Word(
@@ -544,6 +550,37 @@ class MangaOcr:
         _, mask_refined, blk_list = self.text_detector_model(img_np, refine_mode=1, keep_undetected_mask=True)
         ocr_result = self._to_generic_result(mask_refined, blk_list, img_np, img_height, img_width)
         x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x
+
+class MangaOcr:
+    name = 'mangaocr'
+    readable_name = 'Manga OCR'
+    key = 'm'
+    available = False
+    local = True
+    manual_language = False
+    coordinate_support = False
+    threading_support = True
+
+    def __init__(self, config={}):
+        if 'manga_ocr' not in sys.modules:
+            logger.warning('manga-ocr not available, Manga OCR will not work!')
+        else:
+            pretrained_model_name_or_path = config.get('pretrained_model_name_or_path', 'kha-white/manga-ocr-base')
+            force_cpu = config.get('force_cpu', False)
+            initialize_manga_ocr(pretrained_model_name_or_path, force_cpu)
+            self.available = True
+            logger.info('Manga OCR ready')
+
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        x = (True, [manga_ocr_model(img)])
 
         if is_path:
             img.close()

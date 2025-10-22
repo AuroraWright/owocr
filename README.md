@@ -46,7 +46,7 @@ The command-line options/config file allow you to configure OCR providers, hotke
 # Supported engines
 
 ## Local
-- [Manga OCR](https://github.com/kha-white/manga-ocr) (with [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install owocr[mangaocr]` → key: `m`
+- [Manga OCR](https://github.com/kha-white/manga-ocr) (with optional [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install owocr[mangaocr]` → keys: `m` (regular, ideal for small text areas), `n` (segmented, ideal for manga panels/larger images with multiple text areas)
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install owocr[easyocr]` → key: `e`
 - [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install owocr[rapidocr]` → key: `r`
 - Apple Vision framework - Probably the best local engine to date. **macOS only - Recommended (pre-installed)** → key: `a`
