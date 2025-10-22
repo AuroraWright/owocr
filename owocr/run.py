@@ -640,7 +640,7 @@ class TextFiltering:
         for j in range(len(current_lines_ocr)):
             if i == j:
                 continue
-            if not current_lines[j]:
+            if not current_lines[j].replace('\n', ''):
                 continue
 
             other_line_bbox = current_lines_ocr[j].bounding_box
