@@ -49,9 +49,11 @@ parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=ar
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=float, default=argparse.SUPPRESS,
-                    help="When reading with screen capture, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.")
+                    help='When reading with screen capture, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.')
 parser.add_argument('-sl', '--screen_capture_line_recovery', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help="When reading with screen capture and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.")
+                    help='When reading with screen capture and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.')
+parser.add_argument('-sr', '--screen_capture_regex_filter', type=str, default=argparse.SUPPRESS,
+                    help='When reading with screen capture, regex to filter unwanted text from the output. Example value: "▶|♥|・" to remove either of those characters.')
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=argparse.SUPPRESS,
@@ -59,11 +61,11 @@ parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=arg
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code to use for some engines and for filtering screen capture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
 parser.add_argument('-j', '--join_lines', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help="Display lines in the text output without a space between them.")
+                    help='Display lines in the text output without a space between them.')
 parser.add_argument('-jp', '--join_paragraphs', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help="Display paragraphs in the text output without a space between them.")
+                    help='Display paragraphs in the text output without a space between them.')
 parser.add_argument('-f', '--furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help="Try to filter furigana lines for Japanese.")
+                    help='Try to filter furigana lines for Japanese.')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
@@ -103,6 +105,7 @@ class Config:
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
         'screen_capture_line_recovery': True,
+        'screen_capture_regex_filter': '',
         'join_lines': False,
         'furigana_filter': True,
         'screen_capture_combo': '',

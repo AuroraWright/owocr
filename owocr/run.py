@@ -319,6 +319,7 @@ class TextFiltering:
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E01-\u9FFF]')
         self.kanji_regex = re.compile(r'[\u4E00-\u9FFF]')
         self.regex = self._get_regex()
+        self.manual_regex_filter = self._get_manual_regex_filter()
         self.kana_variants = {
             'ぁ': ['ぁ', 'あ'], 'あ': ['ぁ', 'あ'],
             'ぃ': ['ぃ', 'い'], 'い': ['ぃ', 'い'],
@@ -363,6 +364,15 @@ class TextFiltering:
             # Latin Extended regex for many European languages/English
             return re.compile(
             r'[a-zA-Z\u00C0-\u00FF\u0100-\u017F\u0180-\u024F\u0250-\u02AF\u1D00-\u1D7F\u1D80-\u1DBF\u1E00-\u1EFF\u2C60-\u2C7F\uA720-\uA7FF\uAB30-\uAB6F]')
+
+    def _get_manual_regex_filter(self):
+        manual_regex_filter = config.get_general('screen_capture_regex_filter').strip()
+        if manual_regex_filter:
+            try:
+                return re.compile(manual_regex_filter)
+            except re.error as e:
+                logger.warning(f'Invalid screen capture regex filter: {e}')
+        return None
 
     def _convert_small_kana_to_big(self, text):
         converted_text = ''.join(self.kana_variants.get(char, [char])[-1] for char in text)
@@ -625,6 +635,9 @@ class TextFiltering:
                         logger.opt(colors=True).debug(f"<magenta>Found overlap: '{overlap}'</magenta>")
                         changed_line = self._cut_at_overlap(changed_line, overlap)
                         logger.opt(colors=True).debug(f"<magenta>After cutting: '{changed_line}'</magenta>")
+
+            if self.manual_regex_filter:
+                changed_line = self.manual_regex_filter.sub('', changed_line)
             changed_lines.append(changed_line)
             changed_lines_count += 1
 
