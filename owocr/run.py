@@ -636,7 +636,7 @@ class TextFiltering:
                         changed_line = self._cut_at_overlap(changed_line, overlap)
                         logger.opt(colors=True).debug(f"<magenta>After cutting: '{changed_line}'</magenta>")
 
-            if self.manual_regex_filter:
+            if regex_filter and self.manual_regex_filter:
                 changed_line = self.manual_regex_filter.sub('', changed_line)
             changed_lines.append(changed_line)
             changed_lines_count += 1
