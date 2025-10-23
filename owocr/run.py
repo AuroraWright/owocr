@@ -366,7 +366,7 @@ class TextFiltering:
             r'[a-zA-Z\u00C0-\u00FF\u0100-\u017F\u0180-\u024F\u0250-\u02AF\u1D00-\u1D7F\u1D80-\u1DBF\u1E00-\u1EFF\u2C60-\u2C7F\uA720-\uA7FF\uAB30-\uAB6F]')
 
     def _get_manual_regex_filter(self):
-        manual_regex_filter = config.get_general('screen_capture_regex_filter').strip()
+        manual_regex_filter = config.get_general('screen_capture_regex_filter')
         if manual_regex_filter:
             try:
                 return re.compile(manual_regex_filter)
