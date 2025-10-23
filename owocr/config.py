@@ -173,6 +173,6 @@ class Config:
         try:
             return self.__engine_config[value]
         except KeyError:
-            return None
+            return {}
 
 config = Config()

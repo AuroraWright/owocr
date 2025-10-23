@@ -380,6 +380,7 @@ class MangaOcrSegmented:
     name = 'mangaocrs'
     readable_name = 'Manga OCR (segmented)'
     key = 'n'
+    config_entry = 'mangaocr'
     available = False
     local = True
     manual_language = False
@@ -559,6 +560,7 @@ class MangaOcr:
     name = 'mangaocr'
     readable_name = 'Manga OCR'
     key = 'm'
+    config_entry = 'mangaocr'
     available = False
     local = True
     manual_language = False
@@ -590,6 +592,7 @@ class GoogleVision:
     name = 'gvision'
     readable_name = 'Google Vision'
     key = 'g'
+    config_entry = None
     available = False
     local = False
     manual_language = False
@@ -727,6 +730,7 @@ class GoogleLens:
     name = 'glens'
     readable_name = 'Google Lens'
     key = 'l'
+    config_entry = None
     available = False
     local = False
     manual_language = False
@@ -875,6 +879,7 @@ class Bing:
     name = 'bing'
     readable_name = 'Bing'
     key = 'b'
+    config_entry = None
     available = False
     local = False
     manual_language = False
@@ -1047,6 +1052,7 @@ class AppleVision:
     name = 'avision'
     readable_name = 'Apple Vision'
     key = 'a'
+    config_entry = 'avision'
     available = False
     local = True
     manual_language = True
@@ -1138,6 +1144,7 @@ class AppleLiveText:
     name = 'alivetext'
     readable_name = 'Apple Live Text'
     key = 'd'
+    config_entry = None
     available = False
     local = True
     manual_language = True
@@ -1265,6 +1272,7 @@ class WinRTOCR:
     name = 'winrtocr'
     readable_name = 'WinRT OCR'
     key = 'w'
+    config_entry = 'winrtocr'
     available = False
     local = True
     manual_language = True
@@ -1373,6 +1381,7 @@ class OneOCR:
     name = 'oneocr'
     readable_name = 'OneOCR'
     key = 'z'
+    config_entry = 'oneocr'
     available = False
     local = True
     manual_language = False
@@ -1502,6 +1511,7 @@ class AzureImageAnalysis:
     name = 'azure'
     readable_name = 'Azure Image Analysis'
     key = 'v'
+    config_entry = 'azure'
     available = False
     local = False
     manual_language = False
@@ -1603,6 +1613,7 @@ class EasyOCR:
     name = 'easyocr'
     readable_name = 'EasyOCR'
     key = 'e'
+    config_entry = 'easyocr'
     available = False
     local = True
     manual_language = True
@@ -1672,6 +1683,7 @@ class RapidOCR:
     name = 'rapidocr'
     readable_name = 'RapidOCR'
     key = 'r'
+    config_entry = 'rapidocr'
     available = False
     local = True
     manual_language = True
@@ -1767,6 +1779,7 @@ class OCRSpace:
     name = 'ocrspace'
     readable_name = 'OCRSpace'
     key = 'o'
+    config_entry = 'ocrspace'
     available = False
     local = False
     manual_language = True

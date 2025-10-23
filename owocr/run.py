@@ -1684,16 +1684,16 @@ def run():
                 logger.warning(f"Skipping {engine_class.readable_name} as it does not support JSON output")
                 continue
 
-            if config.get_engine(engine_class.name) == None:
+            if not engine_class.config_entry:
                 if engine_class.manual_language:
                     engine_instance = engine_class(language=language)
                 else:
                     engine_instance = engine_class()
             else:
                 if engine_class.manual_language:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.name), language=language)
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry), language=language)
                 else:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.name))
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry))
 
             if engine_instance.available:
                 engine_instances.append(engine_instance)
