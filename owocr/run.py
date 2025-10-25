@@ -668,7 +668,7 @@ class TextFiltering:
             logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}'</magenta>")
 
             if is_vertical:
-                width_threshold = other_line_bbox.width * 0.85
+                width_threshold = other_line_bbox.width * 0.7
                 is_smaller = current_line_bbox.width < width_threshold
                 logger.opt(colors=True).debug(f"<magenta>Vertical furigana check width: '{other_line_bbox.width}' '{current_line_bbox.width}'</magenta>")
             else:
@@ -685,7 +685,7 @@ class TextFiltering:
                 continue
 
             if is_vertical:
-                horizontal_threshold = current_line_bbox.width + other_line_bbox.width
+                horizontal_threshold = (current_line_bbox.width + other_line_bbox.width) * 0.7
                 horizontal_distance = current_line_bbox.center_x - other_line_bbox.center_x
                 vertical_overlap = self._check_vertical_overlap(current_line_bbox, other_line_bbox)
 
