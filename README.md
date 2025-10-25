@@ -46,19 +46,19 @@ The command-line options/config file allow you to configure OCR providers, hotke
 # Supported engines
 
 ## Local
-- [Manga OCR](https://github.com/kha-white/manga-ocr) (with optional [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install owocr[mangaocr]` → keys: `m` (regular, ideal for small text areas), `n` (segmented, ideal for manga panels/larger images with multiple text areas)
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install owocr[easyocr]` → key: `e`
-- [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install owocr[rapidocr]` → key: `r`
+- [Manga OCR](https://github.com/kha-white/manga-ocr) (with optional [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install "owocr[mangaocr]"` → keys: `m` (regular, ideal for small text areas), `n` (segmented, ideal for manga panels/larger images with multiple text areas)
+- [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install "owocr[easyocr]"` → key: `e`
+- [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install "owocr[rapidocr]"` → key: `r`
 - Apple Vision framework - Probably the best local engine to date. **macOS only - Recommended (pre-installed)** → key: `a`
 - Apple Live Text (VisionKit framework) - It should be the same as Vision except that in Sonoma Apple added vertical text reading. **macOS only - Recommended (pre-installed)** → key: `d`
-- WinRT OCR: install: `pip install owocr[winocr]`. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only** → key: `w`
-- OneOCR - install: `pip install owocr[oneocr]`. Close second local best to the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only - Recommended** → key: `z`
+- WinRT OCR: install: `pip install "owocr[winocr]"`. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only** → key: `w`
+- OneOCR - install: `pip install "owocr[oneocr]"`. Close second local best to the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only - Recommended** → key: `z`
 
 ## Cloud
-- Google Lens - install: `pip install owocr[lens]`. Arguably the best OCR engine to date. **Recommended** → key: `l`
+- Google Lens - install: `pip install "owocr[lens]"`. Arguably the best OCR engine to date. **Recommended** → key: `l`
 - Bing - Close second best. **Recommended (pre-installed)** → key: `b`
-- Google Vision: install: `pip install owocr[gvision]`, you also need a service account .json file named google_vision.json in `user directory/.config/` → key: `g`
-- Azure Image Analysis: install: `pip install owocr[azure]`, you also need to specify an api key and an endpoint in the config file → key: `v`
+- Google Vision: install: `pip install "owocr[gvision]"`, you also need a service account .json file named google_vision.json in `user directory/.config/` → key: `g`
+- Azure Image Analysis: install: `pip install "owocr[azure]"`, you also need to specify an api key and an endpoint in the config file → key: `v`
 - OCRSpace: you need to specify an api key in the config file → key: `o`
 
 # Acknowledgments
