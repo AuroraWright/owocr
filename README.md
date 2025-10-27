@@ -5,10 +5,10 @@ OwOCR is a command-line text recognition tool that continuously scans for images
 ## Demo
 
 ### Visual novel:
-https://github.com/user-attachments/assets/4ef3dd44-9b82-4621-9c68-fcf06da74666
+https://github.com/user-attachments/assets/0b245a52-9a29-4e33-9b52-56645977f3f7
 
 ### Manga:
-https://github.com/user-attachments/assets/0b245a52-9a29-4e33-9b52-56645977f3f7
+https://github.com/user-attachments/assets/4ef3dd44-9b82-4621-9c68-fcf06da74666
 
 ## Installation
 
