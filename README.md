@@ -2,6 +2,14 @@
 
 OwOCR is a command-line text recognition tool that continuously scans for images and performs OCR (Optical Character Recognition) on them. Its main focus is Japanese, but it works for many other languages.
 
+## Demo
+
+### Visual novel:
+https://github.com/user-attachments/assets/4ef3dd44-9b82-4621-9c68-fcf06da74666
+
+### Manga:
+https://github.com/user-attachments/assets/0b245a52-9a29-4e33-9b52-56645977f3f7
+
 ## Installation
 
 OwOCR has been tested on Python 3.11, 3.12 and 3.13. It can be installed with `pip install owocr` after you install Python. You also need to have one or more OCR engines, check the list below for instructions. I recommend installing at least Google Lens on any operating system, and OneOCR if you are on Windows. Bing is pre-installed, Apple Vision and Live Text come pre-installed on macOS.
@@ -72,5 +80,5 @@ This uses code from/references these people/projects:
 - [Manga OCR](https://github.com/kha-white/manga-ocr) for inspiring and being the project owocr was originally derived from
 - [Mokuro](https://github.com/kha-white/mokuro) for the comic text detector integration code
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
-- [NadeOCR](https://github.com/Natsume-197/NadeOCR) for the Google Vision API
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code
+- vicky for the demo videos in this readme!
