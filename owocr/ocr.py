@@ -530,7 +530,7 @@ class MangaOcrSegmented:
                 lines.append(line)
 
             p_bbox = self._convert_box_bbox(list(blk.xyxy), img_width, img_height)
-            writing_direction = 'TOP_TO_BOTTOM' if blk.vertical else None
+            writing_direction = 'TOP_TO_BOTTOM' if blk.vertical else "LEFT_TO_RIGHT"
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines, writing_direction=writing_direction)
 
             paragraphs.append(paragraph)

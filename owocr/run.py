@@ -622,7 +622,7 @@ class TextFiltering:
 
             if current_lines_ocr:
                 if i2 >= 0:
-                    is_furigana = self._furigana_filter(current_lines[len_recovered_lines:], current_lines_ocr, current_text, i2)
+                    is_furigana = self._furigana_filter(current_lines[len_recovered_lines:], current_lines_ocr, i2)
                     if is_furigana:
                         continue
 
@@ -643,71 +643,75 @@ class TextFiltering:
 
         return changed_lines, changed_lines_count
 
-    def _furigana_filter(self, current_lines, current_lines_ocr, current_text, i):
-        has_kanji = self.kanji_regex.search(current_text)
+    def _furigana_filter(self, current_lines, current_lines_ocr, i):
+        current_line_text = current_lines[i]
+        has_kanji = self.kanji_regex.search(current_line_text)
         if has_kanji:
             return False
 
         is_furigana = False
         current_line_bbox = current_lines_ocr[i].bounding_box
 
-        for j in range(len(current_lines_ocr)):
-            if i == j:
-                continue
+        for j in range(i + 1, len(current_lines_ocr)):
             if not current_lines[j]:
                 continue
 
             other_line_text = current_lines[j]
             other_line_bbox = current_lines_ocr[j].bounding_box
 
-            if len(current_text) <= len(other_line_text):
-                is_vertical = other_line_bbox.height > other_line_bbox.width
+            if len(current_line_text) <= len(other_line_text):
+                aspect_ratio = other_line_bbox.width / other_line_bbox.height
             else:
-                is_vertical = current_line_bbox.height > current_line_bbox.width
+                aspect_ratio = current_line_bbox.width / current_line_bbox.height
+            is_vertical = aspect_ratio < 0.8
 
-            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}'</magenta>")
+            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}' vertical: '{is_vertical}'</magenta>")
 
             if is_vertical:
-                width_threshold = other_line_bbox.width * 0.7
-                is_smaller = current_line_bbox.width < width_threshold
-                logger.opt(colors=True).debug(f"<magenta>Vertical furigana check width: '{other_line_bbox.width}' '{current_line_bbox.width}'</magenta>")
-            else:
-                height_threshold = other_line_bbox.height * 0.85
-                is_smaller = current_line_bbox.height < height_threshold
-                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana check height: '{other_line_bbox.height}' '{current_line_bbox.height}'</magenta>")
+                min_h_distance = abs(other_line_bbox.width - current_line_bbox.width) / 2
+                max_h_distance = other_line_bbox.width + current_line_bbox.width
+                min_v_overlap = 0.4
 
-            if not is_smaller:
-                continue
-
-            # Check if the line has kanji
-            other_has_kanji = self.kanji_regex.search(other_line_text)
-            if not other_has_kanji:
-                continue
-
-            if is_vertical:
-                horizontal_threshold = (current_line_bbox.width + other_line_bbox.width) * 0.7
                 horizontal_distance = current_line_bbox.center_x - other_line_bbox.center_x
                 vertical_overlap = self._check_vertical_overlap(current_line_bbox, other_line_bbox)
 
-                logger.opt(colors=True).debug(f"<magenta>Vertical furigana check position: '{horizontal_threshold}' '{horizontal_distance}' '{vertical_overlap}'</magenta>")
+                logger.opt(colors=True).debug(f"<magenta>Vertical furigana: min h.dist '{min_h_distance:.4f}' max h.dist '{max_h_distance:.4f}' h.dist '{horizontal_distance:.4f}' v.overlap '{vertical_overlap:.4f}'</magenta>")
 
-                # If horizontally close and vertically aligned, it's likely furigana
-                if (0 < horizontal_distance < horizontal_threshold and vertical_overlap > 0.4):
-                    is_furigana = True
-                    logger.opt(colors=True).debug(f"<magenta>Skipping vertical furigana line: '{current_text}' next to line: '{other_line_text}'</magenta>")
-                    break
+                passed_position_check = min_h_distance < horizontal_distance < max_h_distance and vertical_overlap > min_v_overlap
             else:
-                vertical_threshold = other_line_bbox.height + current_line_bbox.height
+                min_v_distance = abs(other_line_bbox.height - current_line_bbox.height) / 2
+                max_v_distance = other_line_bbox.height + current_line_bbox.height
+                min_h_overlap = 0.4
+
                 vertical_distance = other_line_bbox.center_y - current_line_bbox.center_y
                 horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, other_line_bbox)
 
-                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana check position: '{vertical_threshold}' '{vertical_distance}' '{horizontal_overlap}'</magenta>")
+                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana: min v.dist '{min_v_distance:.4f}' max v.dist '{max_v_distance:.4f}' v.dist '{vertical_distance:.4f}' h.overlap '{horizontal_overlap:.4f}'</magenta>")
 
-                # If vertically close and horizontally aligned, it's likely furigana
-                if (0 < vertical_distance < vertical_threshold and horizontal_overlap > 0.4):
-                    is_furigana = True
-                    logger.opt(colors=True).debug(f"<magenta>Skipping horizontal furigana line: '{current_text}' above line: '{other_line_text}'</magenta>")
-                    break
+                passed_position_check = min_v_distance < vertical_distance < max_v_distance and horizontal_overlap > min_h_overlap
+
+            if not passed_position_check:
+                logger.opt(colors=True).debug(f"<magenta>Not overlapping line found: '{other_line_text}', continuing</magenta>")
+                continue
+
+            other_has_kanji = self.kanji_regex.search(other_line_text)
+            if not other_has_kanji:
+                break
+
+            if is_vertical:
+                width_threshold = other_line_bbox.width * 0.77
+                is_smaller = current_line_bbox.width < width_threshold
+                logger.opt(colors=True).debug(f"<magenta>Vertical furigana width: kanji '{other_line_bbox.width:.4f}' kana '{current_line_bbox.width:.4f}' max kana '{width_threshold:.4f}'</magenta>")
+            else:
+                height_threshold = other_line_bbox.height * 0.85
+                is_smaller = current_line_bbox.height < height_threshold
+                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana width: kanji '{other_line_bbox.height:.4f}' kana '{current_line_bbox.height:.4f}' max kana '{height_threshold:.4f}'</magenta>")
+
+            if is_smaller:
+                is_furigana = True
+                logger.opt(colors=True).debug(f"<yellow>Skipping furigana line: '{current_line_text}' next to line: '{other_line_text}'</yellow>")
+
+            break
 
         return is_furigana
 
@@ -741,7 +745,7 @@ class TextFiltering:
 
             logger.opt(colors=True).debug(f"<magenta>Line: '{text}'</magenta>")
 
-            is_furigana = self._furigana_filter(lines, lines_ocr, text, i)
+            is_furigana = self._furigana_filter(lines, lines_ocr, i)
             if is_furigana:
                 continue
 
@@ -782,6 +786,126 @@ class TextFiltering:
             return current_line[cut_position:]
 
         return current_line
+
+    def order_paragraphs_and_lines(self, result_data):
+        if not result_data.paragraphs:
+            return result_data
+
+        paragraphs_with_lines = [p for p in result_data.paragraphs if p.lines]
+        ordered_paragraphs = self._order_paragraphs_by_orientation_and_overlap(paragraphs_with_lines)
+
+        for paragraph in ordered_paragraphs:
+            paragraph.lines = self._order_lines_by_paragraph_orientation(
+                paragraph.lines,
+                self._is_paragraph_vertical(paragraph)
+            )
+
+        return OcrResult(
+            image_properties=result_data.image_properties,
+            paragraphs=ordered_paragraphs
+        )
+
+    def _order_lines_by_paragraph_orientation(self, lines, is_paragraph_vertical):
+        if len(lines) <= 1:
+            return lines
+
+        ordered_lines = list(lines)
+
+        # Sort primarily by vertical position (top to bottom)
+        ordered_lines.sort(key=lambda line: line.bounding_box.center_y)
+
+        # Now adjust ordering based on overlap and paragraph orientation
+        for i in range(len(ordered_lines)):
+            for j in range(i + 1, len(ordered_lines)):
+                line_i = ordered_lines[i]
+                line_j = ordered_lines[j]
+
+                vertical_overlap = self._check_vertical_overlap(
+                    line_i.bounding_box, 
+                    line_j.bounding_box
+                )
+
+                if vertical_overlap > 0: # Lines overlap vertically
+                    should_swap = False
+
+                    if is_paragraph_vertical:
+                        # For vertical paragraphs: order right to left (center_x descending)
+                        if line_i.bounding_box.center_x < line_j.bounding_box.center_x:
+                            should_swap = True
+                    else:
+                        # For horizontal paragraphs: order left to right (center_x ascending)
+                        if line_i.bounding_box.center_x > line_j.bounding_box.center_x:
+                            should_swap = True
+
+                    if should_swap:
+                        ordered_lines[i], ordered_lines[j] = ordered_lines[j], ordered_lines[i]
+
+        return ordered_lines
+
+    def _order_paragraphs_by_orientation_and_overlap(self, paragraphs):
+        if len(paragraphs) <= 1:
+            return paragraphs
+
+        ordered_paragraphs = list(paragraphs)
+
+        # Sort primarily by vertical position (top to bottom)
+        ordered_paragraphs.sort(key=lambda p: p.bounding_box.center_y)
+
+        # Now adjust ordering based on overlap and orientation
+        for i in range(len(ordered_paragraphs)):
+            for j in range(i + 1, len(ordered_paragraphs)):
+                para_i = ordered_paragraphs[i]
+                para_j = ordered_paragraphs[j]
+
+                vertical_overlap = self._check_vertical_overlap(
+                    para_i.bounding_box, 
+                    para_j.bounding_box
+                )
+
+                if vertical_overlap > 0: # Paragraphs overlap vertically
+                    is_vertical_i = self._is_paragraph_vertical(para_i)
+                    is_vertical_j = self._is_paragraph_vertical(para_j)
+
+                    should_swap = False
+
+                    if is_vertical_i and is_vertical_j:
+                        # Both vertical: order right to left (center_x descending)
+                        if para_i.bounding_box.center_x < para_j.bounding_box.center_x:
+                            should_swap = True
+                    elif is_vertical_i and not is_vertical_j:
+                        # Vertical with horizontal: order left to right (center_x ascending)
+                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
+                            should_swap = True
+                    elif not is_vertical_i and is_vertical_j:
+                        # Horizontal with vertical: order left to right (center_x ascending)
+                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
+                            should_swap = True
+                    else:
+                        # Both horizontal: order left to right (center_x ascending)
+                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
+                            should_swap = True
+
+                    if should_swap:
+                        ordered_paragraphs[i], ordered_paragraphs[j] = ordered_paragraphs[j], ordered_paragraphs[i]
+
+        return ordered_paragraphs
+
+    def _is_paragraph_vertical(self, paragraph):
+        if paragraph.writing_direction:
+            if paragraph.writing_direction == "TOP_TO_BOTTOM":
+                return True
+            return False
+
+        total_aspect_ratio = 0.0
+
+        for line in paragraph.lines:
+            bbox = line.bounding_box
+            aspect_ratio = bbox.width / bbox.height
+            total_aspect_ratio += aspect_ratio
+
+        average_aspect_ratio = total_aspect_ratio / len(paragraph.lines)
+
+        return average_aspect_ratio < 0.8  # Threshold for vertical text
 
     def _check_horizontal_overlap(self, bbox1, bbox2):
         # Calculate left and right boundaries for both boxes
@@ -1505,6 +1629,7 @@ class OutputResult:
             return
 
         if isinstance(result_data, OcrResult):
+            result_data = self.filtering.order_paragraphs_and_lines(result_data)
             result_data_text = self._extract_lines_from_result(result_data)
         else:
             result_data_text = result_data
