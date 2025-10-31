@@ -792,10 +792,10 @@ class TextFiltering:
             return result_data
 
         paragraphs_with_lines = [p for p in result_data.paragraphs if p.lines]
-        ordered_paragraphs = self._order_paragraphs_by_orientation_and_overlap(paragraphs_with_lines)
+        ordered_paragraphs = self._order_paragraphs(paragraphs_with_lines)
 
         for paragraph in ordered_paragraphs:
-            paragraph.lines = self._order_lines_by_paragraph_orientation(
+            paragraph.lines = self._order_lines(
                 paragraph.lines,
                 self._is_paragraph_vertical(paragraph)
             )
@@ -805,7 +805,7 @@ class TextFiltering:
             paragraphs=ordered_paragraphs
         )
 
-    def _order_lines_by_paragraph_orientation(self, lines, is_paragraph_vertical):
+    def _order_lines(self, lines, is_paragraph_vertical):
         if len(lines) <= 1:
             return lines
 
@@ -833,8 +833,14 @@ class TextFiltering:
                         if line_i.bounding_box.center_x < line_j.bounding_box.center_x:
                             should_swap = True
                     else:
-                        # For horizontal paragraphs: order left to right (center_x ascending)
-                        if line_i.bounding_box.center_x > line_j.bounding_box.center_x:
+                        # For horizontal paragraphs: check horizontal overlap first
+                        horizontal_overlap = self._check_horizontal_overlap(
+                            line_i.bounding_box,
+                            line_j.bounding_box
+                        )
+
+                        # Only swap if there's NO horizontal overlap
+                        if horizontal_overlap == 0 and line_i.bounding_box.center_x > line_j.bounding_box.center_x:
                             should_swap = True
 
                     if should_swap:
@@ -842,7 +848,7 @@ class TextFiltering:
 
         return ordered_lines
 
-    def _order_paragraphs_by_orientation_and_overlap(self, paragraphs):
+    def _order_paragraphs(self, paragraphs):
         if len(paragraphs) <= 1:
             return paragraphs
 
@@ -881,8 +887,14 @@ class TextFiltering:
                         if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
                             should_swap = True
                     else:
-                        # Both horizontal: order left to right (center_x ascending)
-                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
+                        # Both horizontal: check horizontal overlap first
+                        horizontal_overlap = self._check_horizontal_overlap(
+                            para_i.bounding_box,
+                            para_j.bounding_box
+                        )
+
+                        # Only swap if there's NO horizontal overlap
+                        if horizontal_overlap == 0 and para_i.bounding_box.center_x > para_j.bounding_box.center_x:
                             should_swap = True
 
                     if should_swap:
