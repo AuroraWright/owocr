@@ -669,7 +669,7 @@ class TextFiltering:
 
             if is_vertical:
                 min_h_distance = abs(other_line_bbox.width - current_line_bbox.width) / 2
-                max_h_distance = other_line_bbox.width + current_line_bbox.width
+                max_h_distance = other_line_bbox.width + (current_line_bbox.width / 2)
                 min_v_overlap = 0.4
 
                 horizontal_distance = current_line_bbox.center_x - other_line_bbox.center_x
@@ -680,7 +680,7 @@ class TextFiltering:
                 passed_position_check = min_h_distance < horizontal_distance < max_h_distance and vertical_overlap > min_v_overlap
             else:
                 min_v_distance = abs(other_line_bbox.height - current_line_bbox.height) / 2
-                max_v_distance = other_line_bbox.height + current_line_bbox.height
+                max_v_distance = other_line_bbox.height + (current_line_bbox.height / 2)
                 min_h_overlap = 0.4
 
                 vertical_distance = other_line_bbox.center_y - current_line_bbox.center_y
