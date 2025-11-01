@@ -604,7 +604,7 @@ class TextFiltering:
             else:
                 text_similar = current_text in all_previous_text
 
-            logger.opt(colors=True).debug(f"<magenta>Current line: '{current_text}' Similar: '{text_similar}'</magenta>")
+            logger.opt(colors=True).debug(f"<magenta>Current line: '{changed_line}' Similar: '{text_similar}'</magenta>")
 
             if text_similar:
                 continue
@@ -613,7 +613,7 @@ class TextFiltering:
 
             if (recovered_lines == None or i2 < 0) and recovered_lines_count > 0:
                 if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
-                    logger.opt(colors=True).debug(f"<magenta>Skipping recovered line: '{current_text}'</magenta>")
+                    logger.opt(colors=True).debug(f"<magenta>Skipping recovered line: '{changed_line}'</magenta>")
                     recovered_lines_count -= 1
                     continue
 
@@ -622,7 +622,7 @@ class TextFiltering:
 
             if current_lines_ocr:
                 if i2 >= 0:
-                    is_furigana = self._furigana_filter(current_lines[len_recovered_lines:], current_lines_ocr, i2)
+                    is_furigana = self._furigana_filter(current_result[len_recovered_lines:], current_lines[len_recovered_lines:], current_lines_ocr, i2)
                     if is_furigana:
                         continue
 
@@ -643,20 +643,20 @@ class TextFiltering:
 
         return changed_lines, changed_lines_count
 
-    def _furigana_filter(self, current_lines, current_lines_ocr, i):
-        current_line_text = current_lines[i]
-        has_kanji = self.kanji_regex.search(current_line_text)
+    def _furigana_filter(self, current_result, current_lines, current_lines_ocr, i):
+        has_kanji = self.kanji_regex.search(current_lines[i])
         if has_kanji:
             return False
 
         is_furigana = False
+        current_line_text = current_result[i]
         current_line_bbox = current_lines_ocr[i].bounding_box
 
         for j in range(i + 1, len(current_lines_ocr)):
-            if not current_lines[j]:
+            if current_lines_ocr[j] == '\n':
                 continue
 
-            other_line_text = current_lines[j]
+            other_line_text = current_result[j]
             other_line_bbox = current_lines_ocr[j].bounding_box
 
             if len(current_line_text) <= len(other_line_text):
@@ -694,7 +694,10 @@ class TextFiltering:
                 logger.opt(colors=True).debug(f"<magenta>Not overlapping line found: '{other_line_text}', continuing</magenta>")
                 continue
 
-            other_has_kanji = self.kanji_regex.search(other_line_text)
+            other_line_text_normalized = current_lines[j]
+            if not other_line_text_normalized:
+                break
+            other_has_kanji = self.kanji_regex.search(other_line_text_normalized)
             if not other_has_kanji:
                 break
 
@@ -743,9 +746,9 @@ class TextFiltering:
                 filtered_lines.append(filtered_line)
                 continue
 
-            logger.opt(colors=True).debug(f"<magenta>Line: '{text}'</magenta>")
+            logger.opt(colors=True).debug(f"<magenta>Line: '{filtered_line}'</magenta>")
 
-            is_furigana = self._furigana_filter(lines, lines_ocr, i)
+            is_furigana = self._furigana_filter(result, lines, lines_ocr, i)
             if is_furigana:
                 continue
 
