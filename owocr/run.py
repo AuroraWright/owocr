@@ -388,7 +388,7 @@ class TextFiltering:
                 text_parts.append(w.separator)
             else:
                 text_parts.append(' ')
-        return ''.join(text_parts)
+        return ''.join(text_parts).strip()
 
     def _normalize_line_for_comparison(self, line_text):
         if not line_text.replace('\n', ''):
@@ -622,7 +622,7 @@ class TextFiltering:
 
             if current_lines_ocr:
                 if i2 >= 0:
-                    is_furigana = self._furigana_filter(current_result[len_recovered_lines:], current_lines[len_recovered_lines:], current_lines_ocr, i2)
+                    is_furigana = self._furigana_filter(current_result[len_recovered_lines:], current_lines[len_recovered_lines:], current_lines_ocr, current_result_ocr.image_properties, i2)
                     if is_furigana:
                         continue
 
@@ -643,7 +643,7 @@ class TextFiltering:
 
         return changed_lines, changed_lines_count
 
-    def _furigana_filter(self, current_result, current_lines, current_lines_ocr, i):
+    def _furigana_filter(self, current_result, current_lines, current_lines_ocr, image_properties, i):
         has_kanji = self.kanji_regex.search(current_lines[i])
         if has_kanji:
             return False
@@ -660,9 +660,9 @@ class TextFiltering:
             other_line_bbox = current_lines_ocr[j].bounding_box
 
             if len(current_line_text) <= len(other_line_text):
-                aspect_ratio = other_line_bbox.width / other_line_bbox.height
+                aspect_ratio = (other_line_bbox.width * image_properties.width) / (other_line_bbox.height * image_properties.height)
             else:
-                aspect_ratio = current_line_bbox.width / current_line_bbox.height
+                aspect_ratio = (current_line_bbox.width * image_properties.width) / (current_line_bbox.height * image_properties.height)
             is_vertical = aspect_ratio < 0.8
 
             logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}' vertical: '{is_vertical}'</magenta>")
@@ -748,7 +748,7 @@ class TextFiltering:
 
             logger.opt(colors=True).debug(f"<magenta>Line: '{filtered_line}'</magenta>")
 
-            is_furigana = self._furigana_filter(result, lines, lines_ocr, i)
+            is_furigana = self._furigana_filter(result, lines, lines_ocr, result_ocr.image_properties, i)
             if is_furigana:
                 continue
 
@@ -795,12 +795,12 @@ class TextFiltering:
             return result_data
 
         paragraphs_with_lines = [p for p in result_data.paragraphs if p.lines]
-        ordered_paragraphs = self._order_paragraphs(paragraphs_with_lines)
+        ordered_paragraphs = self._order_paragraphs(paragraphs_with_lines, result_data.image_properties)
 
         for paragraph in ordered_paragraphs:
             paragraph.lines = self._order_lines(
                 paragraph.lines,
-                self._is_paragraph_vertical(paragraph)
+                self._is_paragraph_vertical(paragraph, result_data.image_properties)
             )
 
         return OcrResult(
@@ -828,7 +828,7 @@ class TextFiltering:
                     line_j.bounding_box
                 )
 
-                if vertical_overlap > 0: # Lines overlap vertically
+                if vertical_overlap > 0.4: # Lines overlap vertically
                     should_swap = False
 
                     if is_paragraph_vertical:
@@ -851,7 +851,7 @@ class TextFiltering:
 
         return ordered_lines
 
-    def _order_paragraphs(self, paragraphs):
+    def _order_paragraphs(self, paragraphs, image_properties):
         if len(paragraphs) <= 1:
             return paragraphs
 
@@ -871,9 +871,9 @@ class TextFiltering:
                     para_j.bounding_box
                 )
 
-                if vertical_overlap > 0: # Paragraphs overlap vertically
-                    is_vertical_i = self._is_paragraph_vertical(para_i)
-                    is_vertical_j = self._is_paragraph_vertical(para_j)
+                if vertical_overlap > 0.4: # Paragraphs overlap vertically
+                    is_vertical_i = self._is_paragraph_vertical(para_i, image_properties)
+                    is_vertical_j = self._is_paragraph_vertical(para_j, image_properties)
 
                     should_swap = False
 
@@ -905,7 +905,7 @@ class TextFiltering:
 
         return ordered_paragraphs
 
-    def _is_paragraph_vertical(self, paragraph):
+    def _is_paragraph_vertical(self, paragraph, image_properties):
         if paragraph.writing_direction:
             if paragraph.writing_direction == "TOP_TO_BOTTOM":
                 return True
@@ -915,7 +915,9 @@ class TextFiltering:
 
         for line in paragraph.lines:
             bbox = line.bounding_box
-            aspect_ratio = bbox.width / bbox.height
+            pixel_width = bbox.width * image_properties.width
+            pixel_height = bbox.height * image_properties.height
+            aspect_ratio = pixel_width / pixel_height
             total_aspect_ratio += aspect_ratio
 
         average_aspect_ratio = total_aspect_ratio / len(paragraph.lines)
