@@ -63,6 +63,11 @@ except ImportError:
     pass
 
 try:
+    from meikiocr import MeikiOCR as MKOCR
+except ImportError:
+    pass
+
+try:
     import winocr
 except ImportError:
     pass
@@ -1774,6 +1779,104 @@ class RapidOCR:
 
     def _preprocess(self, img):
         return pil_image_to_numpy_array(img)
+
+class MeikiOCR:
+    name = 'meikiocr'
+    readable_name = 'meikiocr'
+    key = 'k'
+    config_entry = 'meikiocr'
+    available = False
+    local = True
+    manual_language = False
+    coordinate_support = True
+    threading_support = True
+
+    def __init__(self, config={}, language='ja'):
+        if 'meikiocr' not in sys.modules:
+            logger.warning('meikiocr not available, meikiocr will not work!')
+        else:
+            logger.info('Loading meikiocr model')
+            self.model = MKOCR()
+            self.available = True
+            logger.info('meikiocr ready')
+
+    def _to_normalized_bbox(self, pixel_bbox: List[int], img_width: int, img_height: int) -> BoundingBox:
+        """Converts a bbox [x1, y1, x2, y2] to a normalized BoundingBox."""
+        x1, y1, x2, y2 = pixel_bbox
+        width_px = x2 - x1
+        height_px = y2 - y1
+        center_x_px = x1 + width_px / 2
+        center_y_px = y1 + height_px / 2
+
+        return BoundingBox(
+            center_x=center_x_px / img_width,
+            center_y=center_y_px / img_height,
+            width=width_px / img_width,
+            height=height_px / img_height
+        )
+
+    def _to_generic_result(self, response: List[dict], img_width: int, img_height: int) -> OcrResult:
+        """Converts the raw meikiocr output into the standardized OcrResult format."""
+        paragraphs = []
+
+        # each dictionary in the response corresponds to a detected line of text.
+        # treat each line as a separate Paragraph containing a single Line.
+        for line_result in response:
+            line_text = line_result.get('text', '')
+            char_results = line_result.get('chars', [])
+            if not line_text or not char_results:
+                continue
+
+            char_in_line = []
+            for char_info in char_results:
+                normalized_bbox = self._to_normalized_bbox(
+                    char_info['bbox'], img_width, img_height
+                )
+                word = Word(
+                    text=char_info['char'],
+                    bounding_box=normalized_bbox
+                )
+                char_in_line.append(word)
+
+            if not char_in_line:
+                continue
+
+            line_bbox = merge_bounding_boxes(char_in_line)
+
+            line = Line(
+                bounding_box=line_bbox,
+                words=char_in_line,
+                text=line_text
+            )
+
+            # each line becomes a paragraph.
+            paragraph = Paragraph(
+                bounding_box=line_bbox,
+                lines=[line],
+                writing_direction="LEFT_TO_RIGHT"  # meikiocr only supports horizontal text
+            )
+            paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs
+        )
+
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        image_np = np.array(img.convert('RGB'))[:, :, ::-1]
+
+        read_results = self.model.run_ocr(image_np)
+        ocr_result = self._to_generic_result(read_results, img.width, img.height)
+
+        x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x
 
 class OCRSpace:
     name = 'ocrspace'
