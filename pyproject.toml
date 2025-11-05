@@ -45,6 +45,10 @@ rapidocr = [
     "onnxruntime"
 ]
 
+meikiocr = [
+    "meikiocr"
+]
+
 mangaocr = [
     "manga-ocr",
     "setuptools<80",
