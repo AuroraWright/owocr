@@ -100,6 +100,22 @@ class BoundingBox:
     height: float
     rotation_z: Optional[float] = None  # Optional rotation in radians
 
+    @property
+    def left(self) -> float:
+        return self.center_x - self.width / 2
+
+    @property
+    def right(self) -> float:
+        return self.center_x + self.width / 2
+
+    @property
+    def top(self) -> float:
+        return self.center_y - self.height / 2
+
+    @property
+    def bottom(self) -> float:
+        return self.center_y + self.height / 2
+
 @dataclass
 class Word:
     """Represents a single recognized word and its properties."""
@@ -128,14 +144,28 @@ class ImageProperties:
     height: int
 
 @dataclass
+class EngineCapabilities:
+    """
+    Represents the features natively supported by the OCR engine.
+    """
+    words: bool
+    word_bounding_boxes: bool
+    lines: bool
+    line_bounding_boxes: bool
+    paragraphs: bool
+    paragraph_bounding_boxes: bool
+
+@dataclass
 class OcrResult:
     """The root object for a complete OCR analysis of an image."""
     image_properties: ImageProperties
+    engine_capabilities: EngineCapabilities
     paragraphs: List[Paragraph] = field(default_factory=list)
 
 
 def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
     def empty_post_process(text):
+        text = re.sub(r'\s+', '', text)
         return text
 
     global manga_ocr_model
@@ -386,6 +416,14 @@ class MangaOcrSegmented:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=True,
+        paragraph_bounding_boxes=True
+    )
 
     def __init__(self, config={}):
         if 'manga_ocr' not in sys.modules:
@@ -537,7 +575,8 @@ class MangaOcrSegmented:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -566,6 +605,14 @@ class MangaOcr:
     manual_language = False
     coordinate_support = False
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=False,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}):
         if 'manga_ocr' not in sys.modules:
@@ -598,6 +645,14 @@ class GoogleVision:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = {
+        'words': True,
+        'word_bounding_boxes': True,
+        'lines': True,
+        'line_bounding_boxes': False,
+        'paragraphs': True,
+        'paragraph_bounding_boxes': True
+    }
 
     def __init__(self):
         if 'google.cloud' not in sys.modules:
@@ -698,7 +753,8 @@ class GoogleVision:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -736,6 +792,14 @@ class GoogleLens:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=True,
+        paragraph_bounding_boxes=True
+    )
 
     def __init__(self):
         if 'betterproto' not in sys.modules:
@@ -797,7 +861,8 @@ class GoogleLens:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -885,6 +950,14 @@ class Bing:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=True,
+        paragraph_bounding_boxes=True
+    )
 
     def __init__(self):
         self.requests_session = requests.Session()
@@ -941,7 +1014,8 @@ class Bing:
 
         return OcrResult(
             image_properties=ImageProperties(width=og_img_width, height=og_img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1058,6 +1132,14 @@ class AppleVision:
     manual_language = True
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, language='ja', config={}):
         if sys.platform != 'darwin':
@@ -1105,7 +1187,8 @@ class AppleVision:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1150,6 +1233,14 @@ class AppleLiveText:
     manual_language = True
     coordinate_support = True
     threading_support = False
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, language='ja'):
         if sys.platform != 'darwin':
@@ -1212,7 +1303,8 @@ class AppleLiveText:
 
         ocr_result = OcrResult(
             image_properties=ImageProperties(width=img.width, height=img.height),
-            paragraphs=self.result
+            paragraphs=self.result,
+            engine_capabilities=self.capabilities
         )
         x = (True, ocr_result)
 
@@ -1278,6 +1370,14 @@ class WinRTOCR:
     manual_language = True
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=False,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}, language='ja'):
         if sys.platform == 'win32':
@@ -1343,7 +1443,8 @@ class WinRTOCR:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1387,6 +1488,14 @@ class OneOCR:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}):
         if sys.platform == 'win32':
@@ -1446,7 +1555,8 @@ class OneOCR:
 
         return OcrResult(
             image_properties=ImageProperties(width=og_img_width, height=og_img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1517,6 +1627,14 @@ class AzureImageAnalysis:
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}):
         if 'azure.ai.vision.imageanalysis' not in sys.modules:
@@ -1569,7 +1687,8 @@ class AzureImageAnalysis:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1619,6 +1738,14 @@ class EasyOCR:
     manual_language = True
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}, language='ja'):
         if 'easyocr' not in sys.modules:
@@ -1660,7 +1787,8 @@ class EasyOCR:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1689,6 +1817,14 @@ class RapidOCR:
     manual_language = True
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}, language='ja'):
         if 'rapidocr' not in sys.modules:
@@ -1756,7 +1892,8 @@ class RapidOCR:
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
@@ -1785,6 +1922,14 @@ class OCRSpace:
     manual_language = True
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=False,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
     def __init__(self, config={}, language='ja'):
         try:
@@ -1855,7 +2000,8 @@ class OCRSpace:
 
         return OcrResult(
             image_properties=ImageProperties(width=og_img_width, height=og_img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):

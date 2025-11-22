@@ -10,6 +10,7 @@ import logging
 import inspect
 import os
 import json
+import collections
 from dataclasses import asdict
 
 import numpy as np
@@ -157,8 +158,10 @@ class ClipboardThread(threading.Thread):
                             old_count = count
                             count = pasteboard.changeCount()
                             if process_clipboard and count != old_count:
-                                while len(pasteboard.types()) == 0:
+                                wait_counter = 0
+                                while len(pasteboard.types()) == 0 and wait_counter < 3:
                                     time.sleep(0.1)
+                                    wait_counter += 1
                                 if NSPasteboardTypeTIFF in pasteboard.types():
                                     img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
                                     image_queue.put((img, False))
@@ -308,11 +311,12 @@ class TextFiltering:
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('furigana_filter')
+        self.debug_filtering = config.get_general('uwu')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
         self.stable_frame_data = None
-        self.last_frame_text = ([], None)
-        self.last_last_frame_text = ([], None)
+        self.last_frame_text = []
+        self.last_last_frame_text = []
         self.stable_frame_text = []
         self.processed_stable_frame = False
         self.frame_stabilization_timestamp = 0
@@ -429,7 +433,7 @@ class TextFiltering:
                 return 0, 0, None
             changed_lines = self._find_changed_lines_impl(current_result, self.stable_frame_data)
             if self.line_recovery and self.last_last_frame_data:
-                logger.debug(f'Checking for missed lines')
+                logger.debug('Checking for missed lines')
                 recovered_lines = self._find_changed_lines_impl(self.last_last_frame_data[1], self.stable_frame_data, current_result)
                 recovered_lines_count = len(recovered_lines) if recovered_lines else 0
             else:
@@ -493,7 +497,7 @@ class TextFiltering:
 
         all_previous_text = ''.join(previous_text)
 
-        logger.debug(f"Previous text: '{previous_text}'")
+        logger.debug("Previous text: '{}'", previous_text)
 
         for i, current_text_line in enumerate(current_text):
             if not current_text_line:
@@ -504,26 +508,26 @@ class TextFiltering:
             else:
                 text_similar = current_text_line in all_previous_text
 
-            logger.debug(f"Current line: '{current_text_line}' Similar: '{text_similar}'")
+            logger.debug("Current line: '{}' Similar: '{}'", current_text_line, text_similar)
 
             if not text_similar:
                 if next_result:
-                    logger.opt(colors=True).debug(f"<red>Recovered line: '{current_text_line}'</red>")
+                    logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", current_text_line)
                 changed_lines.append(current_lines[i])
 
         return changed_lines
 
-    def find_changed_lines_text(self, current_result, current_result_ocr, two_pass_processing_active, recovered_lines_count):
+    def find_changed_lines_text(self, current_result, two_pass_processing_active, recovered_lines_count):
         frame_stabilization_active = self.frame_stabilization != 0
 
         if (not frame_stabilization_active) or two_pass_processing_active:
-            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, recovered_lines_count, True)
+            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, recovered_lines_count, True)
             if changed_lines == None:
                 return [], 0
-            self.last_frame_text = (current_result, current_result_ocr)
+            self.last_frame_text = current_result
             return changed_lines, changed_lines_count
 
-        changed_lines_stabilization, changed_lines_stabilization_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.last_frame_text[0], None, None, 0, False)
+        changed_lines_stabilization, changed_lines_stabilization_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, 0, False)
         if changed_lines_stabilization == None:
             return [], 0
 
@@ -536,24 +540,24 @@ class TextFiltering:
                 return [], 0
             if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
                 return [], 0
-            if self.line_recovery and self.last_last_frame_text[0]:
-                logger.debug(f'Checking for missed lines')
-                recovered_lines, recovered_lines_count = self._find_changed_lines_text_impl(self.last_last_frame_text[0], self.last_last_frame_text[1], self.stable_frame_text, current_result, None, 0, False)
+            if self.line_recovery and self.last_last_frame_text:
+                logger.debug('Checking for missed lines')
+                recovered_lines, recovered_lines_count = self._find_changed_lines_text_impl(self.last_last_frame_text, self.stable_frame_text, current_result, None, 0, False)
             else:
                 recovered_lines_count = 0
                 recovered_lines = []
-            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, current_result_ocr, self.stable_frame_text, None, recovered_lines, recovered_lines_count, True)
+            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, self.stable_frame_text, None, recovered_lines, recovered_lines_count, True)
             self.processed_stable_frame = True
             self.stable_frame_text = current_result
             return changed_lines, changed_lines_count
         else:
             self.last_last_frame_text = self.last_frame_text
-            self.last_frame_text = (current_result, current_result_ocr)
+            self.last_frame_text = current_result
             self.processed_stable_frame = False
             self.frame_stabilization_timestamp = time.time()
             return [], 0
 
-    def _find_changed_lines_text_impl(self, current_result, current_result_ocr, previous_result, next_result, recovered_lines, recovered_lines_count, regex_filter):
+    def _find_changed_lines_text_impl(self, current_result, previous_result, next_result, recovered_lines, recovered_lines_count, regex_filter):
         if recovered_lines:
             current_result = recovered_lines + current_result
 
@@ -562,7 +566,6 @@ class TextFiltering:
 
         changed_lines = []
         current_lines = []
-        current_lines_ocr = []
         previous_text = []
 
         for current_line in current_result:
@@ -570,11 +573,6 @@ class TextFiltering:
             current_lines.append(current_text_line)
         if all(not current_text_line for current_text_line in current_lines):
             return None, 0
-
-        if self.furigana_filter and self.language == 'ja' and isinstance(current_result_ocr, OcrResult):
-            for p in current_result_ocr.paragraphs:
-                current_lines_ocr.extend(p.lines)
-                current_lines_ocr.append('\n')
 
         for prev_line in previous_result:
             prev_text = self._normalize_line_for_comparison(prev_line)
@@ -585,7 +583,7 @@ class TextFiltering:
 
         all_previous_text = ''.join(previous_text)
 
-        logger.opt(colors=True).debug(f"<magenta>Previous text: '{previous_text}'</magenta>")
+        logger.opt(colors=True).debug("<magenta>Previous text: '{}'</>", previous_text)
 
         first = True
         changed_lines_count = 0
@@ -604,27 +602,19 @@ class TextFiltering:
             else:
                 text_similar = current_text in all_previous_text
 
-            logger.opt(colors=True).debug(f"<magenta>Current line: '{changed_line}' Similar: '{text_similar}'</magenta>")
+            logger.opt(colors=True).debug("<magenta>Current line: '{}' Similar: '{}'</>", changed_line, text_similar)
 
             if text_similar:
                 continue
 
-            i2 = i - len_recovered_lines
-
-            if (recovered_lines == None or i2 < 0) and recovered_lines_count > 0:
+            if (recovered_lines == None or i - len_recovered_lines < 0) and recovered_lines_count > 0:
                 if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
-                    logger.opt(colors=True).debug(f"<magenta>Skipping recovered line: '{changed_line}'</magenta>")
+                    logger.opt(colors=True).debug("<magenta>Skipping recovered line: '{}'</>", changed_line)
                     recovered_lines_count -= 1
                     continue
 
             if next_result != None:
-                logger.opt(colors=True).debug(f"<red>Recovered line: '{changed_line}'</red>")
-
-            if current_lines_ocr:
-                if i2 >= 0:
-                    is_furigana = self._furigana_filter(current_result[len_recovered_lines:], current_lines[len_recovered_lines:], current_lines_ocr, current_result_ocr.image_properties, i2)
-                    if is_furigana:
-                        continue
+                logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", changed_line)
 
             if first and len(current_text) > 3:
                 first = False
@@ -632,9 +622,9 @@ class TextFiltering:
                 if regex_filter and all_previous_text:
                     overlap = self._find_overlap(all_previous_text, current_text)
                     if overlap and len(current_text) > len(overlap):
-                        logger.opt(colors=True).debug(f"<magenta>Found overlap: '{overlap}'</magenta>")
+                        logger.opt(colors=True).debug("<magenta>Found overlap: '{}'</>", overlap)
                         changed_line = self._cut_at_overlap(changed_line, overlap)
-                        logger.opt(colors=True).debug(f"<magenta>After cutting: '{changed_line}'</magenta>")
+                        logger.opt(colors=True).debug("<magenta>After cutting: '{}'</>", changed_line)
 
             if regex_filter and self.manual_regex_filter:
                 changed_line = self.manual_regex_filter.sub('', changed_line)
@@ -642,119 +632,6 @@ class TextFiltering:
             changed_lines_count += 1
 
         return changed_lines, changed_lines_count
-
-    def _furigana_filter(self, current_result, current_lines, current_lines_ocr, image_properties, i):
-        has_kanji = self.kanji_regex.search(current_lines[i])
-        if has_kanji:
-            return False
-
-        is_furigana = False
-        current_line_text = current_result[i]
-        current_line_bbox = current_lines_ocr[i].bounding_box
-
-        for j in range(i + 1, len(current_lines_ocr)):
-            if current_lines_ocr[j] == '\n':
-                continue
-
-            other_line_text = current_result[j]
-            other_line_bbox = current_lines_ocr[j].bounding_box
-
-            if len(current_line_text) <= len(other_line_text):
-                aspect_ratio = (other_line_bbox.width * image_properties.width) / (other_line_bbox.height * image_properties.height)
-            else:
-                aspect_ratio = (current_line_bbox.width * image_properties.width) / (current_line_bbox.height * image_properties.height)
-            is_vertical = aspect_ratio < 0.8
-
-            logger.opt(colors=True).debug(f"<magenta>Furigana check against line: '{other_line_text}' vertical: '{is_vertical}'</magenta>")
-
-            if is_vertical:
-                min_h_distance = abs(other_line_bbox.width - current_line_bbox.width) / 2
-                max_h_distance = other_line_bbox.width + (current_line_bbox.width / 2)
-                min_v_overlap = 0.4
-
-                horizontal_distance = current_line_bbox.center_x - other_line_bbox.center_x
-                vertical_overlap = self._check_vertical_overlap(current_line_bbox, other_line_bbox)
-
-                logger.opt(colors=True).debug(f"<magenta>Vertical furigana: min h.dist '{min_h_distance:.4f}' max h.dist '{max_h_distance:.4f}' h.dist '{horizontal_distance:.4f}' v.overlap '{vertical_overlap:.4f}'</magenta>")
-
-                passed_position_check = min_h_distance < horizontal_distance < max_h_distance and vertical_overlap > min_v_overlap
-            else:
-                min_v_distance = abs(other_line_bbox.height - current_line_bbox.height) / 2
-                max_v_distance = other_line_bbox.height + (current_line_bbox.height / 2)
-                min_h_overlap = 0.4
-
-                vertical_distance = other_line_bbox.center_y - current_line_bbox.center_y
-                horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, other_line_bbox)
-
-                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana: min v.dist '{min_v_distance:.4f}' max v.dist '{max_v_distance:.4f}' v.dist '{vertical_distance:.4f}' h.overlap '{horizontal_overlap:.4f}'</magenta>")
-
-                passed_position_check = min_v_distance < vertical_distance < max_v_distance and horizontal_overlap > min_h_overlap
-
-            if not passed_position_check:
-                logger.opt(colors=True).debug(f"<magenta>Not overlapping line found: '{other_line_text}', continuing</magenta>")
-                continue
-
-            other_line_text_normalized = current_lines[j]
-            if not other_line_text_normalized:
-                break
-            other_has_kanji = self.kanji_regex.search(other_line_text_normalized)
-            if not other_has_kanji:
-                break
-
-            if is_vertical:
-                width_threshold = other_line_bbox.width * 0.77
-                is_smaller = current_line_bbox.width < width_threshold
-                logger.opt(colors=True).debug(f"<magenta>Vertical furigana width: kanji '{other_line_bbox.width:.4f}' kana '{current_line_bbox.width:.4f}' max kana '{width_threshold:.4f}'</magenta>")
-            else:
-                height_threshold = other_line_bbox.height * 0.85
-                is_smaller = current_line_bbox.height < height_threshold
-                logger.opt(colors=True).debug(f"<magenta>Horizontal furigana width: kanji '{other_line_bbox.height:.4f}' kana '{current_line_bbox.height:.4f}' max kana '{height_threshold:.4f}'</magenta>")
-
-            if is_smaller:
-                is_furigana = True
-                logger.opt(colors=True).debug(f"<yellow>Skipping furigana line: '{current_line_text}' next to line: '{other_line_text}'</yellow>")
-
-            break
-
-        return is_furigana
-
-    def standalone_furigana_filter(self, result, result_ocr):
-        if len(result) == 0:
-            return result
-
-        filtered_lines = []
-        lines = []
-        lines_ocr = []
-
-        for line in result:
-            if not line.replace('\n', ''):
-                lines.append('')
-                continue
-            text_line = ''.join(self.cj_regex.findall(line))
-            lines.append(text_line)
-        if all(not text_line for text_line in lines):
-            return result
-
-        for p in result_ocr.paragraphs:
-            lines_ocr.extend(p.lines)
-            lines_ocr.append('\n')
-
-        for i, text in enumerate(lines):
-            filtered_line = result[i]
-
-            if not text:
-                filtered_lines.append(filtered_line)
-                continue
-
-            logger.opt(colors=True).debug(f"<magenta>Line: '{filtered_line}'</magenta>")
-
-            is_furigana = self._furigana_filter(result, lines, lines_ocr, result_ocr.image_properties, i)
-            if is_furigana:
-                continue
-
-            filtered_lines.append(filtered_line)
-
-        return filtered_lines
 
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
@@ -781,7 +658,7 @@ class TextFiltering:
         overlap_pattern = r'.*?'.join(pattern_parts)
         full_pattern = r'^.*?' + overlap_pattern
 
-        logger.opt(colors=True).debug(f"<magenta>Cut regex: '{full_pattern}'</magenta>")
+        logger.opt(colors=True).debug("<magenta>Cut regex: '{}'</>", full_pattern)
 
         match = re.search(full_pattern, current_line)
         if match:
@@ -790,148 +667,455 @@ class TextFiltering:
 
         return current_line
 
-    def order_paragraphs_and_lines(self, result_data):
-        if not result_data.paragraphs:
-            return result_data
+    def order_paragraphs_and_lines(self, ocr_result):
+        # Extract all lines and determine their orientation
+        all_lines = []
+        for paragraph in ocr_result.paragraphs:
+            for line in paragraph.lines:
+                if line.text is None:
+                    line.text = self.get_line_text(line)
 
-        paragraphs_with_lines = [p for p in result_data.paragraphs if p.lines]
-        ordered_paragraphs = self._order_paragraphs(paragraphs_with_lines, result_data.image_properties)
+                if paragraph.writing_direction:
+                    is_vertical = paragraph.writing_direction == 'TOP_TO_BOTTOM'
+                else:
+                    is_vertical = self._is_line_vertical(line, ocr_result.image_properties)
 
-        for paragraph in ordered_paragraphs:
-            paragraph.lines = self._order_lines(
-                paragraph.lines,
-                self._is_paragraph_vertical(paragraph, result_data.image_properties)
-            )
+                all_lines.append({
+                    'line_obj': line,
+                    'is_vertical': is_vertical
+                })
+
+        if not all_lines:
+            return ocr_result
+
+        # Create new paragraphs
+        new_paragraphs = self._create_paragraphs_from_lines(all_lines)
+
+        # Group paragraphs into rows
+        rows = self._group_paragraphs_into_rows(new_paragraphs)
+
+        # Reorder paragraphs in each row
+        reordered_rows = self._reorder_paragraphs_in_rows(rows)
+
+        # Order rows from top to bottom and flatten
+        final_paragraphs = self._flatten_rows_to_paragraphs(reordered_rows)
 
         return OcrResult(
-            image_properties=result_data.image_properties,
-            paragraphs=ordered_paragraphs
+            image_properties=ocr_result.image_properties,
+            engine_capabilities=ocr_result.engine_capabilities,
+            paragraphs=final_paragraphs
         )
 
-    def _order_lines(self, lines, is_paragraph_vertical):
-        if len(lines) <= 1:
+    def _create_paragraphs_from_lines(self, lines):
+        grouped = set()
+        all_paragraphs = []
+
+        def _group_lines(is_vertical):
+            indices = [i for i, line in enumerate(lines) if (line['is_vertical'] in (is_vertical, None)) and i not in grouped]
+
+            if len(indices) < 2:
+                return
+
+            if is_vertical:
+                get_start = lambda line: line['line_obj'].bounding_box.top
+                get_end = lambda line: line['line_obj'].bounding_box.bottom
+            else:
+                get_start = lambda line: line['line_obj'].bounding_box.left
+                get_end = lambda line: line['line_obj'].bounding_box.right
+
+            components = self._find_connected_components(
+                items=[lines[i] for i in indices],
+                should_connect=lambda l1, l2: self._should_group_in_same_paragraph(l1, l2, is_vertical),
+                get_start_coord=get_start,
+                get_end_coord=get_end
+            )
+
+            for component in components:
+                if len(component) > 1:
+                    original_indices = [indices[i] for i in component]
+                    paragraph_lines = [lines[i] for i in original_indices]
+                    new_paragraph = self._create_paragraph_from_lines(paragraph_lines, is_vertical)
+                    all_paragraphs.append(new_paragraph)
+                    grouped.update(original_indices)
+
+        _group_lines(True)
+        _group_lines(False)
+
+        # Create paragraphs out of ungrouped lines
+        ungrouped_lines = [line for i, line in enumerate(lines) if i not in grouped]
+        for line in ungrouped_lines:
+            new_paragraph = self._create_paragraph_from_lines([line], None)
+            all_paragraphs.append(new_paragraph)
+
+        return all_paragraphs
+
+    def _create_paragraph_from_lines(self, lines, is_vertical):
+        if len(lines) > 1:
+            if is_vertical:
+                lines = sorted(lines, key=lambda x: x['line_obj'].bounding_box.right, reverse=True)
+            else:
+                lines = sorted(lines, key=lambda x: x['line_obj'].bounding_box.top)
+
+            lines = self._merge_overlapping_lines(lines, is_vertical)
+
+            if self.furigana_filter:
+                lines = self._furigana_filter(lines, is_vertical)
+
+            line_objs = [l['line_obj'] for l in lines]
+
+            left = min(line.bounding_box.left for line in line_objs)
+            right = max(line.bounding_box.right for line in line_objs)
+            top = min(line.bounding_box.top for line in line_objs)
+            bottom = max(line.bounding_box.bottom for line in line_objs)
+
+            new_bbox = BoundingBox(
+                center_x=(left + right) / 2,
+                center_y=(top + bottom) / 2,
+                width=right - left,
+                height=bottom - top
+            )
+
+            writing_direction = 'TOP_TO_BOTTOM' if is_vertical else 'LEFT_TO_RIGHT'
+        else:
+            line_objs = [lines[0]['line_obj']]
+            new_bbox = lines[0]['line_obj'].bounding_box
+            writing_direction = 'TOP_TO_BOTTOM' if lines[0]['is_vertical'] else 'LEFT_TO_RIGHT'
+
+        paragraph = Paragraph(
+            bounding_box=new_bbox,
+            lines=line_objs,
+            writing_direction=writing_direction
+        )
+
+        return paragraph
+
+    def _should_group_in_same_paragraph(self, line1, line2, is_vertical):
+        bbox1 = line1['line_obj'].bounding_box
+        bbox2 = line2['line_obj'].bounding_box
+
+        if is_vertical:
+            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
+            horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
+            line_width = max(bbox1.width, bbox2.width)
+
+            return vertical_overlap > 0.7 and horizontal_distance < line_width * 2
+        else:
+            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+            vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
+            line_height = max(bbox1.height, bbox2.height)
+
+            return horizontal_overlap > 0.7 and vertical_distance < line_height * 2
+
+    def _merge_overlapping_lines(self, lines, is_vertical):
+        if not lines:
+            return []
+
+        merged = []
+        used_indices = set()
+
+        for i, current_line in enumerate(lines):
+            if i in used_indices:
+                continue
+
+            # Start with the current line
+            merge_group = [current_line]
+            used_indices.add(i)
+            last_line_in_group = current_line
+
+            # Check subsequent lines in order
+            for j, candidate_line in enumerate(lines[i+1:], i+1):
+                if j in used_indices:
+                    continue
+
+                # Only check if candidate should merge with the last line in our current group
+                if self._should_merge_lines(last_line_in_group, candidate_line, is_vertical):
+                    merge_group.append(candidate_line)
+                    used_indices.add(j)
+                    last_line_in_group = candidate_line  # Update last line for next comparison
+
+            # Merge all lines in the group into one
+            if len(merge_group) > 1:
+                merged_line = self._merge_multiple_lines(merge_group, is_vertical)
+                merged.append(merged_line)
+                if self.debug_filtering:
+                    logger.opt(colors=True).debug("<green>Merged lines: '{}' vertical: '{}'</>", [self.get_line_text(line['line_obj']) for line in merge_group], is_vertical)
+            else:
+                merged.append(current_line)
+
+        return merged
+
+    def _merge_multiple_lines(self, lines, is_vertical):
+        if is_vertical:
+            # Sort lines by y-coordinate (top to bottom)
+            sort_key = lambda line: line['line_obj'].bounding_box.center_y
+        else:
+            # Sort lines by x-coordinate (left to right)
+            sort_key = lambda line: line['line_obj'].bounding_box.center_x
+
+        lines = sorted(lines, key=sort_key)
+
+        text_sorted = ''
+        for line in lines:
+            text_sorted += line['line_obj'].text
+
+        words_sorted = []
+        for line in lines:
+            words_sorted.extend(line['line_obj'].words)
+
+        # Calculate new bounding box that encompasses all lines
+        bboxes = [line['line_obj'].bounding_box for line in lines]
+
+        left = min(bbox.left for bbox in bboxes)
+        right = max(bbox.right for bbox in bboxes)
+        top = min(bbox.top for bbox in bboxes)
+        bottom = max(bbox.bottom for bbox in bboxes)
+
+        new_bbox = BoundingBox(
+            center_x=(left + right) / 2,
+            center_y=(top + bottom) / 2,
+            width=right - left,
+            height=bottom - top
+        )
+
+        # Create new merged line
+        merged_line = Line(
+            bounding_box=new_bbox,
+            words=words_sorted,
+            text=text_sorted
+        )
+
+        return {
+            'line_obj': merged_line,
+            'is_vertical': is_vertical
+        }
+
+    def _should_merge_lines(self, line1, line2, is_vertical):
+        bbox1 = line1['line_obj'].bounding_box
+        bbox2 = line2['line_obj'].bounding_box
+
+        if is_vertical:
+            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
+
+            return (horizontal_overlap > 0.7 and
+                    vertical_overlap < 0.4)
+
+        else:
+            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
+            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+
+            return (vertical_overlap > 0.7 and
+                    horizontal_overlap < 0.4)
+
+    def _furigana_filter(self, lines, is_vertical):
+        filtered_lines = []
+
+        for line in lines:
+            line_text = self.get_line_text(line['line_obj'])
+            normalized_line_text = ''.join(self.cj_regex.findall(line_text))
+            line['normalized_text'] = normalized_line_text
+        if all(not line['normalized_text'] for line in lines):
             return lines
 
-        ordered_lines = list(lines)
+        for i, line in enumerate(lines):
+            if i >= len(lines) - 1:
+                filtered_lines.append(line)
+                continue
 
-        # Sort primarily by vertical position (top to bottom)
-        ordered_lines.sort(key=lambda line: line.bounding_box.center_y)
+            current_line_text = self.get_line_text(line['line_obj'])
+            current_line_bbox = line['line_obj'].bounding_box
+            next_line = lines[i + 1]
+            next_line_text = self.get_line_text(next_line['line_obj'])
+            next_line_bbox = next_line['line_obj'].bounding_box
 
-        # Now adjust ordering based on overlap and paragraph orientation
-        for i in range(len(ordered_lines)):
-            for j in range(i + 1, len(ordered_lines)):
-                line_i = ordered_lines[i]
-                line_j = ordered_lines[j]
+            if not (line['normalized_text'] and next_line['normalized_text']):
+                filtered_lines.append(line)
+                continue
+            has_kanji = self.kanji_regex.search(line['normalized_text'])
+            if has_kanji:
+                filtered_lines.append(line)
+                continue
+            next_has_kanji = self.kanji_regex.search(next_line['normalized_text'])
+            if not next_has_kanji:
+                filtered_lines.append(line)
+                continue
 
-                vertical_overlap = self._check_vertical_overlap(
-                    line_i.bounding_box, 
-                    line_j.bounding_box
-                )
+            logger.opt(colors=True).debug("<magenta>Furigana check line: '{}' against line: '{}' vertical: '{}'</>", current_line_text, next_line_text, is_vertical)
 
-                if vertical_overlap > 0.4: # Lines overlap vertically
-                    should_swap = False
+            if is_vertical:
+                min_h_distance = abs(next_line_bbox.width - current_line_bbox.width) / 2
+                max_h_distance = next_line_bbox.width + (current_line_bbox.width / 2)
+                min_v_overlap = 0.4
 
-                    if is_paragraph_vertical:
-                        # For vertical paragraphs: order right to left (center_x descending)
-                        if line_i.bounding_box.center_x < line_j.bounding_box.center_x:
-                            should_swap = True
-                    else:
-                        # For horizontal paragraphs: check horizontal overlap first
-                        horizontal_overlap = self._check_horizontal_overlap(
-                            line_i.bounding_box,
-                            line_j.bounding_box
-                        )
+                horizontal_distance = current_line_bbox.center_x - next_line_bbox.center_x
+                vertical_overlap = self._check_vertical_overlap(current_line_bbox, next_line_bbox)
 
-                        # Only swap if there's NO horizontal overlap
-                        if horizontal_overlap == 0 and line_i.bounding_box.center_x > line_j.bounding_box.center_x:
-                            should_swap = True
+                logger.opt(colors=True).debug(f"<magenta>Vertical position: min h.dist '{min_h_distance:.4f}' max h.dist '{max_h_distance:.4f}' h.dist '{horizontal_distance:.4f}' v.overlap '{vertical_overlap:.4f}'</>")
 
-                    if should_swap:
-                        ordered_lines[i], ordered_lines[j] = ordered_lines[j], ordered_lines[i]
+                passed_position_check = min_h_distance < horizontal_distance < max_h_distance and vertical_overlap > min_v_overlap
+            else:
+                min_v_distance = abs(next_line_bbox.height - current_line_bbox.height) / 2
+                max_v_distance = next_line_bbox.height + (current_line_bbox.height / 2)
+                min_h_overlap = 0.4
 
-        return ordered_lines
+                vertical_distance = next_line_bbox.center_y - current_line_bbox.center_y
+                horizontal_overlap = self._check_horizontal_overlap(current_line_bbox, next_line_bbox)
 
-    def _order_paragraphs(self, paragraphs, image_properties):
-        if len(paragraphs) <= 1:
+                logger.opt(colors=True).debug(f"<magenta>Horizontal position: min v.dist '{min_v_distance:.4f}' max v.dist '{max_v_distance:.4f}' v.dist '{vertical_distance:.4f}' h.overlap '{horizontal_overlap:.4f}'</>")
+
+                passed_position_check = min_v_distance < vertical_distance < max_v_distance and horizontal_overlap > min_h_overlap
+
+            if not passed_position_check:
+                filtered_lines.append(line)
+                continue
+
+            if is_vertical:
+                width_threshold = next_line_bbox.width * 0.77
+                passed_size_check = current_line_bbox.width < width_threshold
+                logger.opt(colors=True).debug(f"<magenta>Vertical size (width): kanji '{next_line_bbox.width:.4f}' kana '{current_line_bbox.width:.4f}' max kana '{width_threshold:.4f}'</>")
+            else:
+                height_threshold = next_line_bbox.height * 0.85
+                passed_size_check = current_line_bbox.height < height_threshold
+                logger.opt(colors=True).debug(f"<magenta>Horizontal size (height): kanji '{next_line_bbox.height:.4f}' kana '{current_line_bbox.height:.4f}' max kana '{height_threshold:.4f}'</>")
+
+            if not passed_size_check:
+                filtered_lines.append(line)
+                continue
+
+            logger.opt(colors=True).debug("<yellow>Skipping furigana line: '{}' next to line: '{}'</>", current_line_text, next_line_text)
+
+        return filtered_lines
+
+    def _group_paragraphs_into_rows(self, paragraphs):
+        if len(paragraphs) < 2:
+            return [{'paragraphs': paragraphs, 'is_vertical': False}]
+
+        components = self._find_connected_components(
+            items=paragraphs,
+            should_connect=lambda p1, p2: self._check_vertical_overlap(p1.bounding_box, p2.bounding_box) > 0.4,
+            get_start_coord=lambda p: p.bounding_box.top,
+            get_end_coord=lambda p: p.bounding_box.bottom
+        )
+
+        rows = []
+        for component in components:
+            row_paragraphs = [paragraphs[i] for i in component]
+            vertical_count = sum(1 for p in row_paragraphs if p.writing_direction == 'TOP_TO_BOTTOM')
+            is_vertical = vertical_count * 2 >= len(row_paragraphs)
+
+            rows.append({
+                'paragraphs': row_paragraphs,
+                'is_vertical': is_vertical
+            })
+
+        return rows
+
+    def _reorder_paragraphs_in_rows(self, rows):
+        reordered_rows = []
+
+        for row in rows:
+            paragraphs = row['paragraphs']
+            is_vertical = row['is_vertical']
+
+            # Sort paragraphs by x-coordinate (left edge)
+            paragraphs_sorted = sorted(paragraphs, key=lambda p: p.bounding_box.left)
+
+            if is_vertical:
+                # Reverse the entire order for predominantly vertical rows
+                paragraphs_sorted.reverse()
+
+            # Further reorder contiguous blocks with different orientation
+            final_order = self._reorder_mixed_orientation_blocks(paragraphs_sorted, is_vertical)
+
+            reordered_rows.append({
+                'paragraphs': final_order,
+                'is_vertical': is_vertical
+            })
+
+        return reordered_rows
+
+    def _reorder_mixed_orientation_blocks(self, paragraphs, row_is_vertical):
+        if not paragraphs:
             return paragraphs
 
-        ordered_paragraphs = list(paragraphs)
+        result = []
+        current_block = [paragraphs[0]]
+        current_orientation = paragraphs[0].writing_direction == 'TOP_TO_BOTTOM'
 
-        # Sort primarily by vertical position (top to bottom)
-        ordered_paragraphs.sort(key=lambda p: p.bounding_box.center_y)
+        for para in paragraphs[1:]:
+            para_orientation = para.writing_direction == 'TOP_TO_BOTTOM'
 
-        # Now adjust ordering based on overlap and orientation
-        for i in range(len(ordered_paragraphs)):
-            for j in range(i + 1, len(ordered_paragraphs)):
-                para_i = ordered_paragraphs[i]
-                para_j = ordered_paragraphs[j]
+            if para_orientation == current_orientation:
+                current_block.append(para)
+            else:
+                # Process the completed block
+                if current_orientation != row_is_vertical:
+                    # Reverse blocks that don't match row orientation
+                    current_block.reverse()
+                result.extend(current_block)
 
-                vertical_overlap = self._check_vertical_overlap(
-                    para_i.bounding_box, 
-                    para_j.bounding_box
-                )
+                # Start new block
+                current_block = [para]
+                current_orientation = para_orientation
 
-                if vertical_overlap > 0.4: # Paragraphs overlap vertically
-                    is_vertical_i = self._is_paragraph_vertical(para_i, image_properties)
-                    is_vertical_j = self._is_paragraph_vertical(para_j, image_properties)
+        # Process the last block
+        if current_orientation != row_is_vertical:
+            current_block.reverse()
+        result.extend(current_block)
 
-                    should_swap = False
+        return result
 
-                    if is_vertical_i and is_vertical_j:
-                        # Both vertical: order right to left (center_x descending)
-                        if para_i.bounding_box.center_x < para_j.bounding_box.center_x:
-                            should_swap = True
-                    elif is_vertical_i and not is_vertical_j:
-                        # Vertical with horizontal: order left to right (center_x ascending)
-                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
-                            should_swap = True
-                    elif not is_vertical_i and is_vertical_j:
-                        # Horizontal with vertical: order left to right (center_x ascending)
-                        if para_i.bounding_box.center_x > para_j.bounding_box.center_x:
-                            should_swap = True
-                    else:
-                        # Both horizontal: check horizontal overlap first
-                        horizontal_overlap = self._check_horizontal_overlap(
-                            para_i.bounding_box,
-                            para_j.bounding_box
-                        )
+    def _flatten_rows_to_paragraphs(self, rows):
+        # Sort rows by vertical position (top to bottom)
+        rows_sorted = sorted(rows, key=lambda r: min(p.bounding_box.top for p in r['paragraphs']))
 
-                        # Only swap if there's NO horizontal overlap
-                        if horizontal_overlap == 0 and para_i.bounding_box.center_x > para_j.bounding_box.center_x:
-                            should_swap = True
+        if self.debug_filtering:
+            for r in rows_sorted:
+                logger.opt(colors=True).debug("<green>Row vertical: '{}'</>", r['is_vertical'])
+                for p in r['paragraphs']:
+                    logger.opt(colors=True).debug("<green>    Paragraph: '{}' vertical: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction == 'TOP_TO_BOTTOM')
 
-                    if should_swap:
-                        ordered_paragraphs[i], ordered_paragraphs[j] = ordered_paragraphs[j], ordered_paragraphs[i]
+        # Flatten all paragraphs
+        all_paragraphs = []
+        for row in rows_sorted:
+            all_paragraphs.extend(row['paragraphs'])
 
-        return ordered_paragraphs
+        return all_paragraphs
 
-    def _is_paragraph_vertical(self, paragraph, image_properties):
-        if paragraph.writing_direction:
-            if paragraph.writing_direction == "TOP_TO_BOTTOM":
-                return True
-            return False
+    def _calculate_horizontal_distance(self, bbox1, bbox2):
+        if bbox1.right < bbox2.left:
+            return bbox2.left - bbox1.right
+        elif bbox2.right < bbox1.left:
+            return bbox1.left - bbox2.right
+        else:
+            return 0.0
 
-        total_aspect_ratio = 0.0
+    def _calculate_vertical_distance(self, bbox1, bbox2):
+        if bbox1.bottom < bbox2.top:
+            return bbox2.top - bbox1.bottom
+        elif bbox2.bottom < bbox1.top:
+            return bbox1.top - bbox2.bottom
+        else:
+            return 0.0
 
-        for line in paragraph.lines:
-            bbox = line.bounding_box
-            pixel_width = bbox.width * image_properties.width
-            pixel_height = bbox.height * image_properties.height
-            aspect_ratio = pixel_width / pixel_height
-            total_aspect_ratio += aspect_ratio
+    def _is_line_vertical(self, line, image_properties):
+        # For very short lines (less than 3 characters), undefined orientation
+        if len(self.get_line_text(line)) < 3:
+            return None
 
-        average_aspect_ratio = total_aspect_ratio / len(paragraph.lines)
+        bbox = line.bounding_box
+        pixel_width = bbox.width * image_properties.width
+        pixel_height = bbox.height * image_properties.height
 
-        return average_aspect_ratio < 0.8  # Threshold for vertical text
+        aspect_ratio = pixel_width / pixel_height
+        return aspect_ratio < 0.8
 
     def _check_horizontal_overlap(self, bbox1, bbox2):
-        # Calculate left and right boundaries for both boxes
-        left1 = bbox1.center_x - bbox1.width / 2
-        right1 = bbox1.center_x + bbox1.width / 2
-        left2 = bbox2.center_x - bbox2.width / 2
-        right2 = bbox2.center_x + bbox2.width / 2
+        left1 = bbox1.left
+        right1 = bbox1.right
+        left2 = bbox2.left
+        right2 = bbox2.right
 
-        # Calculate overlap
         overlap_left = max(left1, left2)
         overlap_right = min(right1, right2)
 
@@ -944,13 +1128,11 @@ class TextFiltering:
         return overlap_width / smaller_width if smaller_width > 0 else 0.0
 
     def _check_vertical_overlap(self, bbox1, bbox2):
-        # Calculate top and bottom boundaries for both boxes
-        top1 = bbox1.center_y - bbox1.height / 2
-        bottom1 = bbox1.center_y + bbox1.height / 2
-        top2 = bbox2.center_y - bbox2.height / 2
-        bottom2 = bbox2.center_y + bbox2.height / 2
+        top1 = bbox1.top
+        bottom1 = bbox1.bottom
+        top2 = bbox2.top
+        bottom2 = bbox2.bottom
 
-        # Calculate overlap
         overlap_top = max(top1, top2)
         overlap_bottom = min(bottom1, bottom2)
 
@@ -961,6 +1143,58 @@ class TextFiltering:
         smaller_height = min(bbox1.height, bbox2.height)
 
         return overlap_height / smaller_height if smaller_height > 0 else 0.0
+
+    def _find_connected_components(self, items, should_connect, get_start_coord, get_end_coord):
+        # Build graph using sweep-line algorithm
+        graph = {i: [] for i in range(len(items))}
+
+        # Sort items by appropriate coordinate for sweep-line
+        sorted_items = sorted(
+            [(i, items[i]) for i in range(len(items))],
+            key=lambda x: get_start_coord(x[1])
+        )
+
+        active_items = []  # (index, item, end_coordinate)
+
+        for original_idx, item in sorted_items:
+            current_start = get_start_coord(item)
+            line_end = get_end_coord(item)
+
+            # Remove items that are no longer overlapping
+            active_items = [
+                (active_idx, active_item, active_end) 
+                for active_idx, active_item, active_end in active_items
+                if active_end > current_start  # Still overlapping
+            ]
+
+            # Check current item against all active items
+            for active_idx, active_item, _ in active_items:
+                if should_connect(item, active_item):
+                    graph[original_idx].append(active_idx)
+                    graph[active_idx].append(original_idx)
+
+            # Add current item to active list
+            active_items.append((original_idx, item, line_end))
+
+        # Find connected components using BFS
+        visited = set()
+        connected_components = []
+
+        for i in range(len(items)):
+            if i not in visited:
+                component = []
+                queue = collections.deque([i])
+                visited.add(i)
+                while queue:
+                    node = queue.popleft()
+                    component.append(node)
+                    for neighbor in graph[node]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                connected_components.append(component)
+
+        return connected_components
 
     def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
         def crop_image(image, lines):
@@ -1606,13 +1840,13 @@ class OutputResult:
                 end_time = time.time()
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
+                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
-                            logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</{self.engine_color}> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</{self.engine_color}>")
+                            logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</>")
 
                         if changed_regions_image:
                             img_or_path = changed_regions_image
@@ -1642,7 +1876,7 @@ class OutputResult:
         if not res:
             if auto_pause_handler and auto_pause:
                 auto_pause_handler.stop_timer()
-            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</{self.engine_color}> reported an error after {processing_time:0.03f}s: {result_data}')
+            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</> reported an error after {processing_time:0.03f}s: {result_data}')
             return
 
         if isinstance(result_data, OcrResult):
@@ -1652,15 +1886,13 @@ class OutputResult:
             result_data_text = result_data
 
         if filter_text:
-            changed_lines, changed_lines_count = self.filtering.find_changed_lines_text(result_data_text, result_data, two_pass_processing_active, recovered_lines_count)
+            changed_lines, changed_lines_count = self.filtering.find_changed_lines_text(result_data_text, two_pass_processing_active, recovered_lines_count)
             if self.screen_capture_periodic and not changed_lines_count:
                 if auto_pause_handler and auto_pause:
                     auto_pause_handler.allow_auto_pause.set()
                 return
             output_text = self._post_process(changed_lines, True)
         else:
-            if self.filtering.furigana_filter and isinstance(result_data, OcrResult):
-                result_data_text = self.filtering.standalone_furigana_filter(result_data_text, result_data)
             output_text = self._post_process(result_data_text, False)
 
         if self.json_output:
@@ -1676,7 +1908,7 @@ class OutputResult:
             else:
                 log_message = ': ' + (output_text if len(output_text) <= self.verbosity else output_text[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</{self.engine_color}>{log_message}')
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</>{log_message}')
 
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
@@ -1730,7 +1962,7 @@ def engine_change_handler(user_input='s', is_combo=True):
         if is_combo:
             notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
         engine_color = config.get_general('engine_color')
-        logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</{engine_color}>!')
+        logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</>!')
 
 
 def terminate_handler(sig=None, frame=None):
@@ -1992,7 +2224,7 @@ def run():
     user_input_thread.start()
 
     if not terminated.is_set():
-        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</{engine_color}>{' (paused)' if paused.is_set() else ''}")
+        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
 
     while not terminated.is_set():
         img = None
