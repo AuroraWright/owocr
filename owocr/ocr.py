@@ -1936,8 +1936,8 @@ class MeikiOCR:
             self.available = True
             logger.info('meikiocr ready')
 
-    def _to_normalized_bbox(self, pixel_bbox, img_width: int, img_height: int):
-        x1, y1, x2, y2 = pixel_bbox
+    def _to_normalized_bbox(self, rect, img_width, img_height):
+        x1, y1, x2, y2 = rect
         return rectangle_to_bounding_box(x1, y1, x2, y2, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
