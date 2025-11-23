@@ -61,6 +61,7 @@ The command-line options/config file allow you to configure OCR providers, hotke
 - Apple Live Text (VisionKit framework) - It should be the same as Vision except that in Sonoma Apple added vertical text reading. **macOS only - Recommended (pre-installed)** → key: `d`
 - WinRT OCR: install: `pip install "owocr[winocr]"`. It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only** → key: `w`
 - OneOCR - install: `pip install "owocr[oneocr]"`. Close second local best to the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only - Recommended** → key: `z`
+- [meikiocr](https://github.com/rtr46/meikiocr) - install: `pip install "owocr[meikiocr]"`. Comparable to OneOCR in accuracy and CPU latency. Can be run on Nvidia GPUs via `pip uninstall onnxruntime && pip install onnxruntime-gpu` making it the fastest OCR available. Probably best option for Linux users. Can't process vertical text and is limited to 64 text lines and 48 characters per line.  → key: `k`
 
 ## Cloud
 - Google Lens - install: `pip install "owocr[lens]"`. Arguably the best OCR engine to date. **Recommended** → key: `l`
