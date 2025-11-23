@@ -807,8 +807,8 @@ class TextFiltering:
             return horizontal_overlap > 0.7 and vertical_distance < line_height * 2
 
     def _merge_overlapping_lines(self, lines, is_vertical):
-        if not lines:
-            return []
+        if len(lines) < 2:
+            return lines
 
         merged = []
         used_indices = set()
@@ -1017,6 +1017,10 @@ class TextFiltering:
             paragraphs = row['paragraphs']
             is_vertical = row['is_vertical']
 
+            if len(paragraphs) < 2:
+                reordered_rows.append(row)
+                continue
+
             # Sort paragraphs by x-coordinate (left edge)
             paragraphs_sorted = sorted(paragraphs, key=lambda p: p.bounding_box.left)
 
@@ -1035,7 +1039,7 @@ class TextFiltering:
         return reordered_rows
 
     def _reorder_mixed_orientation_blocks(self, paragraphs, row_is_vertical):
-        if not paragraphs:
+        if len(paragraphs) < 2:
             return paragraphs
 
         result = []
@@ -1066,7 +1070,6 @@ class TextFiltering:
         return result
 
     def _flatten_rows_to_paragraphs(self, rows):
-        # Sort rows by vertical position (top to bottom)
         rows_sorted = sorted(rows, key=lambda r: min(p.bounding_box.top for p in r['paragraphs']))
 
         if self.debug_filtering:
@@ -1075,7 +1078,6 @@ class TextFiltering:
                 for p in r['paragraphs']:
                     logger.opt(colors=True).debug("<green>    Paragraph: '{}' vertical: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction == 'TOP_TO_BOTTOM')
 
-        # Flatten all paragraphs
         all_paragraphs = []
         for row in rows_sorted:
             all_paragraphs.extend(row['paragraphs'])
@@ -1793,6 +1795,7 @@ class OutputResult:
         self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
+        self.reorder_text = config.get_general('reorder_text')
         self.line_separator = '' if config.get_general('join_lines') else ' '
         self.paragraph_separator = '' if config.get_general('join_paragraphs') else ' '
         self.write_to = config.get_general('write_to')
@@ -1880,7 +1883,8 @@ class OutputResult:
             return
 
         if isinstance(result_data, OcrResult):
-            result_data = self.filtering.order_paragraphs_and_lines(result_data)
+            if self.reorder_text:
+                result_data = self.filtering.order_paragraphs_and_lines(result_data)
             result_data_text = self._extract_lines_from_result(result_data)
         else:
             result_data_text = result_data

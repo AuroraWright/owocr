@@ -64,8 +64,10 @@ parser.add_argument('-j', '--join_lines', type=str2bool, nargs='?', const=True, 
                     help='Display lines in the text output without a space between them.')
 parser.add_argument('-jp', '--join_paragraphs', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Display paragraphs in the text output without a space between them.')
+parser.add_argument('-rt', '--reorder_text', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help='Regroup and reorder text instead of using paragraphs/order provided by the OCR engine.')
 parser.add_argument('-f', '--furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Try to filter furigana lines for Japanese.')
+                    help='Try to filter furigana lines for Japanese. Depends on reorder_text.')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
@@ -107,6 +109,7 @@ class Config:
         'screen_capture_line_recovery': True,
         'screen_capture_regex_filter': '',
         'join_lines': False,
+        'reorder_text': True,
         'furigana_filter': True,
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',
