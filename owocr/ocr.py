@@ -271,6 +271,26 @@ def quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width=None, img_hei
         rotation_z=angle
     )
 
+def rectangle_to_bounding_box(x1, y1, x2, y2, img_width=None, img_height=None):
+    width = x2 - x1
+    height = y2 - y1
+
+    center_x = (x1 + x2) / 2
+    center_y = (y1 + y2) / 2
+
+    if img_width and img_height:
+        width = width / img_width
+        height = height / img_height
+        center_x = center_x / img_width
+        center_y = center_y / img_height
+
+    return BoundingBox(
+        center_x=center_x,
+        center_y=center_y,
+        width=width,
+        height=height
+    )
+
 def merge_bounding_boxes(ocr_element_list, rotated=False):
     def _get_all_corners(ocr_element_list):
         corners = []
@@ -465,33 +485,12 @@ class MangaOcrSegmented:
             logger.info('Manga OCR (segmented) ready')
 
     def _convert_line_bbox(self, rect, img_width, img_height):
-        x1, y1 = float(rect[0][0]), float(rect[0][1])
-        x2, y2 = float(rect[1][0]), float(rect[1][1])
-        x3, y3 = float(rect[2][0]), float(rect[2][1])
-        x4, y4 = float(rect[3][0]), float(rect[3][1])
-
+        (x1, y1), (x2, y2), (x3, y3), (x4, y4) = [(float(x), float(y)) for x, y in rect]
         return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _convert_box_bbox(self, rect, img_width, img_height):
-        x1, y1, x2, y2 = rect
-
-        width_px = x2 - x1
-        height_px = y2 - y1
-
-        center_x_px = (x1 + x2) / 2
-        center_y_px = (y1 + y2) / 2
-
-        width_norm = width_px / img_width
-        height_norm = height_px / img_height
-        center_x_norm = center_x_px / img_width
-        center_y_norm = center_y_px / img_height
-
-        return BoundingBox(
-            center_x=float(center_x_norm),
-            center_y=float(center_y_norm),
-            width=float(width_norm),
-            height=float(height_norm)
-        )
+        x1, y1, x2, y2 = map(float, rect)
+        return rectangle_to_bounding_box(x1, y1, x2, y2, img_width, img_height)
 
     # from https://github.com/kha-white/mokuro/blob/master/mokuro/manga_page_ocr.py
     def _split_into_chunks(self, img, mask_refined, blk, line_idx, textheight, max_ratio, anchor_window):
@@ -1764,11 +1763,7 @@ class EasyOCR:
             logger.info('EasyOCR ready')
 
     def _convert_bbox(self, rect, img_width, img_height):
-        x1, y1 = float(rect[0][0]), float(rect[0][1])
-        x2, y2 = float(rect[1][0]), float(rect[1][1])
-        x3, y3 = float(rect[2][0]), float(rect[2][1])
-        x4, y4 = float(rect[3][0]), float(rect[3][1])
-
+        (x1, y1), (x2, y2), (x3, y3), (x4, y4) = [(float(x), float(y)) for x, y in rect]
         return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
@@ -1870,11 +1865,7 @@ class RapidOCR:
             return LangRec.LATIN
 
     def _convert_bbox(self, rect, img_width, img_height):
-        x1, y1 = float(rect[0][0]), float(rect[0][1])
-        x2, y2 = float(rect[1][0]), float(rect[1][1])
-        x3, y3 = float(rect[2][0]), float(rect[2][1])
-        x4, y4 = float(rect[3][0]), float(rect[3][1])
-
+        (x1, y1), (x2, y2), (x3, y3), (x4, y4) = [(float(x), float(y)) for x, y in rect]
         return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
@@ -1921,14 +1912,22 @@ class MeikiOCR:
     name = 'meikiocr'
     readable_name = 'meikiocr'
     key = 'k'
-    config_entry = 'meikiocr'
+    config_entry = None
     available = False
     local = True
     manual_language = False
     coordinate_support = True
     threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=False,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
 
-    def __init__(self, config={}, language='ja'):
+    def __init__(self):
         if 'meikiocr' not in sys.modules:
             logger.warning('meikiocr not available, meikiocr will not work!')
         else:
@@ -1937,23 +1936,11 @@ class MeikiOCR:
             self.available = True
             logger.info('meikiocr ready')
 
-    def _to_normalized_bbox(self, pixel_bbox: List[int], img_width: int, img_height: int) -> BoundingBox:
-        """Converts a bbox [x1, y1, x2, y2] to a normalized BoundingBox."""
+    def _to_normalized_bbox(self, pixel_bbox, img_width: int, img_height: int):
         x1, y1, x2, y2 = pixel_bbox
-        width_px = x2 - x1
-        height_px = y2 - y1
-        center_x_px = x1 + width_px / 2
-        center_y_px = y1 + height_px / 2
+        return rectangle_to_bounding_box(x1, y1, x2, y2, img_width, img_height)
 
-        return BoundingBox(
-            center_x=center_x_px / img_width,
-            center_y=center_y_px / img_height,
-            width=width_px / img_width,
-            height=height_px / img_height
-        )
-
-    def _to_generic_result(self, response: List[dict], img_width: int, img_height: int) -> OcrResult:
-        """Converts the raw meikiocr output into the standardized OcrResult format."""
+    def _to_generic_result(self, response, img_width, img_height):
         paragraphs = []
 
         # each dictionary in the response corresponds to a detected line of text.
@@ -1990,13 +1977,14 @@ class MeikiOCR:
             paragraph = Paragraph(
                 bounding_box=line_bbox,
                 lines=[line],
-                writing_direction="LEFT_TO_RIGHT"  # meikiocr only supports horizontal text
+                writing_direction="LEFT_TO_RIGHT" # meikiocr only supports horizontal text
             )
             paragraphs.append(paragraph)
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
-            paragraphs=paragraphs
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
         )
 
     def __call__(self, img):
