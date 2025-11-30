@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.20"
+version = "1.20.1"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,7 +26,7 @@ dependencies = [
     "desktop-notifier>=6.1.0",
     "mss>=10.1.0",
     "psutil",
-    "requests",
+    "curl_cffi",
     "pywin32;platform_system=='Windows'",
     "pyobjc;platform_system=='Darwin'"
 ]

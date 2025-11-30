@@ -1796,28 +1796,33 @@ class OutputResult:
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
         self.reorder_text = config.get_general('reorder_text')
-        self.line_separator = '' if config.get_general('join_lines') else ' '
-        self.paragraph_separator = '' if config.get_general('join_paragraphs') else ' '
+        self.line_separator = '' if config.get_general('join_lines') else config.get_general('line_separator').encode().decode('unicode_escape') 
+        self.paragraph_separator = '' if config.get_general('join_paragraphs') else config.get_general('paragraph_separator').encode().decode('unicode_escape')
         self.write_to = config.get_general('write_to')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
 
     def _post_process(self, text, strip_spaces):
-        lines = []
+        line_separator = '' if strip_spaces else self.line_separator
+        paragraphs = []
+
+        current_paragraph = []
         for line in text:
             if line == '\n':
-                lines.append(self.paragraph_separator)
+                if current_paragraph:
+                    paragraph = line_separator.join(current_paragraph)
+                    paragraphs.append(paragraph)
+                    current_paragraph = []
                 continue
             line = line.replace('…', '...')
             line = re.sub('[・.]{2,}', lambda x: (x.end() - x.start()) * '.', line)
             is_cj_text = self.filtering.cj_regex.search(line)
             if is_cj_text:
-                lines.append(jaconv.h2z(''.join(line.split()), ascii=True, digit=True))
+                current_paragraph.append(jaconv.h2z(''.join(line.split()), ascii=True, digit=True))
             else:
-                lines.append(line.strip())
-        line_separator = '' if strip_spaces else self.line_separator
-        text = line_separator.join(lines)
-        text = re.sub(r'\s+', ' ', text).strip()
+                current_paragraph.append(re.sub(r'\s+', ' ', line).strip())
+
+        text = self.paragraph_separator.join(paragraphs)
         return text
 
     def _extract_lines_from_result(self, result_data):

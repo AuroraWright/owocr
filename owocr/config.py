@@ -37,9 +37,9 @@ parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=Tru
 parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
                     help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. 0 to disable.')
 parser.add_argument('-cp', '--combo_pause', type=str, default=argparse.SUPPRESS,
-                    help='Combo to wait on for pausing the program. As an example: "<ctrl>+<shift>+p". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='Combo to wait on for pausing the program. As an example: <ctrl>+<shift>+p. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-cs', '--combo_engine_switch', type=str, default=argparse.SUPPRESS,
-                    help='Combo to wait on for switching the OCR engine. As an example: "<ctrl>+<shift>+a". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='Combo to wait on for switching the OCR engine. As an example: <ctrl>+<shift>+a. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.SUPPRESS,
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector), a set of coordinates (x,y,width,height), "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name (the first matching window title will be used).')
 parser.add_argument('-swa', '--screen_capture_window_area', type=str, default=argparse.SUPPRESS,
@@ -53,17 +53,21 @@ parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=float, d
 parser.add_argument('-sl', '--screen_capture_line_recovery', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='When reading with screen capture and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.')
 parser.add_argument('-sr', '--screen_capture_regex_filter', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, regex to filter unwanted text from the output. Example value: "▶|♥|・" to remove either of those characters.')
+                    help='When reading with screen capture, regex to filter unwanted text from the output. Example value: ▶|♥|・ to remove either of those characters.')
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: "<ctrl>+<shift>+s". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: <ctrl>+<shift>+s. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, combo to wait on for invoking the coordinate picker to change the screen/window area. Example value: "<ctrl>+<shift>+c". The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='When reading with screen capture, combo to wait on for invoking the coordinate picker to change the screen/window area. Example value: <ctrl>+<shift>+c. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
                     help='Two letter language code to use for some engines and for filtering screen capture OCR results. Ex. "ja" for Japanese, "zh" for Chinese, "ko" for Korean, "ar" for Arabic, "ru" for Russian, "el" for Greek, "he" for Hebrew, "th" for Thai. Any other value will use Latin Extended (for most European languages and English).')
 parser.add_argument('-j', '--join_lines', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Display lines in the text output without a space between them.')
+                    help='Display lines in the text output without spaces/separators between them.')
 parser.add_argument('-jp', '--join_paragraphs', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Display paragraphs in the text output without a space between them.')
+                    help='Display paragraphs in the text output without spaces/separators between them.')
+parser.add_argument('-ls', '--line_separator', type=str, default=argparse.SUPPRESS,
+                    help='Custom line separator to use. Supports Python escape characters like \\n for newlines.')
+parser.add_argument('-ps', '--paragraph_separator', type=str, default=argparse.SUPPRESS,
+                    help='Custom paragraph separator to use. Supports Python escape characters like \\n for newlines.')
 parser.add_argument('-rt', '--reorder_text', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Regroup and reorder text instead of using paragraphs/order provided by the OCR engine.')
 parser.add_argument('-f', '--furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -109,6 +113,9 @@ class Config:
         'screen_capture_line_recovery': True,
         'screen_capture_regex_filter': '',
         'join_lines': False,
+        'join_paragraphs': False,
+        'line_separator': ' ',
+        'paragraph_separator': ' ',
         'reorder_text': True,
         'furigana_filter': True,
         'screen_capture_combo': '',
@@ -136,6 +143,8 @@ class Config:
             return float(value)
         except ValueError:
             pass
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
         return value
 
     def __init__(self):
