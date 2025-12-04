@@ -688,11 +688,18 @@ class TextFiltering:
         if not all_lines:
             return ocr_result
 
+        if self.debug_filtering:
+            for p in ocr_result.paragraphs:
+                logger.opt(colors=True).debug("<red>Engine paragraph: '{}' writing_direction: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction)
+
         # Create new paragraphs
         new_paragraphs = self._create_paragraphs_from_lines(all_lines)
 
+        # Merge very close paragraphs
+        merged_paragraphs = self._merge_close_paragraphs(new_paragraphs)
+
         # Group paragraphs into rows
-        rows = self._group_paragraphs_into_rows(new_paragraphs)
+        rows = self._group_paragraphs_into_rows(merged_paragraphs)
 
         # Reorder paragraphs in each row
         reordered_rows = self._reorder_paragraphs_in_rows(rows)
@@ -717,11 +724,11 @@ class TextFiltering:
                 return
 
             if is_vertical:
-                get_start = lambda line: line['line_obj'].bounding_box.top
-                get_end = lambda line: line['line_obj'].bounding_box.bottom
+                get_start = lambda l: l['line_obj'].bounding_box.top
+                get_end = lambda l: l['line_obj'].bounding_box.bottom
             else:
-                get_start = lambda line: line['line_obj'].bounding_box.left
-                get_end = lambda line: line['line_obj'].bounding_box.right
+                get_start = lambda l: l['line_obj'].bounding_box.left
+                get_end = lambda l: l['line_obj'].bounding_box.right
 
             components = self._find_connected_components(
                 items=[lines[i] for i in indices],
@@ -734,7 +741,7 @@ class TextFiltering:
                 if len(component) > 1:
                     original_indices = [indices[i] for i in component]
                     paragraph_lines = [lines[i] for i in original_indices]
-                    new_paragraph = self._create_paragraph_from_lines(paragraph_lines, is_vertical)
+                    new_paragraph = self._create_paragraph_from_lines(paragraph_lines, is_vertical, False)
                     all_paragraphs.append(new_paragraph)
                     grouped.update(original_indices)
 
@@ -744,12 +751,12 @@ class TextFiltering:
         # Create paragraphs out of ungrouped lines
         ungrouped_lines = [line for i, line in enumerate(lines) if i not in grouped]
         for line in ungrouped_lines:
-            new_paragraph = self._create_paragraph_from_lines([line], None)
+            new_paragraph = self._create_paragraph_from_lines([line], None, False)
             all_paragraphs.append(new_paragraph)
 
         return all_paragraphs
 
-    def _create_paragraph_from_lines(self, lines, is_vertical):
+    def _create_paragraph_from_lines(self, lines, is_vertical, merging_step):
         if len(lines) > 1:
             if is_vertical:
                 lines = sorted(lines, key=lambda x: x['line_obj'].bounding_box.right, reverse=True)
@@ -758,15 +765,15 @@ class TextFiltering:
 
             lines = self._merge_overlapping_lines(lines, is_vertical)
 
-            if self.furigana_filter:
+            if not merging_step and self.furigana_filter:
                 lines = self._furigana_filter(lines, is_vertical)
 
             line_objs = [l['line_obj'] for l in lines]
 
-            left = min(line.bounding_box.left for line in line_objs)
-            right = max(line.bounding_box.right for line in line_objs)
-            top = min(line.bounding_box.top for line in line_objs)
-            bottom = max(line.bounding_box.bottom for line in line_objs)
+            left = min(l.bounding_box.left for l in line_objs)
+            right = max(l.bounding_box.right for l in line_objs)
+            top = min(l.bounding_box.top for l in line_objs)
+            bottom = max(l.bounding_box.bottom for l in line_objs)
 
             new_bbox = BoundingBox(
                 center_x=(left + right) / 2,
@@ -787,7 +794,30 @@ class TextFiltering:
             writing_direction=writing_direction
         )
 
+        if not merging_step:
+            character_size = self._calculate_character_size(lines, is_vertical)
+
+            return {
+                'paragraph_obj': paragraph,
+                'character_size': character_size
+            }
+
         return paragraph
+
+    def _calculate_character_size(self, lines, is_vertical):
+        if is_vertical:
+            largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.width)
+            line_dimension = largest_line['line_obj'].bounding_box.height
+        else:
+            largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.height)
+            line_dimension = largest_line['line_obj'].bounding_box.width
+
+        char_count = len(self.get_line_text(largest_line['line_obj']))
+
+        if char_count == 0:
+            return 0.0
+
+        return line_dimension / char_count
 
     def _should_group_in_same_paragraph(self, line1, line2, is_vertical):
         bbox1 = line1['line_obj'].bounding_box
@@ -985,6 +1015,80 @@ class TextFiltering:
             logger.opt(colors=True).debug("<yellow>Skipping furigana line: '{}' next to line: '{}'</>", current_line_text, next_line_text)
 
         return filtered_lines
+
+    def _merge_close_paragraphs(self, paragraphs):
+        if len(paragraphs) < 2:
+            return [p['paragraph_obj'] for p in paragraphs]
+
+        merged_paragraphs = []
+
+        def _merge_paragraphs(is_vertical):
+            indices = [i for i, paragraph in enumerate(paragraphs) if ((paragraph['paragraph_obj'].writing_direction == 'TOP_TO_BOTTOM') == is_vertical)]
+
+            if len(indices) == 0:
+                return
+            if len(indices) == 1:
+                merged_paragraphs.append(paragraphs[indices[0]]['paragraph_obj'])
+                return
+
+            if is_vertical:
+                get_start = lambda p: p['paragraph_obj'].bounding_box.left
+                get_end = lambda p: p['paragraph_obj'].bounding_box.right
+            else:
+                get_start = lambda p: p['paragraph_obj'].bounding_box.top
+                get_end = lambda p: p['paragraph_obj'].bounding_box.bottom
+
+            components = self._find_connected_components(
+                items=[paragraphs[i] for i in indices],
+                should_connect=lambda p1, p2: self._should_merge_close_paragraphs(p1, p2, is_vertical),
+                get_start_coord=get_start,
+                get_end_coord=get_end
+            )
+
+            for component in components:
+                if len(component) == 1:
+                    merged_paragraphs.append(paragraphs[component[0]]['paragraph_obj'])
+                else:
+                    component_paragraphs = [paragraphs[i] for i in component]
+                    if self.debug_filtering:
+                        logger.opt(colors=True).debug("<green>Merged paragraphs vertical: '{}'</>", is_vertical)
+                        for p in component_paragraphs:
+                            logger.opt(colors=True).debug("<green>    Paragraph: '{}'</>", [self.get_line_text(line) for line in p['paragraph_obj'].lines])
+                    merged_paragraph = self._merge_multiple_paragraphs(component_paragraphs, is_vertical)
+                    merged_paragraphs.append(merged_paragraph)
+
+        _merge_paragraphs(True)
+        _merge_paragraphs(False)
+
+        return merged_paragraphs
+
+    def _should_merge_close_paragraphs(self, paragraph1, paragraph2, is_vertical):
+        bbox1 = paragraph1['paragraph_obj'].bounding_box
+        bbox2 = paragraph2['paragraph_obj'].bounding_box
+
+        character_size = max(paragraph1['character_size'], paragraph2['character_size'])
+
+        if is_vertical:
+            vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
+            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+
+            return (vertical_distance <= 3 * character_size and horizontal_overlap > 0.4)
+        else:
+            horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
+            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
+
+            return (horizontal_distance <= 3 * character_size and vertical_overlap > 0.4)
+
+    def _merge_multiple_paragraphs(self, paragraphs, is_vertical):
+        merged_lines = []
+        for p in paragraphs:
+            for line in p['paragraph_obj'].lines:
+                merged_lines.append({
+                    'line_obj': line,
+                    'is_vertical': is_vertical
+                })
+
+        return self._create_paragraph_from_lines(merged_lines, is_vertical, True)
 
     def _group_paragraphs_into_rows(self, paragraphs):
         if len(paragraphs) < 2:
