@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.20.1"
+version = "1.20.2"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
