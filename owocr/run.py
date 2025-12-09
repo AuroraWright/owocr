@@ -1926,6 +1926,10 @@ class OutputResult:
             else:
                 current_paragraph.append(re.sub(r'\s+', ' ', line).strip())
 
+        if current_paragraph:
+            paragraph = line_separator.join(current_paragraph)
+            paragraphs.append(paragraph)
+
         text = self.paragraph_separator.join(paragraphs)
         return text
 
