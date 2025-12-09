@@ -853,6 +853,10 @@ class GoogleLens:
                         lines.append(line)
 
                     p_bbox = p.get('geometry', {}).get('bounding_box', {})
+                    writing_direction=p.get('writing_direction')
+                    if writing_direction:
+                        writing_direction = writing_direction.replace('WRITING_DIRECTION_', '')
+
                     paragraph = Paragraph(
                         bounding_box=BoundingBox(
                             center_x=p_bbox.get('center_x'),
@@ -862,7 +866,7 @@ class GoogleLens:
                             rotation_z=p_bbox.get('rotation_z')
                         ),
                         lines=lines,
-                        writing_direction=p.get('writing_direction')
+                        writing_direction=writing_direction
                     )
                     paragraphs.append(paragraph)
 
