@@ -79,10 +79,10 @@ except ImportError:
 
 try:
     from google.protobuf.json_format import MessageToDict
-    from .py_lens.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
-    from .py_lens.lens_overlay_platform_pb2 import PLATFORM_WEB
-    from .py_lens.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
-    from .py_lens.lens_overlay_filters_pb2 import AUTO_FILTER
+    from .lens_protos.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
+    from .lens_protos.lens_overlay_platform_pb2 import PLATFORM_WEB
+    from .lens_protos.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
+    from .lens_protos.lens_overlay_filters_pb2 import AUTO_FILTER
     import random
 except ImportError:
     pass
@@ -853,7 +853,7 @@ class GoogleLens:
                         lines.append(line)
 
                     p_bbox = p.get('geometry', {}).get('bounding_box', {})
-                    writing_direction=p.get('writing_direction')
+                    writing_direction = p.get('writing_direction')
                     if writing_direction:
                         writing_direction = writing_direction.replace('WRITING_DIRECTION_', '')
 
