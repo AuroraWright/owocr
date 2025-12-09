@@ -1,1 +1,0 @@
-from owocr.ocr import *

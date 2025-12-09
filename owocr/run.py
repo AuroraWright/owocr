@@ -12,6 +12,8 @@ import os
 import json
 import collections
 from dataclasses import asdict
+import importlib
+import urllib.request
 
 import numpy as np
 import pyperclipfix
@@ -169,7 +171,7 @@ class ClipboardThread(threading.Thread):
                         old_img = img
                         try:
                             img = ImageGrab.grabclipboard()
-                        except Exception:
+                        except:
                             pass
                         else:
                             if (process_clipboard and isinstance(img, Image.Image) and \
@@ -2153,10 +2155,28 @@ def on_coordinate_selector_combo():
     coordinate_selector_event.set()
 
 
+def get_current_version():  
+    try:
+        return importlib.metadata.version(__package__)
+    except:
+        return 'N/A'
+
+
+def get_latest_version():    
+    try:
+        with urllib.request.urlopen(f'https://pypi.org/pypi/{__package__}/json', timeout=5) as response:
+            data = json.load(response)
+            return data['info']['version']
+    except:
+        return 'N/A'
+
+
 def run():
     logger_level = 'DEBUG' if config.get_general('uwu') else 'INFO'
     logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format'), 'level': logger_level}])
 
+    logger.info(f'Starting owocr version {get_current_version()}')
+    logger.info(f'Latest available version: {get_latest_version()}')
     if config.has_config:
         logger.info('Parsed config file')
     else:
