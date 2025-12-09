@@ -78,8 +78,11 @@ except ImportError:
     pass
 
 try:
-    import betterproto
-    from .lens_betterproto import *
+    from google.protobuf.json_format import MessageToDict
+    from .py_lens.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
+    from .py_lens.lens_overlay_platform_pb2 import PLATFORM_WEB
+    from .py_lens.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
+    from .py_lens.lens_overlay_filters_pb2 import AUTO_FILTER
     import random
 except ImportError:
     pass
@@ -806,8 +809,8 @@ class GoogleLens:
     )
 
     def __init__(self):
-        if 'betterproto' not in sys.modules:
-            logger.warning('betterproto not available, Google Lens will not work!')
+        if 'google.protobuf' not in sys.modules:
+            logger.warning('protobuf not available, Google Lens will not work!')
         else:
             self.available = True
             logger.info('Google Lens ready')
@@ -880,10 +883,10 @@ class GoogleLens:
         request.objects_request.request_context.request_id.sequence_id = 0
         request.objects_request.request_context.request_id.image_sequence_id = 0
         request.objects_request.request_context.request_id.analytics_id = random.randbytes(16)
-        request.objects_request.request_context.request_id.routing_info = LensOverlayRoutingInfo()
+        request.objects_request.request_context.request_id.routing_info.Clear()
 
-        request.objects_request.request_context.client_context.platform = Platform.WEB
-        request.objects_request.request_context.client_context.surface = Surface.CHROMIUM
+        request.objects_request.request_context.client_context.platform = PLATFORM_WEB
+        request.objects_request.request_context.client_context.surface = SURFACE_CHROMIUM
 
         request.objects_request.request_context.client_context.locale_context.language = 'ja'
         request.objects_request.request_context.client_context.locale_context.region = 'Asia/Tokyo'
@@ -891,9 +894,8 @@ class GoogleLens:
 
         request.objects_request.request_context.client_context.app_id = '' # not set by chromium
 
-        filter = AppliedFilter()
-        filter.filter_type = LensOverlayFilterType.AUTO_FILTER
-        request.objects_request.request_context.client_context.client_filters.filter.append(filter)
+        filter = request.objects_request.request_context.client_context.client_filters.filter.add()
+        filter.filter_type = AUTO_FILTER
 
         img_bytes, img_width, img_height = self._preprocess(img)
         request.objects_request.image_data.payload.image_bytes = img_bytes
@@ -921,8 +923,9 @@ class GoogleLens:
         if res.status_code != 200:
             return (False, 'Unknown error!')
 
-        response_proto = LensOverlayServerResponse().FromString(res.content)
-        response_dict = response_proto.to_dict(betterproto.Casing.SNAKE)
+        response_proto = LensOverlayServerResponse()
+        response_proto.ParseFromString(res.content)
+        response_dict = MessageToDict(response_proto, preserving_proto_field_name=True)
 
         ocr_result = self._to_generic_result(response_dict, img.width, img.height)
         x = (True, ocr_result)
