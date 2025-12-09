@@ -22,8 +22,8 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_math_solver_query_pb2 as lens__overlay__math__solver__query__pb2
-import owocr.py_lens.lens_overlay_message_set_pb2 as lens__overlay__message__set__pb2
+from . import lens_overlay_math_solver_query_pb2 as lens__overlay__math__solver__query__pb2
+from . import lens_overlay_message_set_pb2 as lens__overlay__message__set__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%lens_overlay_stickiness_signals.proto\x12\x04lens\x1a$lens_overlay_math_solver_query.proto\x1a\x1elens_overlay_message_set.proto\"\xfb\x01\n\x11StickinessSignals\x12\x37\n\x0cid_namespace\x18\x01 \x01(\x0e\x32!.lens.StickinessSignals.Namespace\x12(\n\x0einterpretation\x18\x1c \x01(\x0b\x32\x10.lens.MessageSet\x12@\n\x19\x65\x64ucation_input_extension\x18y \x01(\x0b\x32\x1d.lens.EducationInputExtension\"A\n\tNamespace\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x12\n\x0eTRANSLATE_LITE\x10\x38\x12\x13\n\x0f\x45\x44UCATION_INPUT\x10O\"K\n\x17\x45\x64ucationInputExtension\x12\x30\n\x11math_solver_query\x18\x01 \x01(\x0b\x32\x15.lens.MathSolverQueryB\x02H\x03')

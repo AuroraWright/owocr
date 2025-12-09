@@ -22,9 +22,9 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_request_id_pb2 as lens__overlay__request__id__pb2
-import owocr.py_lens.lens_overlay_visual_input_type_pb2 as lens__overlay__visual__input__type__pb2
-import owocr.py_lens.lens_overlay_visual_search_interaction_data_pb2 as lens__overlay__visual__search__interaction__data__pb2
+from . import lens_overlay_request_id_pb2 as lens__overlay__request__id__pb2
+from . import lens_overlay_visual_input_type_pb2 as lens__overlay__visual__input__type__pb2
+from . import lens_overlay_visual_search_interaction_data_pb2 as lens__overlay__visual__search__interaction__data__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x61im_query.proto\x12\x04lens\x1a\x1dlens_overlay_request_id.proto\x1a$lens_overlay_visual_input_type.proto\x1a\x31lens_overlay_visual_search_interaction_data.proto\"\xfe\x01\n\x12LensImageQueryData\x12\x19\n\x11search_session_id\x18\x01 \x01(\t\x12.\n\nrequest_id\x18\x02 \x01(\x0b\x32\x1a.lens.LensOverlayRequestId\x12;\n\x11visual_input_type\x18\x04 \x01(\x0e\x32 .lens.LensOverlayVisualInputType\x12T\n\x1evisual_search_interaction_data\x18\x07 \x01(\x0b\x32,.lens.LensOverlayVisualSearchInteractionDataJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06\"\x82\x02\n\x0cQueryPayload\x12\x12\n\nquery_text\x18\x01 \x01(\t\x12=\n\x11query_text_source\x18\x03 \x01(\x0e\x32\".lens.QueryPayload.QueryTextSource\x12\x37\n\x15lens_image_query_data\x18\x02 \x03(\x0b\x32\x18.lens.LensImageQueryData\"Z\n\x0fQueryTextSource\x12!\n\x1dQUERY_TEXT_SOURCE_UNSPECIFIED\x10\x00\x12$\n QUERY_TEXT_SOURCE_KEYBOARD_INPUT\x10\x01J\x04\x08\x05\x10\x06J\x04\x08\x07\x10\x08\x42\x02H\x03\x62\x06proto3')

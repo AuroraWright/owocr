@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!lens_overlay_overlay_object.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\"\xac\x03\n\rOverlayObject\x12\n\n\x02id\x18\x01 \x01(\t\x12 \n\x08geometry\x18\x02 \x01(\x0b\x32\x0e.lens.Geometry\x12\x41\n\x12rendering_metadata\x18\x08 \x01(\x0b\x32%.lens.OverlayObject.RenderingMetadata\x12I\n\x16interaction_properties\x18\x04 \x01(\x0b\x32).lens.OverlayObject.InteractionProperties\x12\x14\n\x0cis_fulfilled\x18\t \x01(\x08\x1a\x80\x01\n\x11RenderingMetadata\x12\x45\n\x0brender_type\x18\x01 \x01(\x0e\x32\x30.lens.OverlayObject.RenderingMetadata.RenderType\"$\n\nRenderType\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x12\t\n\x05GLEAM\x10\x01\x1a.\n\x15InteractionProperties\x12\x15\n\rselect_on_tap\x18\x01 \x01(\x08J\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08\x42\x02H\x03\x62\x06proto3')

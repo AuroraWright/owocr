@@ -22,9 +22,9 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
-import owocr.py_lens.lens_overlay_interaction_request_metadata_pb2 as lens__overlay__interaction__request__metadata__pb2
-import owocr.py_lens.lens_overlay_visual_search_interaction_log_data_pb2 as lens__overlay__visual__search__interaction__log__data__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_interaction_request_metadata_pb2 as lens__overlay__interaction__request__metadata__pb2
+from . import lens_overlay_visual_search_interaction_log_data_pb2 as lens__overlay__visual__search__interaction__log__data__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n1lens_overlay_visual_search_interaction_data.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\x1a/lens_overlay_interaction_request_metadata.proto\x1a\x35lens_overlay_visual_search_interaction_log_data.proto\"\x89\x03\n&LensOverlayVisualSearchInteractionData\x12J\n\x10interaction_type\x18\x01 \x01(\x0e\x32\x30.lens.LensOverlayInteractionRequestMetadata.Type\x12%\n\x0bzoomed_crop\x18\x07 \x01(\x0b\x32\x10.lens.ZoomedCrop\x12\x11\n\tobject_id\x18\x03 \x01(\t\x12L\n\x0btext_select\x18\x04 \x01(\x0b\x32\x37.lens.LensOverlayVisualSearchInteractionData.TextSelect\x12\x41\n\x08log_data\x18\x05 \x01(\x0b\x32/.lens.LensOverlayVisualSearchInteractionLogData\x1a<\n\nTextSelect\x12\x16\n\x0eselected_texts\x18\x05 \x01(\tJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03J\x04\x08\x03\x10\x04J\x04\x08\x04\x10\x05J\x04\x08\x02\x10\x03J\x04\x08\x06\x10\x07\x42\x02H\x03\x62\x06proto3')

@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
+from . import lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dlens_overlay_request_id.proto\x12\x04lens\x1a\x1flens_overlay_routing_info.proto\"\x9c\x03\n\x14LensOverlayRequestId\x12\x0c\n\x04uuid\x18\x01 \x01(\x04\x12\x13\n\x0bsequence_id\x18\x02 \x01(\x05\x12\x19\n\x11image_sequence_id\x18\x03 \x01(\x05\x12\x14\n\x0c\x61nalytics_id\x18\x04 \x01(\x0c\x12\x17\n\x0flong_context_id\x18\t \x01(\x05\x12\x32\n\x0crouting_info\x18\x06 \x01(\x0b\x32\x1c.lens.LensOverlayRoutingInfo\x12\x11\n\ttime_usec\x18\x07 \x01(\x04\x12\x38\n\nmedia_type\x18\n \x01(\x0e\x32$.lens.LensOverlayRequestId.MediaType\"\x95\x01\n\tMediaType\x12\x1c\n\x18MEDIA_TYPE_DEFAULT_IMAGE\x10\x00\x12\x12\n\x0eMEDIA_TYPE_PDF\x10\x01\x12\x16\n\x12MEDIA_TYPE_WEBPAGE\x10\x02\x12\x1c\n\x18MEDIA_TYPE_PDF_AND_IMAGE\x10\x03\x12 \n\x1cMEDIA_TYPE_WEBPAGE_AND_IMAGE\x10\x04\x42\x02H\x03\x62\x06proto3')

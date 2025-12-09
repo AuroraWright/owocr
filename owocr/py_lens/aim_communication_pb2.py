@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import aim_query_pb2 as aim__query__pb2
+from . import aim_query_pb2 as aim__query__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x61im_communication.proto\x12\x04lens\x1a\x0f\x61im_query.proto\">\n\rHandshakePing\x12-\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapability\"2\n\x0bSubmitQuery\x12#\n\x07payload\x18\x01 \x01(\x0b\x32\x12.lens.QueryPayload\"B\n\x11HandshakeResponse\x12-\n\x0c\x63\x61pabilities\x18\x01 \x03(\x0e\x32\x17.lens.FeatureCapability\"\x7f\n\x12\x43lientToAimMessage\x12-\n\x0ehandshake_ping\x18\x01 \x01(\x0b\x32\x13.lens.HandshakePingH\x00\x12)\n\x0csubmit_query\x18\x02 \x01(\x0b\x32\x11.lens.SubmitQueryH\x00\x42\x0f\n\revent_message\"\\\n\x12\x41imToClientMessage\x12\x35\n\x12handshake_response\x18\x01 \x01(\x0b\x32\x17.lens.HandshakeResponseH\x00\x42\x0f\n\revent_message* \n\x11\x46\x65\x61tureCapability\x12\x0b\n\x07\x44\x45\x46\x41ULT\x10\x00\x42\x02H\x03\x62\x06proto3')

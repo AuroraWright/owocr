@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_phase_latencies_metadata_pb2 as lens__overlay__phase__latencies__metadata__pb2
+from . import lens_overlay_phase_latencies_metadata_pb2 as lens__overlay__phase__latencies__metadata__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1elens_overlay_client_logs.proto\x12\x04lens\x1a+lens_overlay_phase_latencies_metadata.proto\"\xa4\x04\n\x15LensOverlayClientLogs\x12I\n\x18phase_latencies_metadata\x18\x01 \x01(\x0b\x32\'.lens.LensOverlayPhaseLatenciesMetadata\x12S\n\x18lens_overlay_entry_point\x18\x02 \x01(\x0e\x32\x31.lens.LensOverlayClientLogs.LensOverlayEntryPoint\x12\x11\n\tpaella_id\x18\x03 \x01(\x04\x12#\n\x1bmetrics_collection_disabled\x18\x05 \x01(\x08\"\xac\x02\n\x15LensOverlayEntryPoint\x12\x17\n\x13UNKNOWN_ENTRY_POINT\x10\x00\x12\x0c\n\x08\x41PP_MENU\x10\x01\x12\x15\n\x11PAGE_CONTEXT_MENU\x10\x02\x12\x16\n\x12IMAGE_CONTEXT_MENU\x10\x03\x12\x12\n\x0eOMNIBOX_BUTTON\x10\x04\x12\x12\n\x0eTOOLBAR_BUTTON\x10\x05\x12\x10\n\x0c\x46IND_IN_PAGE\x10\x06\x12\x17\n\x13OMNIBOX_PAGE_ACTION\x10\x07\x12!\n\x1dOMNIBOX_CONTEXTUAL_SUGGESTION\x10\x08\x12\x18\n\x14HOMEWORK_ACTION_CHIP\x10\t\x12\x15\n\x11TEXT_CONTEXT_MENU\x10\n\x12\x16\n\x12VIDEO_CONTEXT_MENU\x10\x0bJ\x04\x08\x04\x10\x05\x42\x02H\x03\x62\x06proto3')

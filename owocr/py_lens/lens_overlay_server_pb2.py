@@ -22,12 +22,12 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_client_context_pb2 as lens__overlay__client__context__pb2
-import owocr.py_lens.lens_overlay_client_logs_pb2 as lens__overlay__client__logs__pb2
-import owocr.py_lens.lens_overlay_platform_pb2 as lens__overlay__platform__pb2
-import owocr.py_lens.lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
-import owocr.py_lens.lens_overlay_service_deps_pb2 as lens__overlay__service__deps__pb2
-import owocr.py_lens.lens_overlay_surface_pb2 as lens__overlay__surface__pb2
+from . import lens_overlay_client_context_pb2 as lens__overlay__client__context__pb2
+from . import lens_overlay_client_logs_pb2 as lens__overlay__client__logs__pb2
+from . import lens_overlay_platform_pb2 as lens__overlay__platform__pb2
+from . import lens_overlay_routing_info_pb2 as lens__overlay__routing__info__pb2
+from . import lens_overlay_service_deps_pb2 as lens__overlay__service__deps__pb2
+from . import lens_overlay_surface_pb2 as lens__overlay__surface__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19lens_overlay_server.proto\x12\x04lens\x1a!lens_overlay_client_context.proto\x1a\x1elens_overlay_client_logs.proto\x1a\x1blens_overlay_platform.proto\x1a\x1flens_overlay_routing_info.proto\x1a\x1flens_overlay_service_deps.proto\x1a\x1alens_overlay_surface.proto\"\xbc\x01\n#LensOverlayServerClusterInfoRequest\x12 \n\x18\x65nable_search_session_id\x18\x01 \x01(\x08\x12\x1e\n\x07surface\x18\x02 \x01(\x0e\x32\r.lens.Surface\x12 \n\x08platform\x18\x03 \x01(\x0e\x32\x0e.lens.Platform\x12\x31\n\x11rendering_context\x18\x04 \x01(\x0b\x32\x16.lens.RenderingContext\"\x90\x01\n$LensOverlayServerClusterInfoResponse\x12\x19\n\x11server_session_id\x18\x01 \x01(\t\x12\x19\n\x11search_session_id\x18\x02 \x01(\t\x12\x32\n\x0crouting_info\x18\x03 \x01(\x0b\x32\x1c.lens.LensOverlayRoutingInfo\"\xda\x01\n\x16LensOverlayServerError\x12:\n\nerror_type\x18\x01 \x01(\x0e\x32&.lens.LensOverlayServerError.ErrorType\x12<\n\x17missing_chunks_metadata\x18\x02 \x01(\x0b\x32\x1b.lens.MissingChunksMetadata\"F\n\tErrorType\x12\x10\n\x0cUNKNOWN_TYPE\x10\x00\x12\x13\n\x0fMISSING_REQUEST\x10\x01\x12\x12\n\x0eMISSING_CHUNKS\x10\x02\"N\n\x15MissingChunksMetadata\x12\x1a\n\x12has_chunk_metadata\x18\x01 \x01(\x08\x12\x19\n\x11missing_chunk_ids\x18\x02 \x03(\x03\"\xc8\x01\n\x18LensOverlayServerRequest\x12\x38\n\x0fobjects_request\x18\x01 \x01(\x0b\x32\x1f.lens.LensOverlayObjectsRequest\x12@\n\x13interaction_request\x18\x02 \x01(\x0b\x32#.lens.LensOverlayInteractionRequest\x12\x30\n\x0b\x63lient_logs\x18\x03 \x01(\x0b\x32\x1b.lens.LensOverlayClientLogs\"\xc8\x01\n\x19LensOverlayServerResponse\x12+\n\x05\x65rror\x18\x01 \x01(\x0b\x32\x1c.lens.LensOverlayServerError\x12:\n\x10objects_response\x18\x02 \x01(\x0b\x32 .lens.LensOverlayObjectsResponse\x12\x42\n\x14interaction_response\x18\x03 \x01(\x0b\x32$.lens.LensOverlayInteractionResponseB\x02H\x03\x62\x06proto3')

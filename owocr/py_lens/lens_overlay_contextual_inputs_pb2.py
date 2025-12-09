@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_request_id_pb2 as lens__overlay__request__id__pb2
+from . import lens_overlay_request_id_pb2 as lens__overlay__request__id__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$lens_overlay_contextual_inputs.proto\x12\x04lens\x1a\x1dlens_overlay_request_id.proto\"\xb9\x01\n\x1bLensOverlayContextualInputs\x12L\n\x06inputs\x18\x01 \x03(\x0b\x32<.lens.LensOverlayContextualInputs.LensOverlayContextualInput\x1aL\n\x1aLensOverlayContextualInput\x12.\n\nrequest_id\x18\x01 \x01(\x0b\x32\x1a.lens.LensOverlayRequestIdB\x02H\x03\x62\x06proto3')

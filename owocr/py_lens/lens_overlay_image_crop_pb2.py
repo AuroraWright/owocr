@@ -22,8 +22,8 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
-import owocr.py_lens.lens_overlay_payload_pb2 as lens__overlay__payload__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_payload_pb2 as lens__overlay__payload__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dlens_overlay_image_crop.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\x1a\x1alens_overlay_payload.proto\"k\n\tImageCrop\x12\x0f\n\x07\x63rop_id\x18\x01 \x01(\t\x12 \n\x05image\x18\x02 \x01(\x0b\x32\x11.lens.ClientImage\x12%\n\x0bzoomed_crop\x18\x03 \x01(\x0b\x32\x10.lens.ZoomedCropJ\x04\x08\x04\x10\x05\x42\x02H\x03\x62\x06proto3')

@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dlens_overlay_image_data.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\"\x90\x01\n\tImageData\x12#\n\x07payload\x18\x01 \x01(\x0b\x32\x12.lens.ImagePayload\x12+\n\x0eimage_metadata\x18\x03 \x01(\x0b\x32\x13.lens.ImageMetadata\x12+\n\x13significant_regions\x18\x04 \x03(\x0b\x32\x0e.lens.GeometryJ\x04\x08\x02\x10\x03\")\n\x0cImagePayload\x12\x13\n\x0bimage_bytes\x18\x01 \x01(\x0cJ\x04\x08\x02\x10\x03\"4\n\rImageMetadata\x12\r\n\x05width\x18\x01 \x01(\x05\x12\x0e\n\x06height\x18\x02 \x01(\x05J\x04\x08\x06\x10\x07\x42\x02H\x03\x62\x06proto3')

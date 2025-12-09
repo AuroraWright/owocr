@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_knowledge_intent_query_pb2 as lens__overlay__knowledge__intent__query__pb2
+from . import lens_overlay_knowledge_intent_query_pb2 as lens__overlay__knowledge__intent__query__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\"lens_overlay_knowledge_query.proto\x12\x04lens\x1a)lens_overlay_knowledge_intent_query.proto\"4\n\x05Query\x12+\n\x0cintent_query\x18\xc2\x95\xe9\x1a \x01(\x0b\x32\x12.lens.FunctionCallB\x02H\x03\x62\x06proto3')

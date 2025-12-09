@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_translate_stickiness_signals_pb2 as lens__overlay__translate__stickiness__signals__pb2
+from . import lens_overlay_translate_stickiness_signals_pb2 as lens__overlay__translate__stickiness__signals__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n)lens_overlay_knowledge_intent_query.proto\x12\x04lens\x1a/lens_overlay_translate_stickiness_signals.proto\"j\n\x0c\x46unctionCall\x12\x0c\n\x04name\x18\x01 \x01(\t\x12 \n\x08\x61rgument\x18\x02 \x03(\x0b\x32\x0e.lens.Argument\x12*\n\x07signals\x18\x04 \x01(\x0b\x32\x19.lens.FunctionCallSignals\"a\n\x13\x46unctionCallSignals\x12J\n\x1ctranslate_stickiness_signals\x18\xe6\x81\xbd\x94\x01 \x01(\x0b\x32 .lens.TranslateStickinessSignals\"<\n\x08\x41rgument\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\"\n\x05value\x18\x02 \x01(\x0b\x32\x13.lens.ArgumentValue\"C\n\rArgumentValue\x12)\n\x0csimple_value\x18\x03 \x01(\x0b\x32\x11.lens.SimpleValueH\x00\x42\x07\n\x05value\".\n\x0bSimpleValue\x12\x16\n\x0cstring_value\x18\x01 \x01(\tH\x00\x42\x07\n\x05valueB\x02H\x03\x62\x06proto3')

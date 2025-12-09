@@ -22,8 +22,8 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
-import owocr.py_lens.lens_overlay_text_query_pb2 as lens__overlay__text__query__pb2
+from . import lens_overlay_geometry_pb2 as lens__overlay__geometry__pb2
+from . import lens_overlay_text_query_pb2 as lens__overlay__text__query__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n/lens_overlay_interaction_request_metadata.proto\x12\x04lens\x1a\x1blens_overlay_geometry.proto\x1a\x1dlens_overlay_text_query.proto\"\xb9\x07\n%LensOverlayInteractionRequestMetadata\x12>\n\x04type\x18\x01 \x01(\x0e\x32\x30.lens.LensOverlayInteractionRequestMetadata.Type\x12Y\n\x12selection_metadata\x18\x02 \x01(\x0b\x32=.lens.LensOverlayInteractionRequestMetadata.SelectionMetadata\x12Q\n\x0equery_metadata\x18\x04 \x01(\x0b\x32\x39.lens.LensOverlayInteractionRequestMetadata.QueryMetadata\x1a\xb6\x03\n\x11SelectionMetadata\x12T\n\x05point\x18\x01 \x01(\x0b\x32\x43.lens.LensOverlayInteractionRequestMetadata.SelectionMetadata.PointH\x00\x12V\n\x06region\x18\x02 \x01(\x0b\x32\x44.lens.LensOverlayInteractionRequestMetadata.SelectionMetadata.RegionH\x00\x12V\n\x06object\x18\x03 \x01(\x0b\x32\x44.lens.LensOverlayInteractionRequestMetadata.SelectionMetadata.ObjectH\x00\x1a\x1d\n\x05Point\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\x1a\x30\n\x06Region\x12&\n\x06region\x18\x01 \x01(\x0b\x32\x16.lens.CenterRotatedBox\x1a=\n\x06Object\x12\x11\n\tobject_id\x18\x01 \x01(\t\x12 \n\x08geometry\x18\x02 \x01(\x0b\x32\x0e.lens.GeometryB\x0b\n\tselection\x1a:\n\rQueryMetadata\x12#\n\ntext_query\x18\x02 \x01(\x0b\x32\x0f.lens.TextQueryJ\x04\x08\x01\x10\x02\"\xa6\x01\n\x04Type\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x07\n\x03TAP\x10\x01\x12\n\n\x06REGION\x10\x02\x12\x12\n\x0eTEXT_SELECTION\x10\x03\x12\x11\n\rREGION_SEARCH\x10\x04\x12\x16\n\x12OBJECT_FULFILLMENT\x10\x05\x12\x1b\n\x17\x43ONTEXTUAL_SEARCH_QUERY\x10\t\x12\r\n\tPDF_QUERY\x10\n\x12\x11\n\rWEBPAGE_QUERY\x10\x0bJ\x04\x08\x03\x10\x04\x42\x02H\x03\x62\x06proto3')

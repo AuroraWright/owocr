@@ -22,9 +22,9 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_filters_pb2 as lens__overlay__filters__pb2
-import owocr.py_lens.lens_overlay_platform_pb2 as lens__overlay__platform__pb2
-import owocr.py_lens.lens_overlay_surface_pb2 as lens__overlay__surface__pb2
+from . import lens_overlay_filters_pb2 as lens__overlay__filters__pb2
+from . import lens_overlay_platform_pb2 as lens__overlay__platform__pb2
+from . import lens_overlay_surface_pb2 as lens__overlay__surface__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!lens_overlay_client_context.proto\x12\x04lens\x1a\x1alens_overlay_filters.proto\x1a\x1blens_overlay_platform.proto\x1a\x1alens_overlay_surface.proto\"\x90\x03\n\x18LensOverlayClientContext\x12 \n\x08platform\x18\x01 \x01(\x0e\x32\x0e.lens.Platform\x12\x1e\n\x07surface\x18\x02 \x01(\x0e\x32\r.lens.Surface\x12+\n\x0elocale_context\x18\x04 \x01(\x0b\x32\x13.lens.LocaleContext\x12\x0e\n\x06\x61pp_id\x18\x06 \x01(\t\x12,\n\x0e\x63lient_filters\x18\x11 \x01(\x0b\x32\x14.lens.AppliedFilters\x12\x31\n\x11rendering_context\x18\x14 \x01(\x0b\x32\x16.lens.RenderingContext\x12\x34\n\x13\x63lient_logging_data\x18\x17 \x01(\x0b\x32\x17.lens.ClientLoggingDataJ\x04\x08\x03\x10\x04J\x04\x08\x05\x10\x06J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\t\x10\nJ\x04\x08\n\x10\x0bJ\x04\x08\x0b\x10\x0cJ\x04\x08\x0c\x10\rJ\x04\x08\r\x10\x0eJ\x04\x08\x0e\x10\x0fJ\x04\x08\x0f\x10\x10J\x04\x08\x10\x10\x11J\x04\x08\x12\x10\x13J\x04\x08\x13\x10\x14J\x04\x08\x15\x10\x16J\x04\x08\x16\x10\x17\"D\n\rLocaleContext\x12\x10\n\x08language\x18\x01 \x01(\t\x12\x0e\n\x06region\x18\x02 \x01(\t\x12\x11\n\ttime_zone\x18\x03 \x01(\t\"W\n\x10RenderingContext\x12=\n\x15rendering_environment\x18\x02 \x01(\x0e\x32\x1e.lens.LensRenderingEnvironmentJ\x04\x08\x01\x10\x02\"0\n\x11\x43lientLoggingData\x12\x1b\n\x13is_history_eligible\x18\x01 \x01(\x08*Y\n\x18LensRenderingEnvironment\x12\x1d\n\x19RENDERING_ENV_UNSPECIFIED\x10\x00\x12\x1e\n\x1aRENDERING_ENV_LENS_OVERLAY\x10\x0e\x42\x02H\x03\x62\x06proto3')

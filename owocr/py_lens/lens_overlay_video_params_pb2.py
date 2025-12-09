@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import owocr.py_lens.lens_overlay_video_context_input_params_pb2 as lens__overlay__video__context__input__params__pb2
+from . import lens_overlay_video_context_input_params_pb2 as lens__overlay__video__context__input__params__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1flens_overlay_video_params.proto\x12\x04lens\x1a-lens_overlay_video_context_input_params.proto\"f\n\x16LensOverlayVideoParams\x12L\n\x1avideo_context_input_params\x18\x01 \x01(\x0b\x32(.lens.LensOverlayVideoContextInputParamsB\x02H\x03\x62\x06proto3')
