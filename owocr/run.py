@@ -1833,6 +1833,7 @@ class ScreenshotThread(threading.Thread):
                 logger.info('Selection is empty, selecting whole screen')
         else:
             self.window_area_coordinates = None
+            self.area_mask = None
             logger.info('Launching window coordinate picker')
             img = self.take_screenshot(True)
             if not img:
@@ -1847,7 +1848,6 @@ class ScreenshotThread(threading.Thread):
                     coordinates = window_selection[0]['coordinates']
                     if coordinates:
                         x1, y1, x2, y2 = coordinates
-                        self.area_mask = None
                         display_rectangles = f'{x1},{y1},{x2},{y2}'
                 else:
                     x1, y1, x2, y2 = self.find_minimum_rectangle(window_selection)
