@@ -1730,11 +1730,13 @@ class ScreenshotThread(threading.Thread):
                     img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
                 except pywintypes.error:
                     return False
+
             window_size_changed = False
             if self.window_size != img.size:
                 if self.window_size:
                     window_size_changed = True
                 self.window_size = img.size
+
             if self.window_area_coordinates:
                 if window_size_changed:
                     self.window_area_coordinates = None
@@ -1742,16 +1744,13 @@ class ScreenshotThread(threading.Thread):
                     logger.warning('Window size changed, discarding area selection')
                 else:
                     img = img.crop(self.window_area_coordinates)
-                    if self.area_mask:
-                        white_bg = Image.new('RGB', img.size, (255, 255, 255))
-                        img = Image.composite(img, white_bg, self.area_mask)
-
         else:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
-            if self.area_mask:
-                white_bg = Image.new('RGB', img.size, (255, 255, 255))
-                img = Image.composite(img, white_bg, self.area_mask)
+
+        if self.area_mask:
+            white_bg = Image.new('RGB', img.size, (255, 255, 255))
+            img = Image.composite(img, white_bg, self.area_mask)
 
         return img
 
