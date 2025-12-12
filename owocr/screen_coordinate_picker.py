@@ -79,17 +79,18 @@ class ScreenSelector:
 
         self.root.after(50, self.process_keyboard_events)
 
-    def add_selection(self, monitor, coordinates):
+    def add_selection(self, monitor, scale_x, scale_y, coordinates):
         ctrl_pressed = self.ctrl_pressed
 
         if coordinates[0] == coordinates[2] or coordinates[1] == coordinates[3]:
-            self.clear_all_selections()
             if ctrl_pressed:
                 return
             coordinates = None
 
         self.selections.append({
             'monitor': monitor,
+            'scale_x': scale_x,
+            'scale_y': scale_y,
             'coordinates': coordinates
         })
 
@@ -98,6 +99,14 @@ class ScreenSelector:
             return
 
         self.redraw_selections()
+
+    def remove_selection(self, monitor, coordinates):
+        x1, y1, x2, y2 = coordinates
+        for i, selection in enumerate(self.selections):
+            if selection['monitor'] == monitor and selection['coordinates'] == (x1, y1, x2, y2):
+                self.selections.pop(i)
+                self.redraw_selections()
+                break
 
     def clear_all_selections(self):
         if self.drawing:
@@ -115,6 +124,15 @@ class ScreenSelector:
         for selection in self.selections:
             monitor = selection['monitor']
             coordinates = selection['coordinates']
+            scale_x = selection['scale_x']
+            scale_y = selection['scale_y']
+
+            if coordinates:
+                scaled_x1 = int(scale_x * coordinates[0])
+                scaled_y1 = int(scale_y * coordinates[1])
+                scaled_x2 = int(scale_x * coordinates[2])
+                scaled_y2 = int(scale_y * coordinates[3])
+                coordinates = (scaled_x1, scaled_y1, scaled_x2, scaled_y2)
 
             if monitor and coordinates:
                 abs_x1 = monitor['left'] + coordinates[0]
@@ -134,8 +152,6 @@ class ScreenSelector:
     def redraw_selections(self):
         for canvas_info in self.canvases:
             canvas = canvas_info['canvas']
-            scale_x = canvas_info['scale_x']
-            scale_y = canvas_info['scale_y']
             monitor = canvas_info['monitor']
 
             items = canvas.find_all()
@@ -146,12 +162,7 @@ class ScreenSelector:
             for selection in self.selections:
                 if selection['monitor'] == monitor:
                     x1, y1, x2, y2 = selection['coordinates']
-                    x1_disp = x1 / scale_x
-                    y1_disp = y1 / scale_y
-                    x2_disp = x2 / scale_x
-                    y2_disp = y2 / scale_y
-
-                    canvas.create_rectangle(x1_disp, y1_disp, x2_disp, y2_disp, outline='green', tags=('selection'))
+                    canvas.create_rectangle(x1, y1, x2, y2, outline='green', tags=('selection', 'permanent'))
 
     def _setup_selection_canvas(self, canvas, img_tk, scale_x=1, scale_y=1, monitor=None):
         canvas.pack(fill=tk.BOTH, expand=True)
@@ -160,8 +171,6 @@ class ScreenSelector:
 
         canvas_info = {
             'canvas': canvas,
-            'scale_x': scale_x,
-            'scale_y': scale_y,
             'monitor': monitor
         }
         self.canvases.append(canvas_info)
@@ -172,7 +181,7 @@ class ScreenSelector:
             self.drawing = True
             nonlocal start_x, start_y, rect
             start_x, start_y = event.x, event.y
-            rect = canvas.create_rectangle(start_x, start_y, start_x, start_y, outline='red', tags=('selection'))
+            rect = canvas.create_rectangle(start_x, start_y, start_x, start_y, outline='red', tags=('selection', 'temporary'))
 
         def on_drag(event):
             nonlocal start_x, start_y, rect
@@ -185,16 +194,30 @@ class ScreenSelector:
                 return
 
             end_x, end_y = event.x, event.y
-            x1 = int(min(start_x, end_x) * scale_x)
-            y1 = int(min(start_y, end_y) * scale_y)
-            x2 = int(max(start_x, end_x) * scale_x)
-            y2 = int(max(start_y, end_y) * scale_y)
+            x1 = min(start_x, end_x)
+            y1 = min(start_y, end_y)
+            x2 = max(start_x, end_x)
+            y2 = max(start_y, end_y)
 
             rect = None
             start_x = None
             start_y = None
             self.drawing = False
-            self.add_selection(monitor, (x1, y1, x2, y2))
+
+            if x1 == x2 or y1 == y2:
+                items = canvas.find_all()
+                for item in items:
+                    tags = canvas.gettags(item)
+                    if tags and 'permanent' in tags:
+                        coords = canvas.coords(item)
+                        x1_item, y1_item, x2_item, y2_item = coords
+                        if x1_item <= end_x <= x2_item and y1_item <= end_y <= y2_item:
+                            self.remove_selection(monitor, coords)
+                            return
+
+                self.clear_all_selections()
+
+            self.add_selection(monitor, scale_x, scale_y, (x1, y1, x2, y2))
 
         def reset_selection(event):
             nonlocal start_x, start_y, rect
