@@ -1745,7 +1745,6 @@ class ScreenshotThread(threading.Thread):
                     if self.area_mask:
                         white_bg = Image.new('RGB', img.size, (255, 255, 255))
                         img = Image.composite(img, white_bg, self.area_mask)
-                        img.save('debug.png')
 
         else:
             sct_img = self.sct.grab(self.sct_params)
@@ -1753,7 +1752,6 @@ class ScreenshotThread(threading.Thread):
             if self.area_mask:
                 white_bg = Image.new('RGB', img.size, (255, 255, 255))
                 img = Image.composite(img, white_bg, self.area_mask)
-                img.save('debug.png')
 
         return img
 
