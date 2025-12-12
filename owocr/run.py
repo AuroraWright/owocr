@@ -24,7 +24,7 @@ import websockets
 import socket
 import socketserver
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageDraw
 from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifierSync, Urgency
@@ -1270,7 +1270,7 @@ class TextFiltering:
 
             # Remove items that are no longer overlapping
             active_items = [
-                (active_idx, active_item, active_end) 
+                (active_idx, active_item, active_end)
                 for active_idx, active_item, active_end in active_items
                 if active_end > current_start  # Still overlapping
             ]
@@ -1393,7 +1393,7 @@ class ScreenshotThread(threading.Thread):
                 exit_with_error('Invalid screen_capture_area')
             screen_capture_monitor = int(parts[1])
             self.screencapture_mode = 1
-        elif len(screen_capture_area.split(',')) == 4:
+        elif len(screen_capture_area.replace('-', ',').split(',')) % 4 == 0:
             self.screencapture_mode = 3
         else:
             self.screencapture_mode = 2
@@ -1404,7 +1404,9 @@ class ScreenshotThread(threading.Thread):
         if self.screencapture_mode != 2:
             self.sct = mss.mss()
 
-            if self.screencapture_mode == 1:
+            if self.screencapture_mode == 0:
+                self.launch_coordinate_picker(False, True)
+            elif self.screencapture_mode == 1:
                 mon = self.sct.monitors
                 if len(mon) <= screen_capture_monitor:
                     exit_with_error('Invalid monitor number in screen_capture_area')
@@ -1412,14 +1414,22 @@ class ScreenshotThread(threading.Thread):
                 coord_top = mon[screen_capture_monitor]['top']
                 coord_width = mon[screen_capture_monitor]['width']
                 coord_height = mon[screen_capture_monitor]['height']
+                self.sct_params = {'left': coord_left, 'top': coord_top, 'width': coord_width, 'height': coord_height}
+                self.area_mask = None
+                logger.info(f'Selected whole screen')
             elif self.screencapture_mode == 3:
-                coord_left, coord_top, coord_width, coord_height = [int(c.strip()) for c in screen_capture_area.split(',')]
-            else:
-                self.launch_coordinate_picker(False, True)
+                saved_rectangles = self.parse_saved_coordinates(screen_capture_area)
+                if len(saved_rectangles) == 1:
+                    x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
+                    self.area_mask = None
+                    display_rectangles = f'{x1},{y1},{x2},{y2}'
+                else:
+                    x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
+                    self.area_mask = self.generate_mask((x1, y1, x2, y2), saved_rectangles)
+                    display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
 
-            if self.screencapture_mode != 0:
-                self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-                logger.info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
+                logger.info(f'Selected coordinates: {display_rectangles}')
+                self.sct_params = {'left': x1, 'top': y1, 'width': x2 - x1, 'height': y2 - y1}
         else:
             self.screen_capture_only_active_windows = config.get_general('screen_capture_only_active_windows')
             self.window_area_coordinates = None
@@ -1481,14 +1491,60 @@ class ScreenshotThread(threading.Thread):
 
             screen_capture_window_area = config.get_general('screen_capture_window_area')
             if screen_capture_window_area != 'window':
-                if len(screen_capture_window_area.split(',')) == 4:
-                    x, y, x2, y2 = [int(c.strip()) for c in screen_capture_window_area.split(',')]
-                    logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
-                    self.window_area_coordinates = (x, y, x2, y2)
-                elif screen_capture_window_area == '':
+                if screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
+                elif len(screen_capture_window_area.replace('-', ',').split(',')) % 4 == 0:
+                    saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area)
+                    if len(saved_rectangles) == 1:
+                        x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
+                        self.area_mask = None
+                        display_rectangles = f'{x1},{y1},{x2},{y2}'
+                    else:
+                        x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
+                        self.area_mask = self.generate_mask((x1, y1, x2, y2), saved_rectangles)
+                        display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
+
+                    logger.info(f'Selected window coordinates: {display_rectangles}')
+                    self.window_area_coordinates = (x1, y1, x2, y2)
                 else:
                     exit_with_error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
+
+    def parse_saved_coordinates(self, saved_coordinates):
+        result = []
+        coordinate_sets = saved_coordinates.split('-')
+
+        for coord_set in coordinate_sets:
+            numbers = coord_set.split(',')
+
+            coord_tuple = tuple(int(num) for num in numbers)
+
+            result.append({
+                'coordinates': coord_tuple,
+                'monitor': None
+            })
+
+        return result
+
+    def find_minimum_rectangle(self, coordinates):
+        min_x = min(r['coordinates'][0] for r in coordinates)
+        min_y = min(r['coordinates'][1] for r in coordinates)
+        max_x = max(r['coordinates'][2] for r in coordinates)
+        max_y = max(r['coordinates'][3] for r in coordinates)
+
+        return min_x, min_y, max_x, max_y
+
+    def generate_mask(self, outer_rectangle, coordinates):
+        x1_outer, y1_outer, x2_outer, y2_outer = outer_rectangle
+
+        mask = Image.new('L', (x2_outer - x1_outer, y2_outer - y1_outer), 0)
+        draw = ImageDraw.Draw(mask)
+
+        for r in coordinates:
+            x1, y1, x2, y2 = r['coordinates']
+            adj_rect = (x1 - x1_outer, y1 - y1_outer, x2 - x1_outer, y2 - y1_outer)
+            draw.rectangle(adj_rect, fill=255)
+
+        return mask
 
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
@@ -1682,12 +1738,22 @@ class ScreenshotThread(threading.Thread):
             if self.window_area_coordinates:
                 if window_size_changed:
                     self.window_area_coordinates = None
+                    self.area_mask = None
                     logger.warning('Window size changed, discarding area selection')
                 else:
                     img = img.crop(self.window_area_coordinates)
+                    if self.area_mask:
+                        white_bg = Image.new('RGB', img.size, (255, 255, 255))
+                        img = Image.composite(img, white_bg, self.area_mask)
+                        img.save('debug.png')
+
         else:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+            if self.area_mask:
+                white_bg = Image.new('RGB', img.size, (255, 255, 255))
+                img = Image.composite(img, white_bg, self.area_mask)
+                img.save('debug.png')
 
         return img
 
@@ -1734,24 +1800,42 @@ class ScreenshotThread(threading.Thread):
             logger.info('Launching screen coordinate picker')
             screen_selection = get_screen_selection(None, self.coordinate_selector_combo_enabled)
             if not screen_selection:
-                if on_init:
+                if must_return:
                     exit_with_error('Picker window was closed or an error occurred')
                 else:
                     logger.warning('Picker window was closed or an error occurred, leaving settings unchanged')
                     return
-            screen_capture_monitor = screen_selection['monitor']
-            x, y, coord_width, coord_height = screen_selection['coordinates']
-            if coord_width > 0 and coord_height > 0:
-                coord_top = screen_capture_monitor['top'] + y
-                coord_left = screen_capture_monitor['left'] + x
+
+            display_rectangles = None
+            if len(screen_selection) == 1:
+                coordinates = screen_selection[0]['coordinates']
+                monitor = screen_selection[0]['monitor']
+
+                if not coordinates:
+                    coord_left = monitor['left']
+                    coord_top = monitor['top']
+                    coord_width = monitor['width']
+                    coord_height = monitor['height']
+                else:
+                    x1, y1, x2, y2 = coordinates
+                    coord_left = x1
+                    coord_top = y1
+                    coord_width = x2 - x1
+                    coord_height = y2 - y1
+                    display_rectangles = f'{x1},{y1},{x2},{y2}'
+
+                self.sct_params = {'left': coord_left, 'top': coord_top, 'width': coord_width, 'height': coord_height}
+                self.area_mask = None
+            else:
+                x1, y1, x2, y2 = self.find_minimum_rectangle(screen_selection)
+                self.sct_params = {'left': x1, 'top': y1, 'width': x2 - x1, 'height': y2 - y1}
+                self.area_mask = self.generate_mask((x1, y1, x2, y2), screen_selection)
+                display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in screen_selection])
+
+            if display_rectangles:
+                logger.info(f'Selected coordinates: {display_rectangles}')
             else:
                 logger.info('Selection is empty, selecting whole screen')
-                coord_left = screen_capture_monitor['left']
-                coord_top = screen_capture_monitor['top']
-                coord_width = screen_capture_monitor['width']
-                coord_height = screen_capture_monitor['height']
-            self.sct_params = {'top': coord_top, 'left': coord_left, 'width': coord_width, 'height': coord_height}
-            logger.info(f'Selected coordinates: {coord_left},{coord_top},{coord_width},{coord_height}')
         else:
             self.window_area_coordinates = None
             logger.info('Launching window coordinate picker')
@@ -1763,12 +1847,21 @@ class ScreenshotThread(threading.Thread):
             if not window_selection:
                 logger.warning('Picker window was closed or an error occurred, selecting whole window')
             else:
-                x, y, coord_width, coord_height = window_selection['coordinates']
-                if coord_width > 0 and coord_height > 0:
-                    x2 = x + coord_width
-                    y2 = y + coord_height
-                    logger.info(f'Selected window coordinates: {x},{y},{x2},{y2}')
-                    self.window_area_coordinates = (x, y, x2, y2)
+                display_rectangles = None
+                if len(window_selection) == 1:
+                    coordinates = window_selection[0]['coordinates']
+                    if coordinates:
+                        x1, y1, x2, y2 = coordinates
+                        self.area_mask = None
+                        display_rectangles = f'{x1},{y1},{x2},{y2}'
+                else:
+                    x1, y1, x2, y2 = self.find_minimum_rectangle(window_selection)
+                    self.area_mask = self.generate_mask((x1, y1, x2, y2), window_selection)
+                    display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in window_selection])
+
+                if display_rectangles:
+                    logger.info(f'Selected window coordinates: {display_rectangles}')
+                    self.window_area_coordinates = (x1, y1, x2, y2)
                 else:
                     logger.info('Selection is empty, selecting whole window')
 
@@ -1902,7 +1995,7 @@ class OutputResult:
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
         self.reorder_text = config.get_general('reorder_text')
-        self.line_separator = '' if config.get_general('join_lines') else config.get_general('line_separator').encode().decode('unicode_escape') 
+        self.line_separator = '' if config.get_general('join_lines') else config.get_general('line_separator').encode().decode('unicode_escape')
         self.paragraph_separator = '' if config.get_general('join_paragraphs') else config.get_general('paragraph_separator').encode().decode('unicode_escape')
         self.write_to = config.get_general('write_to')
         self.filtering = TextFiltering()
@@ -2155,14 +2248,14 @@ def on_coordinate_selector_combo():
     coordinate_selector_event.set()
 
 
-def get_current_version():  
+def get_current_version():
     try:
         return importlib.metadata.version(__package__)
     except:
         return 'N/A'
 
 
-def get_latest_version():    
+def get_latest_version():
     try:
         with urllib.request.urlopen(f'https://pypi.org/pypi/{__package__}/json', timeout=5) as response:
             data = json.load(response)

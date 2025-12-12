@@ -3,7 +3,9 @@ import queue
 import mss
 from loguru import logger
 from PIL import Image
+from pynput import keyboard
 import sys
+import threading
 try:
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 except ImportError:
@@ -22,58 +24,208 @@ class ScreenSelector:
         self.sct = mss.mss()
         self.monitors = self.sct.monitors[1:]
         self.root = None
+        self.after_id = None
         self.result_queue = result_queue
         self.command_queue = command_queue
         self.mac_init_done = False
+        self.ctrl_pressed = False
+        self.drawing = False
+        self.canvases = []
+        self.selections = []
+        self.keyboard_event_queue = queue.Queue()
+        self.start_key_listener()
 
-    def on_select(self, monitor, coordinates):
-        self.result_queue.put({'monitor': monitor, 'coordinates': coordinates})
+    def start_key_listener(self):
+        self.keyboard_listener = keyboard.Listener(
+            on_press=self.on_key_press,
+            on_release=self.on_key_release
+        )
+        self.keyboard_listener.start()
+
+    def on_key_press(self, key):
+        if not self.after_id:
+            return
+
+        if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
+            self.ctrl_pressed = True
+
+    def on_key_release(self, key):
+        if not self.after_id:
+            return
+
+        if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
+            self.ctrl_pressed = False
+            self.keyboard_event_queue.put('return_selections')
+
+        elif key == keyboard.Key.backspace:
+            self.keyboard_event_queue.put('clear_selections')
+
+        elif key == keyboard.Key.esc:
+            self.keyboard_event_queue.put('return_empty')
+
+    def process_keyboard_events(self):
+        if not self.root:
+            return
+
+        try:
+            while True:
+                event_type = self.keyboard_event_queue.get_nowait()
+                if event_type == 'return_selections':
+                    if self.selections and not self.drawing:
+                        self.return_all_selections()
+                        return
+                elif event_type == 'return_empty':
+                    self.return_empty()
+                    return
+                elif event_type == 'clear_selections':
+                    self.clear_all_selections()
+        except queue.Empty:
+            pass
+
         if self.root:
+            self.after_id = self.root.after(50, self.process_keyboard_events)
+
+    def close_ui(self):
+        if self.root:
+            if self.after_id:
+                try:
+                    self.root.after_cancel(self.after_id)
+                except:
+                    pass
             self.root.destroy()
+        self.after_id = None
+        self.drawing = False
+
+        self.canvases.clear()
+        while not self.keyboard_event_queue.empty():
+            self.keyboard_event_queue.get()
+
+    def add_selection(self, monitor, coordinates):
+        ctrl_pressed = self.ctrl_pressed
+
+        if coordinates[0] == coordinates[2] or coordinates[1] == coordinates[3]:
+            self.clear_all_selections()
+            if ctrl_pressed:
+                return
+            coordinates = None
+
+        self.selections.append({
+            'monitor': monitor,
+            'coordinates': coordinates
+        })
+
+        if not ctrl_pressed:
+            self.keyboard_event_queue.put(('return_selections'))
+            return
+
+        self.redraw_selections()
+
+    def clear_all_selections(self):
+        if self.drawing:
+            return
+
+        self.selections.clear()
+        self.redraw_selections()
+
+    def return_empty(self):
+        self.close_ui()
+        self.selections.clear()
+        self.result_queue.put(False)
+
+    def return_all_selections(self):
+        self.close_ui()
+
+        selections_abs = []
+        for selection in self.selections:
+            monitor = selection['monitor']
+            coordinates = selection['coordinates']
+            if monitor and coordinates:
+                abs_x1 = monitor['left'] + coordinates[0]
+                abs_y1 = monitor['top'] + coordinates[1]
+                abs_x2 = monitor['left'] + coordinates[2]
+                abs_y2 = monitor['top'] + coordinates[3]
+                selections_abs.append({
+                    'monitor': monitor,
+                    'coordinates': (abs_x1, abs_y1, abs_x2, abs_y2)
+                })
+
+        self.selections.clear()
+        self.result_queue.put(selections_abs)
+
+    def redraw_selections(self):
+        for canvas_info in self.canvases:
+            canvas = canvas_info['canvas']
+            scale_x = canvas_info['scale_x']
+            scale_y = canvas_info['scale_y']
+            monitor = canvas_info['monitor']
+
+            items = canvas.find_all()
+            for item in items:
+                if canvas.gettags(item) and 'selection' in canvas.gettags(item):
+                    canvas.delete(item)
+
+            for selection in self.selections:
+                if selection['monitor'] == monitor:
+                    x1, y1, x2, y2 = selection['coordinates']
+                    x1_disp = x1 / scale_x
+                    y1_disp = y1 / scale_y
+                    x2_disp = x2 / scale_x
+                    y2_disp = y2 / scale_y
+
+                    canvas.create_rectangle(x1_disp, y1_disp, x2_disp, y2_disp, outline='green', tags=('selection'))
 
     def _setup_selection_canvas(self, canvas, img_tk, scale_x=1, scale_y=1, monitor=None):
         canvas.pack(fill=tk.BOTH, expand=True)
         canvas.image = img_tk
         canvas.create_image(0, 0, image=img_tk, anchor=tk.NW)
 
+        canvas_info = {
+            'canvas': canvas,
+            'scale_x': scale_x,
+            'scale_y': scale_y,
+            'monitor': monitor
+        }
+        self.canvases.append(canvas_info)
+
         start_x, start_y, rect = None, None, None
 
         def on_click(event):
+            self.drawing = True
             nonlocal start_x, start_y, rect
             start_x, start_y = event.x, event.y
-            rect = canvas.create_rectangle(start_x, start_y, start_x, start_y, outline='red')
+            rect = canvas.create_rectangle(start_x, start_y, start_x, start_y, outline='red', tags=('selection'))
 
         def on_drag(event):
-            nonlocal rect, start_x, start_y
+            nonlocal start_x, start_y, rect
             if rect:
                 canvas.coords(rect, start_x, start_y, event.x, event.y)
 
         def on_release(event):
-            nonlocal start_x, start_y
+            nonlocal start_x, start_y, rect
             if start_x is None or start_y is None:
                 return
 
             end_x, end_y = event.x, event.y
+            x1 = int(min(start_x, end_x) * scale_x)
+            y1 = int(min(start_y, end_y) * scale_y)
+            x2 = int(max(start_x, end_x) * scale_x)
+            y2 = int(max(start_y, end_y) * scale_y)
 
-            x1 = min(start_x, end_x) 
-            y1 = min(start_y, end_y) 
-            x2 = max(start_x, end_x) 
-            y2 = max(start_y, end_y)
-
-            x1 = int(x1 * scale_x)
-            y1 = int(y1 * scale_y)
-            x2 = int(x2 * scale_x)
-            y2 = int(y2 * scale_y)
-
-            self.on_select(monitor, (x1, y1, x2 - x1, y2 - y1))
+            rect = None
+            start_x = None
+            start_y = None
+            self.drawing = False
+            self.add_selection(monitor, (x1, y1, x2, y2))
 
         def reset_selection(event):
             nonlocal start_x, start_y, rect
             if rect:
                 canvas.delete(rect)
                 rect = None
+
             start_x = None
             start_y = None
+            self.drawing = False
 
         canvas.bind('<ButtonPress-1>', on_click)
         canvas.bind('<B1-Motion>', on_drag)
@@ -96,8 +248,7 @@ class ScreenSelector:
         display_monitor = None
 
         for monitor in self.monitors:
-            if (monitor['width'] >= original_width and 
-                monitor['height'] >= original_height):
+            if (monitor['width'] >= original_width and monitor['height'] >= original_height):
                 display_monitor = monitor
                 break
 
@@ -145,7 +296,7 @@ class ScreenSelector:
             if image == False:
                 break
             if image == True:
-                self.on_select(None, None)
+                self.result_queue.put([None])
                 continue
 
             self.root = tk.Tk()
@@ -156,6 +307,7 @@ class ScreenSelector:
                 self.mac_init_done = True
 
             self.root.withdraw()
+            self.after_id = self.root.after(50, self.process_keyboard_events)
 
             if image:
                 self.create_window_from_image(image)
@@ -192,14 +344,15 @@ def get_screen_selection(pil_image, permanent_process):
 
     command_queue.put(pil_image)
 
-    result = False
-    while (not result) and selector_process.is_alive():
+    result = None
+    while result is None and selector_process.is_alive():
         try:
             result = result_queue.get(timeout=0.1)
         except:
             continue
     if not permanent_process:
         terminate_selector_if_running()
+
     return result
 
 def terminate_selector_if_running():
