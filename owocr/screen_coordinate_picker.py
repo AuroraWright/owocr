@@ -5,7 +5,6 @@ from loguru import logger
 from PIL import Image
 from pynput import keyboard
 import sys
-import threading
 try:
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 except ImportError:
@@ -296,7 +295,7 @@ class ScreenSelector:
             if image == False:
                 break
             if image == True:
-                self.result_queue.put([None])
+                self.result_queue.put(False)
                 continue
 
             self.root = tk.Tk()
