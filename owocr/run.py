@@ -1384,6 +1384,7 @@ class ScreenshotThread(threading.Thread):
         self.window_visible = True
         self.window_closed = False
         self.window_size = None
+        self.area_mask = None
 
         if screen_capture_area == '':
             self.screencapture_mode = 0
@@ -1415,13 +1416,11 @@ class ScreenshotThread(threading.Thread):
                 coord_width = mon[screen_capture_monitor]['width']
                 coord_height = mon[screen_capture_monitor]['height']
                 self.sct_params = {'left': coord_left, 'top': coord_top, 'width': coord_width, 'height': coord_height}
-                self.area_mask = None
                 logger.info(f'Selected whole screen')
             elif self.screencapture_mode == 3:
                 saved_rectangles = self.parse_saved_coordinates(screen_capture_area)
                 if len(saved_rectangles) == 1:
                     x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
-                    self.area_mask = None
                     display_rectangles = f'{x1},{y1},{x2},{y2}'
                 else:
                     x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
@@ -1497,7 +1496,6 @@ class ScreenshotThread(threading.Thread):
                     saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area)
                     if len(saved_rectangles) == 1:
                         x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
-                        self.area_mask = None
                         display_rectangles = f'{x1},{y1},{x2},{y2}'
                     else:
                         x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
