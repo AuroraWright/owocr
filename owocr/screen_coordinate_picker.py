@@ -23,7 +23,6 @@ class ScreenSelector:
         self.sct = mss.mss()
         self.monitors = self.sct.monitors[1:]
         self.root = None
-        self.after_id = None
         self.result_queue = result_queue
         self.command_queue = command_queue
         self.mac_init_done = False
@@ -42,14 +41,14 @@ class ScreenSelector:
         self.keyboard_listener.start()
 
     def on_key_press(self, key):
-        if not self.after_id:
+        if not self.root:
             return
 
         if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
             self.ctrl_pressed = True
 
     def on_key_release(self, key):
-        if not self.after_id:
+        if not self.root:
             return
 
         if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
@@ -63,9 +62,6 @@ class ScreenSelector:
             self.keyboard_event_queue.put('return_empty')
 
     def process_keyboard_events(self):
-        if not self.root:
-            return
-
         try:
             while True:
                 event_type = self.keyboard_event_queue.get_nowait()
@@ -81,23 +77,7 @@ class ScreenSelector:
         except queue.Empty:
             pass
 
-        if self.root:
-            self.after_id = self.root.after(50, self.process_keyboard_events)
-
-    def close_ui(self):
-        if self.root:
-            if self.after_id:
-                try:
-                    self.root.after_cancel(self.after_id)
-                except:
-                    pass
-            self.root.destroy()
-        self.after_id = None
-        self.drawing = False
-
-        self.canvases.clear()
-        while not self.keyboard_event_queue.empty():
-            self.keyboard_event_queue.get()
+        self.root.after(50, self.process_keyboard_events)
 
     def add_selection(self, monitor, coordinates):
         ctrl_pressed = self.ctrl_pressed
@@ -127,29 +107,29 @@ class ScreenSelector:
         self.redraw_selections()
 
     def return_empty(self):
-        self.close_ui()
-        self.selections.clear()
         self.result_queue.put(False)
+        self.root.destroy()
 
     def return_all_selections(self):
-        self.close_ui()
-
         selections_abs = []
         for selection in self.selections:
             monitor = selection['monitor']
             coordinates = selection['coordinates']
+
             if monitor and coordinates:
                 abs_x1 = monitor['left'] + coordinates[0]
                 abs_y1 = monitor['top'] + coordinates[1]
                 abs_x2 = monitor['left'] + coordinates[2]
                 abs_y2 = monitor['top'] + coordinates[3]
-                selections_abs.append({
-                    'monitor': monitor,
-                    'coordinates': (abs_x1, abs_y1, abs_x2, abs_y2)
-                })
+                coordinates = (abs_x1, abs_y1, abs_x2, abs_y2)
 
-        self.selections.clear()
+            selections_abs.append({
+                'monitor': monitor,
+                'coordinates': coordinates
+            })
+
         self.result_queue.put(selections_abs)
+        self.root.destroy()
 
     def redraw_selections(self):
         for canvas_info in self.canvases:
@@ -288,6 +268,15 @@ class ScreenSelector:
 
         self._create_selection_window(img, geometry, scale_x, scale_y, monitor)
 
+    def cleanup_ui(self):
+        self.root.update()
+        self.root = None
+        self.selections.clear()
+        self.canvases.clear()
+        self.drawing = False
+        while not self.keyboard_event_queue.empty():
+            self.keyboard_event_queue.get()
+
     def start(self):
         while True:
             image = self.command_queue.get()
@@ -306,7 +295,6 @@ class ScreenSelector:
                 self.mac_init_done = True
 
             self.root.withdraw()
-            self.after_id = self.root.after(50, self.process_keyboard_events)
 
             if image:
                 self.create_window_from_image(image)
@@ -314,9 +302,9 @@ class ScreenSelector:
                 for monitor in self.monitors:
                     self.create_window(monitor)
 
+            self.root.after(50, self.process_keyboard_events)
             self.root.mainloop()
-            self.root.update()
-            self.root = None
+            self.cleanup_ui()
 
 
 def run_screen_selector(result_queue, command_queue):
