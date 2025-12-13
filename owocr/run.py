@@ -1421,7 +1421,7 @@ class ScreenshotThread(threading.Thread):
             elif self.screencapture_mode == 3:
                 saved_rectangles = self.parse_saved_coordinates(screen_capture_area, False)
                 if len(saved_rectangles) == 0:
-                    exit_with_error('Invalid coordinates in screen_capture_area')
+                    exit_with_error('Invalid coordinate set in screen_capture_area')
                 elif len(saved_rectangles) == 1:
                     x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
                     display_rectangles = f'{x1},{y1},{x2},{y2}'
@@ -1465,7 +1465,7 @@ class ScreenshotThread(threading.Thread):
                             break
 
                 if not window_index:
-                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
+                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
 
                 self.window_id = window_ids[window_index]
                 window_title = window_titles[window_index]
@@ -1478,7 +1478,7 @@ class ScreenshotThread(threading.Thread):
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
-                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, a valid set of coordinates, or a valid window name')
+                    exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
 
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
                 self.window_visible = not win32gui.IsIconic(self.window_handle)
@@ -1499,7 +1499,7 @@ class ScreenshotThread(threading.Thread):
                 elif len(screen_capture_window_area.replace('-', ',').split(',')) % 4 == 0:
                     saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area, True)
                     if len(saved_rectangles) == 0:
-                        exit_with_error('Invalid coordinates in screen_capture_window_area')
+                        exit_with_error('Invalid coordinate set in screen_capture_window_area')
                     elif len(saved_rectangles) == 1:
                         x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
                         display_rectangles = f'{x1},{y1},{x2},{y2}'
@@ -1512,7 +1512,7 @@ class ScreenshotThread(threading.Thread):
                     self.current_coordinates = saved_rectangles
                     self.window_area_coordinates = (x1, y1, x2, y2)
                 else:
-                    exit_with_error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
+                    exit_with_error('"screen_capture_window_area" must be empty, "window" for the whole window, one or more sets of rectangle coordinates')
 
     def parse_saved_coordinates(self, saved_coordinates, is_window):
         result = []
