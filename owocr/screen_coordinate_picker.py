@@ -30,6 +30,7 @@ class ScreenSelector:
         self.drawing = False
         self.canvases = []
         self.selections = []
+        self.previous_coordinates = []
         self.keyboard_event_queue = queue.Queue()
         self.start_key_listener()
 
@@ -46,6 +47,7 @@ class ScreenSelector:
 
         if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
             self.ctrl_pressed = True
+            self.keyboard_event_queue.put('show_previous_selections')
 
     def on_key_release(self, key):
         if not self.root:
@@ -74,6 +76,8 @@ class ScreenSelector:
                     return
                 elif event_type == 'clear_selections':
                     self.clear_all_selections()
+                elif event_type == 'show_previous_selections':
+                    self.show_previous_selections()
         except queue.Empty:
             pass
 
@@ -149,6 +153,54 @@ class ScreenSelector:
         self.result_queue.put(selections_abs)
         self.root.destroy()
 
+    def show_previous_selections(self):
+        if not self.previous_coordinates:
+            return
+        if self.selections:
+            return
+
+        for prev_sel in self.previous_coordinates:
+            monitor = prev_sel['monitor']
+            abs_coords = prev_sel['coordinates']
+
+            canvas_info = None
+            if monitor is None:
+                canvas_info = self.canvases[0]
+            else:
+                for info in self.canvases:
+                    if info['monitor'] == monitor:
+                        canvas_info = info
+                        break
+
+            if not canvas_info:
+                continue
+
+            scale_x = canvas_info['scale_x']
+            scale_y = canvas_info['scale_y']
+
+            if monitor is not None:
+                rel_x1 = abs_coords[0] - monitor['left']
+                rel_y1 = abs_coords[1] - monitor['top']
+                rel_x2 = abs_coords[2] - monitor['left']
+                rel_y2 = abs_coords[3] - monitor['top']
+            else:
+                rel_x1, rel_y1, rel_x2, rel_y2 = abs_coords
+
+            canvas_x1 = rel_x1 / scale_x
+            canvas_y1 = rel_y1 / scale_y
+            canvas_x2 = rel_x2 / scale_x
+            canvas_y2 = rel_y2 / scale_y
+
+            self.selections.append({
+                'monitor': monitor,
+                'scale_x': scale_x,
+                'scale_y': scale_y,
+                'coordinates': (canvas_x1, canvas_y1, canvas_x2, canvas_y2)
+            })
+
+        self.previous_coordinates = []
+        self.redraw_selections()
+
     def redraw_selections(self):
         for canvas_info in self.canvases:
             canvas = canvas_info['canvas']
@@ -171,7 +223,9 @@ class ScreenSelector:
 
         canvas_info = {
             'canvas': canvas,
-            'monitor': monitor
+            'monitor': monitor,
+            'scale_x': scale_x,
+            'scale_y': scale_y
         }
         self.canvases.append(canvas_info)
 
@@ -302,7 +356,8 @@ class ScreenSelector:
 
     def start(self):
         while True:
-            image = self.command_queue.get()
+            command = self.command_queue.get()
+            image, coordinates = command
 
             if image == False:
                 break
@@ -310,6 +365,7 @@ class ScreenSelector:
                 self.result_queue.put(False)
                 continue
 
+            self.previous_coordinates = coordinates if coordinates else []
             self.root = tk.Tk()
 
             if not self.mac_init_done and sys.platform == 'darwin':
@@ -338,7 +394,7 @@ selector_process = None
 result_queue = None
 command_queue = None
 
-def get_screen_selection(pil_image, permanent_process):
+def get_screen_selection(pil_image, previous_coordinates, permanent_process):
     global selector_process, result_queue, command_queue
 
     if not selector_available:
@@ -352,7 +408,7 @@ def get_screen_selection(pil_image, permanent_process):
         selector_process.daemon = True
         selector_process.start()
 
-    command_queue.put(pil_image)
+    command_queue.put((pil_image, previous_coordinates))
 
     result = None
     while result is None and selector_process.is_alive():
@@ -367,5 +423,5 @@ def get_screen_selection(pil_image, permanent_process):
 
 def terminate_selector_if_running():
     if selector_process and selector_process.is_alive():
-        command_queue.put(False)
+        command_queue.put((False, None))
         selector_process.join()
