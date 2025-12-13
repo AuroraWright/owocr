@@ -157,6 +157,10 @@ class ScreenSelector:
         if not self.previous_coordinates:
             return
         if self.selections:
+            self.previous_coordinates = []
+            return
+        if self.drawing:
+            self.previous_coordinates = []
             return
 
         for prev_sel in self.previous_coordinates:
@@ -164,7 +168,7 @@ class ScreenSelector:
             abs_coords = prev_sel['coordinates']
 
             canvas_info = None
-            if monitor is None:
+            if not monitor:
                 canvas_info = self.canvases[0]
             else:
                 for info in self.canvases:
@@ -178,7 +182,7 @@ class ScreenSelector:
             scale_x = canvas_info['scale_x']
             scale_y = canvas_info['scale_y']
 
-            if monitor is not None:
+            if monitor:
                 rel_x1 = abs_coords[0] - monitor['left']
                 rel_y1 = abs_coords[1] - monitor['top']
                 rel_x2 = abs_coords[2] - monitor['left']
