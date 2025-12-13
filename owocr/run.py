@@ -1419,7 +1419,7 @@ class ScreenshotThread(threading.Thread):
                 self.sct_params = {'left': coord_left, 'top': coord_top, 'width': coord_width, 'height': coord_height}
                 logger.info(f'Selected whole screen')
             elif self.screencapture_mode == 3:
-                saved_rectangles = self.parse_saved_coordinates(screen_capture_area, self.sct.monitors[1:], None)
+                saved_rectangles = self.parse_saved_coordinates(screen_capture_area, False)
                 if len(saved_rectangles) == 0:
                     exit_with_error('Invalid coordinates in screen_capture_area')
                 elif len(saved_rectangles) == 1:
@@ -1497,8 +1497,7 @@ class ScreenshotThread(threading.Thread):
                 if screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
                 elif len(screen_capture_window_area.replace('-', ',').split(',')) % 4 == 0:
-                    img = self.take_screenshot(True)
-                    saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area, None, img.size)
+                    saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area, True)
                     if len(saved_rectangles) == 0:
                         exit_with_error('Invalid coordinates in screen_capture_window_area')
                     elif len(saved_rectangles) == 1:
@@ -1515,9 +1514,14 @@ class ScreenshotThread(threading.Thread):
                 else:
                     exit_with_error('"screen_capture_window_area" must be empty, "window" for the whole window, or a valid set of coordinates')
 
-    def parse_saved_coordinates(self, saved_coordinates, monitors, window_size):
+    def parse_saved_coordinates(self, saved_coordinates, is_window):
         result = []
         coordinate_sets = saved_coordinates.split('-')
+
+        if not is_window:
+            monitors = self.sct.monitors[1:]
+        else:
+            img = self.take_screenshot(True)
 
         for coord_set in coordinate_sets:
             numbers = coord_set.split(',')
@@ -1525,7 +1529,7 @@ class ScreenshotThread(threading.Thread):
             coord_tuple = tuple(int(num) for num in numbers)
             found_monitor = None
 
-            if monitors:
+            if not is_window:
                 for monitor in monitors:
                     x1_monitor = monitor['left']
                     y1_monitor = monitor['top']
@@ -1541,8 +1545,8 @@ class ScreenshotThread(threading.Thread):
                 valid_coordinates = False
                 x1_window = 0
                 y1_window = 0
-                x2_window = 0 + window_size[0]
-                y2_window = 0 + window_size[1]
+                x2_window = 0 + img.width
+                y2_window = 0 + img.height
                 if (x1_window <= coord_tuple[0] <= x2_window and y1_window <= coord_tuple[1] <= y2_window
                 and x1_window <= coord_tuple[2] <= x2_window and y1_window <= coord_tuple[3] <= y2_window):
                     valid_coordinates = True
