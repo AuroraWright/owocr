@@ -1395,7 +1395,7 @@ class ScreenshotThread(threading.Thread):
                 exit_with_error('Invalid screen_capture_area')
             screen_capture_monitor = int(parts[1])
             self.screencapture_mode = 1
-        elif len(screen_capture_area.replace('-', ',').split(',')) % 4 == 0:
+        elif len(screen_capture_area.replace('_', ',').split(',')) % 4 == 0:
             self.screencapture_mode = 3
         else:
             self.screencapture_mode = 2
@@ -1428,7 +1428,7 @@ class ScreenshotThread(threading.Thread):
                 else:
                     x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
                     self.area_mask = self.generate_mask((x1, y1, x2, y2), saved_rectangles)
-                    display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
+                    display_rectangles = '_'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
 
                 logger.info(f'Selected coordinates: {display_rectangles}')
                 self.current_coordinates = saved_rectangles
@@ -1496,7 +1496,7 @@ class ScreenshotThread(threading.Thread):
             if screen_capture_window_area != 'window':
                 if screen_capture_window_area == '':
                     self.launch_coordinate_picker(False, False)
-                elif len(screen_capture_window_area.replace('-', ',').split(',')) % 4 == 0:
+                elif len(screen_capture_window_area.replace('_', ',').split(',')) % 4 == 0:
                     saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area, True)
                     if len(saved_rectangles) == 0:
                         exit_with_error('Invalid coordinate set in screen_capture_window_area')
@@ -1506,7 +1506,7 @@ class ScreenshotThread(threading.Thread):
                     else:
                         x1, y1, x2, y2 = self.find_minimum_rectangle(saved_rectangles)
                         self.area_mask = self.generate_mask((x1, y1, x2, y2), saved_rectangles)
-                        display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
+                        display_rectangles = '_'.join([','.join(map(str, r['coordinates'])) for r in saved_rectangles])
 
                     logger.info(f'Selected window coordinates: {display_rectangles}')
                     self.current_coordinates = saved_rectangles
@@ -1516,7 +1516,7 @@ class ScreenshotThread(threading.Thread):
 
     def parse_saved_coordinates(self, saved_coordinates, is_window):
         result = []
-        coordinate_sets = saved_coordinates.split('-')
+        coordinate_sets = saved_coordinates.split('_')
 
         if not is_window:
             monitors = self.sct.monitors[1:]
@@ -1862,7 +1862,7 @@ class ScreenshotThread(threading.Thread):
                 x1, y1, x2, y2 = self.find_minimum_rectangle(screen_selection)
                 self.sct_params = {'left': x1, 'top': y1, 'width': x2 - x1, 'height': y2 - y1}
                 self.area_mask = self.generate_mask((x1, y1, x2, y2), screen_selection)
-                display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in screen_selection])
+                display_rectangles = '_'.join([','.join(map(str, r['coordinates'])) for r in screen_selection])
 
             if display_rectangles:
                 logger.info(f'Selected coordinates: {display_rectangles}')
@@ -1892,7 +1892,7 @@ class ScreenshotThread(threading.Thread):
                 else:
                     x1, y1, x2, y2 = self.find_minimum_rectangle(window_selection)
                     self.area_mask = self.generate_mask((x1, y1, x2, y2), window_selection)
-                    display_rectangles = '-'.join([','.join(map(str, r['coordinates'])) for r in window_selection])
+                    display_rectangles = '_'.join([','.join(map(str, r['coordinates'])) for r in window_selection])
 
                 if display_rectangles:
                     logger.info(f'Selected window coordinates: {display_rectangles}')
