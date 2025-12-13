@@ -85,21 +85,38 @@ class ScreenSelector:
 
     def add_selection(self, monitor, scale_x, scale_y, coordinates):
         ctrl_pressed = self.ctrl_pressed
+        x1, y1, x2, y2 = coordinates
 
-        if coordinates[0] == coordinates[2] or coordinates[1] == coordinates[3]:
+        if x1 == x2 or y1 == y2:
             if ctrl_pressed:
                 return
             coordinates = None
 
-        self.selections.append({
-            'monitor': monitor,
-            'scale_x': scale_x,
-            'scale_y': scale_y,
-            'coordinates': coordinates
-        })
+        valid_selection = True
+        if coordinates:
+            to_remove = []
+            for i, selection in enumerate(self.selections):
+                if selection['monitor'] == monitor:
+                    x1_old, y1_old, x2_old, y2_old = selection['coordinates']
+                    if x1_old <= x1 and y1_old <= y1 and x2_old >= x2 and y2_old >= y2:
+                        valid_selection = False
+                        break
+                    if x1 <= x1_old and y1 <= y1_old and x2 >= x2_old and y2 >= y2_old:
+                        to_remove.append(i)
+            if valid_selection:
+                for i in sorted(to_remove, reverse=True):
+                    self.selections.pop(i)
+
+        if valid_selection:
+            self.selections.append({
+                'monitor': monitor,
+                'scale_x': scale_x,
+                'scale_y': scale_y,
+                'coordinates': coordinates
+            })
 
         if not ctrl_pressed:
-            self.keyboard_event_queue.put(('return_selections'))
+            self.keyboard_event_queue.put('return_selections')
             return
 
         self.redraw_selections()
