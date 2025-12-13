@@ -117,6 +117,7 @@ class ScreenSelector:
             return
 
         self.selections.clear()
+        self.previous_coordinates.clear()
         self.redraw_selections()
 
     def return_empty(self):
