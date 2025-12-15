@@ -1421,7 +1421,7 @@ class ScreenshotThread(threading.Thread):
             elif self.screencapture_mode == 3:
                 saved_rectangles = self.parse_saved_coordinates(screen_capture_area, False)
                 if len(saved_rectangles) == 0:
-                    exit_with_error('Invalid coordinate set in screen_capture_area')
+                    exit_with_error('Invalid coordinate set(s) in screen_capture_area')
                 elif len(saved_rectangles) == 1:
                     x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
                     display_rectangles = f'{x1},{y1},{x2},{y2}'
@@ -1499,7 +1499,7 @@ class ScreenshotThread(threading.Thread):
                 elif len(screen_capture_window_area.replace('_', ',').split(',')) % 4 == 0:
                     saved_rectangles = self.parse_saved_coordinates(screen_capture_window_area, True)
                     if len(saved_rectangles) == 0:
-                        exit_with_error('Invalid coordinate set in screen_capture_window_area')
+                        exit_with_error('Invalid coordinate set(s) in screen_capture_window_area')
                     elif len(saved_rectangles) == 1:
                         x1, y1, x2, y2 = saved_rectangles[0]['coordinates']
                         display_rectangles = f'{x1},{y1},{x2},{y2}'
@@ -1794,6 +1794,7 @@ class ScreenshotThread(threading.Thread):
 
             if self.window_area_coordinates:
                 if window_size_changed:
+                    self.current_coordinates = None
                     self.window_area_coordinates = None
                     self.area_mask = None
                     logger.warning('Window size changed, discarding area selection')
