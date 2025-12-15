@@ -2135,5 +2135,4 @@ class OCRSpace:
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)
-
-
+        
