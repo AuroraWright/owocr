@@ -117,7 +117,7 @@ class ClipboardThread(threading.Thread):
             try:
                 if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP) and win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
                     img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
-                    image_queue.put((img, False))
+                    image_queue.put((img, False, None))
                 win32clipboard.CloseClipboard()
             except pywintypes.error:
                 pass
@@ -166,7 +166,7 @@ class ClipboardThread(threading.Thread):
                                     wait_counter += 1
                                 if NSPasteboardTypeTIFF in pasteboard.types():
                                     img = self.normalize_macos_clipboard(pasteboard.dataForType_(NSPasteboardTypeTIFF))
-                                    image_queue.put((img, False))
+                                    image_queue.put((img, False, None))
                     else:
                         old_img = img
                         try:
@@ -176,7 +176,7 @@ class ClipboardThread(threading.Thread):
                         else:
                             if (process_clipboard and isinstance(img, Image.Image) and \
                                 (not self.are_images_identical(img, old_img))):
-                                image_queue.put((img, False))
+                                image_queue.put((img, False, None))
 
                     process_clipboard = True
 
@@ -213,7 +213,7 @@ class DirectoryWatcher(threading.Thread):
                             old_paths.add(path_key)
 
                             if not paused.is_set():
-                                image_queue.put((path, False))
+                                image_queue.put((path, False, None))
 
             if not terminated.is_set():
                 time.sleep(sleep_time)
@@ -241,7 +241,7 @@ class WebsocketServerThread(threading.Thread):
         try:
             async for message in websocket:
                 if self.read and not paused.is_set():
-                    image_queue.put((message, False))
+                    image_queue.put((message, False, None))
                     try:
                         await websocket.send('True')
                     except websockets.exceptions.ConnectionClosedOK:
@@ -298,7 +298,7 @@ class UnixSocketRequestHandler(socketserver.BaseRequestHandler):
 
         try:
             if not paused.is_set():
-                image_queue.put((img, False))
+                image_queue.put((img, False, None))
                 conn.sendall(b'True')
             else:
                 conn.sendall(b'False')
@@ -1646,14 +1646,16 @@ class ScreenshotThread(threading.Thread):
 
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, window_id)
         if not window_list or len(window_list) == 0:
-            return None
+            return None, None
         window_info = window_list[0]
         bounds = window_info.get('kCGWindowBounds')
         if not bounds:
-            return None
+            return None, None
 
         width = bounds['Width']
         height = bounds['Height']
+        x = bounds['X']
+        y = bounds['Y']
         current_size = (width, height)
 
         if self.window_size != current_size:
@@ -1664,9 +1666,9 @@ class ScreenshotThread(threading.Thread):
             try:
                 result = self.screencapturekit_queue.get(timeout=0.5)
             except queue.Empty:
-                return None
+                return None, None
             if not result:
-                return None
+                return None, None
 
             if self.window_content_filter:
                 self.window_content_filter.dealloc()
@@ -1688,9 +1690,9 @@ class ScreenshotThread(threading.Thread):
         )
 
         try:
-            return self.screencapturekit_queue.get(timeout=5)
+            return self.screencapturekit_queue.get(timeout=5), (x, y)
         except queue.Empty:
-            return None
+            return None, None
 
     def macos_window_tracker(self):
         found = True
@@ -1721,11 +1723,11 @@ class ScreenshotThread(threading.Thread):
     def take_screenshot(self, ignore_active_status):
         if self.screencapture_mode == 2:
             if self.window_closed:
-                return False
+                return False, None
             if not ignore_active_status and not self.window_active:
-                return None
+                return None, None
             if not self.window_visible:
-                return None
+                return None, None
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
@@ -1739,9 +1741,24 @@ class ScreenshotThread(threading.Thread):
                         except:
                             img = None
                     else:
-                        img = self.capture_macos_window_screenshot(self.window_id)
+                        img, image_offset = self.capture_macos_window_screenshot(self.window_id)
                 if not img:
-                    return False
+                    return False, None
+
+                x = None
+                y = None
+                if self.old_macos_screenshot_api:
+                    with objc.autorelease_pool():
+                        window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_id)
+                        if window_list:
+                            bounds = window_list[0].get('kCGWindowBounds')
+                            if bounds:
+                                x = bounds['X']
+                                y = bounds['Y']
+                                
+                elif image_offset is not None:
+                    x, y = image_offset
+
             else:
                 try:
                     coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
@@ -1763,8 +1780,11 @@ class ScreenshotThread(threading.Thread):
                     bmpinfo = self.windows_window_save_bitmap.GetInfo()
                     bmpstr = self.windows_window_save_bitmap.GetBitmapBits(True)
                     img = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+
+                    x = coord_left
+                    y = coord_top
                 except pywintypes.error:
-                    return False
+                    return False, None
 
             window_size_changed = False
             if self.window_size != img.size:
@@ -1779,15 +1799,20 @@ class ScreenshotThread(threading.Thread):
                     logger.warning('Window size changed, discarding area selection')
                 else:
                     img = img.crop(self.window_area_coordinates)
+                    if x is not None and y is not None:
+                        x += self.window_area_coordinates[0]
+                        y += self.window_area_coordinates[1]
         else:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+            x = self.sct_params['left']
+            y = self.sct_params['top']
 
         if self.area_mask:
             white_bg = Image.new('RGB', img.size, (255, 255, 255))
             img = Image.composite(img, white_bg, self.area_mask)
 
-        return img
+        return img, (x, y) if x is not None and y is not None else None
 
     def cleanup_window_screen_capture(self):
         if sys.platform == 'win32':
@@ -1817,11 +1842,11 @@ class ScreenshotThread(threading.Thread):
                 self.window_content_filter.dealloc()
                 self.window_content_filter = None
 
-    def write_result(self, result, is_combo):
+    def write_result(self, result, is_combo, image_offset):
         if is_combo:
-            image_queue.put((result, True))
+            image_queue.put((result, True, image_offset))
         else:
-            periodic_screenshot_queue.put(result)
+            periodic_screenshot_queue.put((result, image_offset))
 
     def launch_coordinate_picker(self, init, must_return):
         if init:
@@ -1915,8 +1940,8 @@ class ScreenshotThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            img = self.take_screenshot(False)
-            self.write_result(img, is_combo)
+            img, image_offset = self.take_screenshot(False)
+            self.write_result(img, is_combo, image_offset)
 
             if img == False:
                 logger.info('The window was closed or an error occurred')
@@ -2073,7 +2098,7 @@ class OutputResult:
             lines.append('\n')
         return lines
 
-    def __call__(self, img_or_path, filter_text, auto_pause, notify):
+    def __call__(self, img_or_path, filter_text, auto_pause, notify, image_offset):
         engine_index_local = engine_index
         engine_instance = engine_instances[engine_index_local]
         two_pass_processing_active = False
@@ -2145,7 +2170,14 @@ class OutputResult:
             output_text = self._post_process(result_data_text, False)
 
         if self.json_output:
-            output_string = json.dumps(asdict(result_data), ensure_ascii=False)
+            result_dict = asdict(result_data)
+
+            if image_offset is not None:
+                image_props = result_dict['image_properties']
+                image_props['x'] = image_offset[0]
+                image_props['y'] = image_offset[1]
+
+            output_string = json.dumps(result_dict, ensure_ascii=False)
         else:
             output_string = output_text
 
@@ -2502,7 +2534,7 @@ def run():
 
         if process_queue:
             try:
-                img, is_screen_capture = image_queue.get_nowait()
+                img, is_screen_capture, image_offset = image_queue.get_nowait()
                 if not screen_capture_periodic and is_screen_capture:
                     filter_text = True
                 if is_screen_capture:
@@ -2516,7 +2548,7 @@ def run():
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
                 try:
-                    img = periodic_screenshot_queue.get(timeout=0.5)
+                    img, image_offset = periodic_screenshot_queue.get(timeout=0.5)
                     filter_text = True
                     last_screenshot_time = time.time()
                 except queue.Empty:
@@ -2524,7 +2556,7 @@ def run():
                     pass
 
         if img:
-            output_result(img, filter_text, auto_pause, notify)
+            output_result(img, filter_text, auto_pause, notify, image_offset)
             if isinstance(img, Path) and delete_images:
                 Path.unlink(img)
 
