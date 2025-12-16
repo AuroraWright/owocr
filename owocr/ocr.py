@@ -136,7 +136,7 @@ class Line:
     """Represents a single line of text, composed of words."""
     bounding_box: BoundingBox
     words: List[Word] = field(default_factory=list)
-    text: Optional[str] = None
+    text: Optional[str] = None # Optional: The entire text line, as reported by the OCR engine
 
 @dataclass
 class Paragraph:
@@ -150,12 +150,12 @@ class ImageProperties:
     """Stores the original dimensions of the processed image."""
     width: int
     height: int
+    x: Optional[int] = None # Optional: X position of the scanned area relative to the screen
+    y: Optional[int] = None # Optional: Y position of the scanned area relative to the screen
 
 @dataclass
 class EngineCapabilities:
-    """
-    Represents the features natively supported by the OCR engine.
-    """
+    """Represents the features natively supported by the OCR engine."""
     words: bool
     word_bounding_boxes: bool
     lines: bool
@@ -2135,4 +2135,3 @@ class OCRSpace:
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)
-        

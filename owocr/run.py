@@ -407,7 +407,7 @@ class TextFiltering:
     def find_changed_lines(self, pil_image, current_result):
         if self.frame_stabilization == 0:
             changed_lines = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
-            if changed_lines == None:
+            if changed_lines is None:
                 return 0, 0, None
             changed_lines_count = len(changed_lines)
             self.last_frame_data = (pil_image, current_result)
@@ -421,7 +421,7 @@ class TextFiltering:
                 return changed_lines_count, 0, None
 
         changed_lines_stabilization = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
-        if changed_lines_stabilization == None:
+        if changed_lines_stabilization is None:
             return 0, 0, None
 
         frames_match = len(changed_lines_stabilization) == 0
@@ -524,13 +524,13 @@ class TextFiltering:
 
         if (not frame_stabilization_active) or two_pass_processing_active:
             changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, recovered_lines_count, True)
-            if changed_lines == None:
+            if changed_lines is None:
                 return [], 0
             self.last_frame_text = current_result
             return changed_lines, changed_lines_count
 
         changed_lines_stabilization, changed_lines_stabilization_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, 0, False)
-        if changed_lines_stabilization == None:
+        if changed_lines_stabilization is None:
             return [], 0
 
         frames_match = changed_lines_stabilization_count == 0
@@ -579,7 +579,7 @@ class TextFiltering:
         for prev_line in previous_result:
             prev_text = self._normalize_line_for_comparison(prev_line)
             previous_text.append(prev_text)
-        if next_result != None:
+        if next_result is not None:
             for next_text in next_result:
                 previous_text.extend(next_text)
 
@@ -599,7 +599,7 @@ class TextFiltering:
             if not current_text:
                 continue
 
-            if next_result != None and len(current_text) < 3:
+            if next_result is not None and len(current_text) < 3:
                 text_similar = current_text in previous_text
             else:
                 text_similar = current_text in all_previous_text
@@ -609,13 +609,13 @@ class TextFiltering:
             if text_similar:
                 continue
 
-            if (recovered_lines == None or i - len_recovered_lines < 0) and recovered_lines_count > 0:
+            if (recovered_lines is None or i - len_recovered_lines < 0) and recovered_lines_count > 0:
                 if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
                     logger.opt(colors=True).debug("<magenta>Skipping recovered line: '{}'</>", changed_line)
                     recovered_lines_count -= 1
                     continue
 
-            if next_result != None:
+            if next_result is not None:
                 logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", changed_line)
 
             if first and len(current_text) > 3:
@@ -1521,7 +1521,7 @@ class ScreenshotThread(threading.Thread):
         if not is_window:
             monitors = self.sct.monitors[1:]
         else:
-            img = self.take_screenshot(True)
+            img, _ = self.take_screenshot(True)
 
         for coord_set in coordinate_sets:
             numbers = coord_set.split(',')
@@ -1728,6 +1728,9 @@ class ScreenshotThread(threading.Thread):
                 return None, None
             if not self.window_visible:
                 return None, None
+
+            x = None
+            y = None
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
@@ -1738,27 +1741,20 @@ class ScreenshotThread(threading.Thread):
                             raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
                             bpr = CGImageGetBytesPerRow(cg_image)
                             img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                            window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_id)
+                            if window_list:
+                                bounds = window_list[0].get('kCGWindowBounds')
+                                if bounds:
+                                    x = bounds['X']
+                                    y = bounds['Y']
                         except:
                             img = None
                     else:
                         img, image_offset = self.capture_macos_window_screenshot(self.window_id)
+                        if image_offset is not None:
+                            x, y = image_offset
                 if not img:
                     return False, None
-
-                x = None
-                y = None
-                if self.old_macos_screenshot_api:
-                    with objc.autorelease_pool():
-                        window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_id)
-                        if window_list:
-                            bounds = window_list[0].get('kCGWindowBounds')
-                            if bounds:
-                                x = bounds['X']
-                                y = bounds['Y']
-                                
-                elif image_offset is not None:
-                    x, y = image_offset
-
             else:
                 try:
                     coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
@@ -1900,7 +1896,7 @@ class ScreenshotThread(threading.Thread):
             self.window_area_coordinates = None
             self.area_mask = None
             logger.info('Launching window coordinate picker')
-            img = self.take_screenshot(True)
+            img, _ = self.take_screenshot(True)
             if not img:
                 window_selection = False
             else:
@@ -2099,7 +2095,7 @@ class OutputResult:
             lines.append('\n')
         return lines
 
-    def __call__(self, img_or_path, filter_text, auto_pause, notify, image_offset):
+    def __call__(self, img_or_path, image_offset, filter_text, auto_pause, notify):
         engine_index_local = engine_index
         engine_instance = engine_instances[engine_index_local]
         two_pass_processing_active = False
@@ -2154,6 +2150,9 @@ class OutputResult:
             return
 
         if isinstance(result_data, OcrResult):
+            if image_offset:
+                result_data.image_properties.x = int(image_offset[0])
+                result_data.image_properties.y = int(image_offset[1])
             if self.reorder_text:
                 result_data = self.filtering.order_paragraphs_and_lines(result_data)
             result_data_text = self._extract_lines_from_result(result_data)
@@ -2171,14 +2170,7 @@ class OutputResult:
             output_text = self._post_process(result_data_text, False)
 
         if self.json_output:
-            result_dict = asdict(result_data)
-
-            if image_offset is not None:
-                image_props = result_dict['image_properties']
-                image_props['x'] = image_offset[0]
-                image_props['y'] = image_offset[1]
-
-            output_string = json.dumps(result_dict, ensure_ascii=False)
+            output_string = json.dumps(asdict(result_data), ensure_ascii=False)
         else:
             output_string = output_text
 
@@ -2544,7 +2536,7 @@ def run():
             except queue.Empty:
                 pass
 
-        if img == None and screen_capture_periodic:
+        if img is None and screen_capture_periodic:
             if (not paused.is_set()) and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
@@ -2557,7 +2549,7 @@ def run():
                     pass
 
         if img:
-            output_result(img, filter_text, auto_pause, notify, image_offset)
+            output_result(img, image_offset, filter_text, auto_pause, notify)
             if isinstance(img, Path) and delete_images:
                 Path.unlink(img)
 
