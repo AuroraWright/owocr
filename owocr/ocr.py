@@ -150,8 +150,11 @@ class ImageProperties:
     """Stores the original dimensions of the processed image."""
     width: int
     height: int
-    x: Optional[int] = None # Optional: X position of the scanned area relative to the screen
-    y: Optional[int] = None # Optional: Y position of the scanned area relative to the screen
+    x: Optional[int] = None # Optional: X position of the scanned area relative to the screen(s)
+    y: Optional[int] = None # Optional: Y position of the scanned area relative to the screen(s)
+    window_handle: Optional[int] = None # Optional: handle of the scanned window
+    window_x: Optional[int] = None # Optional: X position of the scanned area relative to the window
+    window_y: Optional[int] = None # Optional: Y position of the scanned area relative to the window
 
 @dataclass
 class EngineCapabilities:

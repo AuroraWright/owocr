@@ -1448,13 +1448,13 @@ class ScreenshotThread(threading.Thread):
                     CGMainDisplayID()
                 window_list = CGWindowListCopyWindowInfo(kCGWindowListExcludeDesktopElements, kCGNullWindowID)
                 window_titles = []
-                window_ids = []
+                window_handles = []
                 window_index = None
                 for i, window in enumerate(window_list):
                     window_title = window.get(kCGWindowName, '')
                     if psutil.Process(window['kCGWindowOwnerPID']).name() not in ('Terminal', 'iTerm2'):
                         window_titles.append(window_title)
-                        window_ids.append(window['kCGWindowNumber'])
+                        window_handles.append(window['kCGWindowNumber'])
 
                 if screen_capture_area in window_titles:
                     window_index = window_titles.index(screen_capture_area)
@@ -1467,7 +1467,7 @@ class ScreenshotThread(threading.Thread):
                 if not window_index:
                     exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
 
-                self.window_id = window_ids[window_index]
+                self.window_handle = window_handles[window_index]
                 window_title = window_titles[window_index]
 
                 if self.screen_capture_only_active_windows:
@@ -1614,7 +1614,7 @@ class ScreenshotThread(threading.Thread):
         if not found:
             self.window_closed = True
 
-    def capture_macos_window_screenshot(self, window_id):
+    def capture_macos_window_screenshot(self):
         def shareable_content_completion_handler(shareable_content, error):
             if error:
                 self.screencapturekit_queue.put(None)
@@ -1622,7 +1622,7 @@ class ScreenshotThread(threading.Thread):
 
             target_window = None
             for window in shareable_content.windows():
-                if window.windowID() == window_id:
+                if window.windowID() == self.window_handle:
                     target_window = window
                     break
 
@@ -1644,7 +1644,7 @@ class ScreenshotThread(threading.Thread):
                 except:
                     self.screencapturekit_queue.put(None)
 
-        window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, window_id)
+        window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_handle)
         if not window_list or len(window_list) == 0:
             return None, None
         window_info = window_list[0]
@@ -1705,13 +1705,13 @@ class ScreenshotThread(threading.Thread):
                     if found and window.get(kCGWindowName, '') == 'Fullscreen Backdrop':
                         is_active = True
                         break
-                    if self.window_id == window['kCGWindowNumber']:
+                    if self.window_handle == window['kCGWindowNumber']:
                         found = True
                         if i == 0 or window_list[i-1].get(kCGWindowName, '') in ('Dock', 'Color Enforcer Window'):
                             is_active = True
                             break
                 if not found:
-                    window_list = CGWindowListCreateDescriptionFromArray([self.window_id])
+                    window_list = CGWindowListCreateDescriptionFromArray([self.window_handle])
                     if len(window_list) > 0:
                         found = True
             if found:
@@ -1731,17 +1731,19 @@ class ScreenshotThread(threading.Thread):
 
             x = None
             y = None
+            window_x = None
+            window_y = None
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:
                         try:
-                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_id], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
+                            cg_image = CGWindowListCreateImageFromArray(CGRectNull, [self.window_handle], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageNominalResolution)
                             width = CGImageGetWidth(cg_image)
                             height = CGImageGetHeight(cg_image)
                             raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
                             bpr = CGImageGetBytesPerRow(cg_image)
                             img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
-                            window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_id)
+                            window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_handle)
                             if window_list:
                                 bounds = window_list[0].get('kCGWindowBounds')
                                 if bounds:
@@ -1750,8 +1752,8 @@ class ScreenshotThread(threading.Thread):
                         except:
                             img = None
                     else:
-                        img, image_offset = self.capture_macos_window_screenshot(self.window_id)
-                        if image_offset is not None:
+                        img, image_offset = self.capture_macos_window_screenshot()
+                        if image_offset:
                             x, y = image_offset
                 if not img:
                     return False, None
@@ -1782,6 +1784,8 @@ class ScreenshotThread(threading.Thread):
                 except pywintypes.error:
                     return False, None
 
+            window_x = 0
+            window_y = 0
             window_size_changed = False
             if self.window_size != img.size:
                 if self.window_size:
@@ -1796,9 +1800,10 @@ class ScreenshotThread(threading.Thread):
                     logger.warning('Window size changed, discarding area selection')
                 else:
                     img = img.crop(self.window_area_coordinates)
+                    window_x, window_y, _, _ = self.window_area_coordinates
                     if x is not None and y is not None:
-                        x += self.window_area_coordinates[0]
-                        y += self.window_area_coordinates[1]
+                        x += window_x
+                        y += window_y
         else:
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
@@ -1809,7 +1814,7 @@ class ScreenshotThread(threading.Thread):
             white_bg = Image.new('RGB', img.size, (255, 255, 255))
             img = Image.composite(img, white_bg, self.area_mask)
 
-        return img, (x, y) if x is not None and y is not None else None
+        return img, (x, y, self.window_handle, window_x, window_y)
 
     def cleanup_window_screen_capture(self):
         if sys.platform == 'win32':
@@ -1839,11 +1844,11 @@ class ScreenshotThread(threading.Thread):
                 self.window_content_filter.dealloc()
                 self.window_content_filter = None
 
-    def write_result(self, result, is_combo, image_offset):
+    def write_result(self, result, is_combo, screen_capture_properties):
         if is_combo:
-            image_queue.put((result, True, image_offset))
+            image_queue.put((result, True, screen_capture_properties))
         else:
-            periodic_screenshot_queue.put((result, image_offset))
+            periodic_screenshot_queue.put((result, screen_capture_properties))
 
     def launch_coordinate_picker(self, init, must_return):
         if init:
@@ -1937,8 +1942,8 @@ class ScreenshotThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            img, image_offset = self.take_screenshot(False)
-            self.write_result(img, is_combo, image_offset)
+            img, screen_capture_properties = self.take_screenshot(False)
+            self.write_result(img, is_combo, screen_capture_properties)
 
             if img == False:
                 logger.info('The window was closed or an error occurred')
@@ -2095,7 +2100,7 @@ class OutputResult:
             lines.append('\n')
         return lines
 
-    def __call__(self, img_or_path, image_offset, filter_text, auto_pause, notify):
+    def __call__(self, img_or_path, screen_capture_properties, filter_text, auto_pause, notify):
         engine_index_local = engine_index
         engine_instance = engine_instances[engine_index_local]
         two_pass_processing_active = False
@@ -2150,9 +2155,16 @@ class OutputResult:
             return
 
         if isinstance(result_data, OcrResult):
-            if image_offset:
-                result_data.image_properties.x = int(image_offset[0])
-                result_data.image_properties.y = int(image_offset[1])
+            if screen_capture_properties:
+                x, y, window_handle, window_x, window_y = screen_capture_properties
+                if x is not None and y is not None:
+                    result_data.image_properties.x = int(x)
+                    result_data.image_properties.y = int(y)
+                if window_handle:
+                    result_data.image_properties.window_handle = int(window_handle)
+                if window_x is not None and window_y is not None:
+                    result_data.image_properties.window_x = int(window_x)
+                    result_data.image_properties.window_y = int(window_y)
             if self.reorder_text:
                 result_data = self.filtering.order_paragraphs_and_lines(result_data)
             result_data_text = self._extract_lines_from_result(result_data)
@@ -2527,7 +2539,7 @@ def run():
 
         if process_queue:
             try:
-                img, is_screen_capture, image_offset = image_queue.get_nowait()
+                img, is_screen_capture, screen_capture_properties = image_queue.get_nowait()
                 if not screen_capture_periodic and is_screen_capture:
                     filter_text = True
                 if is_screen_capture:
@@ -2541,7 +2553,7 @@ def run():
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
                 try:
-                    img, image_offset = periodic_screenshot_queue.get(timeout=0.5)
+                    img, screen_capture_properties = periodic_screenshot_queue.get(timeout=0.5)
                     filter_text = True
                     last_screenshot_time = time.time()
                 except queue.Empty:
@@ -2549,7 +2561,7 @@ def run():
                     pass
 
         if img:
-            output_result(img, image_offset, filter_text, auto_pause, notify)
+            output_result(img, screen_capture_properties, filter_text, auto_pause, notify)
             if isinstance(img, Path) and delete_images:
                 Path.unlink(img)
 
