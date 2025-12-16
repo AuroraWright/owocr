@@ -1380,6 +1380,7 @@ class ScreenshotThread(threading.Thread):
         self.coordinate_selector_combo_enabled = config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
+        self.window_handle = None
         self.window_active = True
         self.window_visible = True
         self.window_closed = False
