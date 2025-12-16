@@ -1986,7 +1986,7 @@ class MeikiOCR:
         if not img:
             return (False, 'Invalid image provided')
 
-        image_np = np.array(img.convert('RGB'))[:, :, ::-1]
+        image_np = np.array(img.convert('RGB'))
 
         read_results = self.model.run_ocr(image_np)
         ocr_result = self._to_generic_result(read_results, img.width, img.height)
@@ -2135,3 +2135,4 @@ class OCRSpace:
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)
+        
