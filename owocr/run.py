@@ -1722,6 +1722,10 @@ class ScreenshotThread(threading.Thread):
             self.window_closed = True
 
     def take_screenshot(self, ignore_active_status):
+        x = None
+        y = None
+        window_x = None
+        window_y = None
         if self.screencapture_mode == 2:
             if self.window_closed:
                 return False, None
@@ -1729,11 +1733,6 @@ class ScreenshotThread(threading.Thread):
                 return None, None
             if not self.window_visible:
                 return None, None
-
-            x = None
-            y = None
-            window_x = None
-            window_y = None
             if sys.platform == 'darwin':
                 with objc.autorelease_pool():
                     if self.old_macos_screenshot_api:

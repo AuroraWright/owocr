@@ -151,7 +151,7 @@ class Config:
         args = parser.parse_args()
         self.__provided_cli_args = vars(args)
         config = configparser.ConfigParser()
-        res = config.read(self.config_path)
+        res = config.read(self.config_path, encoding='utf-8')
 
         if len(res) == 0:
             try:
