@@ -1991,7 +1991,7 @@ class MeikiOCR:
 
         image_np = np.array(img.convert('RGB'))
 
-        read_results = self.model.run_ocr(image_np)
+        read_results = self.model.run_ocr(image_np, punct_conf_factor=0.2)
         ocr_result = self._to_generic_result(read_results, img.width, img.height)
 
         x = (True, ocr_result)
