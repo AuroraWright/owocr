@@ -1048,10 +1048,11 @@ class TextFiltering:
             )
 
             for component in components:
+                original_indices = [indices[i] for i in component]
                 if len(component) == 1:
-                    merged_paragraphs.append(paragraphs[component[0]]['paragraph_obj'])
+                    merged_paragraphs.append(paragraphs[original_indices[0]]['paragraph_obj'])
                 else:
-                    component_paragraphs = [paragraphs[i] for i in component]
+                    component_paragraphs = [paragraphs[i] for i in original_indices]
                     if self.debug_filtering:
                         logger.opt(colors=True).debug("<green>Merged paragraphs vertical: '{}'</>", is_vertical)
                         for p in component_paragraphs:
