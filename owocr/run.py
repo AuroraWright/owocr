@@ -1641,7 +1641,7 @@ class ScreenshotThread(threading.Thread):
                     height = CGImageGetHeight(image)
                     raw_data = CGDataProviderCopyData(CGImageGetDataProvider(image))
                     bpr = CGImageGetBytesPerRow(image)
-                    img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                    img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
                     self.screencapturekit_queue.put(img)
                 except:
                     self.screencapturekit_queue.put(None)
@@ -1743,7 +1743,7 @@ class ScreenshotThread(threading.Thread):
                             height = CGImageGetHeight(cg_image)
                             raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
                             bpr = CGImageGetBytesPerRow(cg_image)
-                            img = Image.frombuffer('RGBA', (width, height), bytes(raw_data), 'raw', 'BGRA', bpr, 1)
+                            img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
                             window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_handle)
                             if window_list:
                                 bounds = window_list[0].get('kCGWindowBounds')
