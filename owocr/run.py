@@ -100,7 +100,7 @@ class ClipboardThread(threading.Thread):
             1.0
         )
 
-        return bytes(new_image.TIFFRepresentation())
+        return bytearray(new_image.TIFFRepresentation())
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
