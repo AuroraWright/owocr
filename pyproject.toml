@@ -20,7 +20,6 @@ dependencies = [
     "loguru",
     "numpy",
     "Pillow>=10.0.0",
-    "pyperclipfix",
     "pynput<=1.7.8",
     "websockets>=14.0",
     "desktop-notifier>=6.1.0",
@@ -28,7 +27,8 @@ dependencies = [
     "psutil",
     "curl_cffi",
     "pywin32;platform_system=='Windows'",
-    "pyobjc;platform_system=='Darwin'"
+    "pyobjc;platform_system=='Darwin'",
+    "pyperclipfix;platform_system=='Linux'"
 ]
 
 [project.optional-dependencies]

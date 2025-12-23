@@ -48,11 +48,13 @@ except ImportError:
 try:
     import objc
     import platform
-    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy
+    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
+                       NSPasteboardTypeTIFF
     from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
                        CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
                        kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
                        kCGWindowImageNominalResolution
+    from Foundation import NSString
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
 except ImportError:
     pass
@@ -107,17 +109,24 @@ class ClipboardThread(threading.Thread):
         timestamp = time.time()
         if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused.is_set():
             self.last_update = timestamp
+            wait_counter = 0
             while True:
                 try:
                     win32clipboard.OpenClipboard()
                     break
                 except pywintypes.error:
                     pass
+                if wait_counter == 3:
+                    return 0
                 time.sleep(0.1)
+                wait_counter += 1
             try:
                 if win32clipboard.IsClipboardFormatAvailable(win32con.CF_BITMAP) and win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_DIB):
                     img = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
                     image_queue.put((img, False, None))
+            except pywintypes.error:
+                pass
+            try:
                 win32clipboard.CloseClipboard()
             except pywintypes.error:
                 pass
@@ -141,7 +150,6 @@ class ClipboardThread(threading.Thread):
         else:
             is_macos = sys.platform == 'darwin'
             if is_macos:
-                from AppKit import NSPasteboard, NSPasteboardTypeTIFF
                 pasteboard = NSPasteboard.generalPasteboard()
                 count = pasteboard.changeCount()
             else:
@@ -2103,6 +2111,37 @@ class OutputResult:
             lines.append('\n')
         return lines
 
+    def _copy_to_clipboard(self, string):
+        if sys.platform == 'win32':
+            wait_counter = 0
+            while True:
+                try:
+                    win32clipboard.OpenClipboard()
+                    break
+                except pywintypes.error:
+                    pass
+                if wait_counter == 3:
+                    return
+                time.sleep(0.1)
+                wait_counter += 1
+            try:
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, string)
+            except pywintypes.error:
+                pass
+            try:
+                win32clipboard.CloseClipboard()
+            except pywintypes.error:
+                pass
+        elif sys.platform == 'Darwin':
+            with objc.autorelease_pool():
+                pb = NSPasteboard.generalPasteboard()
+                pb.clearContents()
+                ns_string = NSString.stringWithString_(string)
+                pb.writeObjects_([ns_string])
+        else:
+            pyperclipfix.copy(string)
+
     def __call__(self, img_or_path, screen_capture_properties, filter_text, auto_pause, notify):
         engine_index_local = engine_index
         engine_instance = engine_instances[engine_index_local]
@@ -2205,7 +2244,7 @@ class OutputResult:
         if self.write_to == 'websocket':
             websocket_server_thread.send_text(output_string)
         elif self.write_to == 'clipboard':
-            pyperclipfix.copy(output_string)
+            self._copy_to_clipboard(output_string)
         else:
             with Path(self.write_to).open('a', encoding='utf-8') as f:
                 f.write(output_string + '\n')
