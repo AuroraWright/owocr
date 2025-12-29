@@ -1485,7 +1485,7 @@ class ScreenshotThread(threading.Thread):
                     self.macos_window_tracker_instance.start()
                 logger.info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
-                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
+                self.window_handle, window_title, self.is_dpi_unaware = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
                     exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
@@ -1591,6 +1591,15 @@ class ScreenshotThread(threading.Thread):
 
         return mask
 
+    def _is_window_dpi_unaware(self, hwnd):
+        try:
+            DPI_AWARENESS_UNAWARE = 0
+            dpi_awareness_context = ctypes.windll.user32.GetWindowDpiAwarenessContext(hwnd)
+            dpi_awareness = ctypes.windll.user32.GetAwarenessFromDpiAwarenessContext(dpi_awareness_context)
+            return dpi_awareness == DPI_AWARENESS_UNAWARE
+        except (AttributeError):
+            return None
+
     def get_windows_window_handle(self, window_title):
         def callback(hwnd, window_title_part):
             window_title = win32gui.GetWindowText(hwnd)
@@ -1600,16 +1609,16 @@ class ScreenshotThread(threading.Thread):
 
         handle = win32gui.FindWindow(None, window_title)
         if handle:
-            return (handle, window_title)
+            return (handle, window_title, self._is_window_dpi_unaware(handle))
 
         handles = []
         win32gui.EnumWindows(callback, window_title)
-        for handle in handles:
-            _, pid = win32process.GetWindowThreadProcessId(handle[0])
+        for handle, window_title in handles:
+            _, pid = win32process.GetWindowThreadProcessId(handle)
             if psutil.Process(pid).name().lower() not in ('cmd.exe', 'powershell.exe', 'windowsterminal.exe'):
-                return handle
+                return (handle, window_title, self._is_window_dpi_unaware(handle))
 
-        return (None, None)
+        return (None, None, None)
 
     def windows_window_tracker(self):
         found = True
@@ -1736,6 +1745,8 @@ class ScreenshotThread(threading.Thread):
         y = None
         window_x = None
         window_y = None
+        scale_x = None
+        scale_y = None
         if self.screencapture_mode == 2:
             if self.window_closed:
                 return False, None
@@ -1773,7 +1784,22 @@ class ScreenshotThread(threading.Thread):
                     coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
                     coord_width = right - coord_left
                     coord_height = bottom - coord_top
+                    
+                    if self.is_dpi_unaware:
+                        try:
+                            MONITOR_DEFAULTTONEAREST = 2
+                            MDT_EFFECTIVE_DPI = 0
 
+                            monitor_handle = ctypes.windll.user32.MonitorFromWindow(self.window_handle, MONITOR_DEFAULTTONEAREST)
+                            dpi_x = ctypes.c_uint()
+                            dpi_y = ctypes.c_uint()
+                            ctypes.windll.shcore.GetDpiForMonitor(monitor_handle, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+
+                            scale_x = dpi_x.value / 96.0
+                            scale_y = dpi_y.value / 96.0
+                        except AttributeError:
+                            pass
+                        
                     current_size = (coord_width, coord_height)
                     if self.window_size != current_size:
                         self.cleanup_window_screen_capture()
@@ -1825,7 +1851,7 @@ class ScreenshotThread(threading.Thread):
             white_bg = Image.new('RGB', img.size, (255, 255, 255))
             img = Image.composite(img, white_bg, self.area_mask)
 
-        return img, (x, y, self.window_handle, window_x, window_y)
+        return img, (x, y, self.window_handle, window_x, window_y, scale_x, scale_y)
 
     def cleanup_window_screen_capture(self):
         if sys.platform == 'win32':
@@ -2198,7 +2224,7 @@ class OutputResult:
 
         if isinstance(result_data, OcrResult):
             if screen_capture_properties:
-                x, y, window_handle, window_x, window_y = screen_capture_properties
+                x, y, window_handle, window_x, window_y, scale_x, scale_y = screen_capture_properties
                 if x is not None and y is not None:
                     result_data.image_properties.x = int(x)
                     result_data.image_properties.y = int(y)
@@ -2207,6 +2233,9 @@ class OutputResult:
                 if window_x is not None and window_y is not None:
                     result_data.image_properties.window_x = int(window_x)
                     result_data.image_properties.window_y = int(window_y)
+                if scale_x is not None and scale_y is not None:
+                    result_data.image_properties.scale_x = scale_x
+                    result_data.image_properties.scale_y = scale_y
             if self.reorder_text:
                 result_data = self.filtering.order_paragraphs_and_lines(result_data)
             result_data_text = self._extract_lines_from_result(result_data)

@@ -155,6 +155,8 @@ class ImageProperties:
     window_handle: Optional[int] = None # Optional: handle of the scanned window
     window_x: Optional[int] = None # Optional: X position of the scanned area relative to the window
     window_y: Optional[int] = None # Optional: Y position of the scanned area relative to the window
+    scale_x: Optional[float] = None # Optional: horizontal DPI scaling factor, only set for DPI-unaware windows
+    scale_y: Optional[float] = None # Optional: vertical DPI scaling factor, only set for DPI-unaware windows
 
 @dataclass
 class EngineCapabilities:
