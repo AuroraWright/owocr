@@ -1,10 +1,10 @@
 import multiprocessing
 import queue
-import mss
 from loguru import logger
 from PIL import Image
 from pynput import keyboard
 import sys
+
 try:
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 except ImportError:
@@ -20,8 +20,6 @@ except:
 
 class ScreenSelector:
     def __init__(self, result_queue, command_queue):
-        self.sct = mss.mss()
-        self.monitors = self.sct.monitors[1:]
         self.root = None
         self.result_queue = result_queue
         self.command_queue = command_queue
@@ -321,17 +319,17 @@ class ScreenSelector:
 
         self._setup_selection_canvas(canvas, img_tk, scale_x, scale_y, monitor)
 
-    def create_window_from_image(self, img):
+    def create_window_from_image(self, monitors, img):
         original_width, original_height = img.size
         display_monitor = None
 
-        for monitor in self.monitors:
+        for monitor in monitors:
             if (monitor['width'] >= original_width and monitor['height'] >= original_height):
                 display_monitor = monitor
                 break
 
         if not display_monitor:
-            display_monitor = self.monitors[0]
+            display_monitor = monitors[0]
 
         window_width = min(original_width, display_monitor['width'])
         window_height = min(original_height, display_monitor['height'])
@@ -350,9 +348,7 @@ class ScreenSelector:
 
         self._create_selection_window(img, geometry, scale_x, scale_y, None)
 
-    def create_window(self, monitor):
-        screenshot = self.sct.grab(monitor)
-        img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+    def create_window(self, monitor, img):
         original_width, original_height = img.size
 
         geometry = f"{monitor['width']}x{monitor['height']}+{monitor['left']}+{monitor['top']}"
@@ -379,7 +375,7 @@ class ScreenSelector:
     def start(self):
         while True:
             command = self.command_queue.get()
-            image, coordinates = command
+            image, coordinates, is_window = command
 
             if image == False:
                 break
@@ -397,11 +393,12 @@ class ScreenSelector:
 
             self.root.withdraw()
 
-            if image:
-                self.create_window_from_image(image)
+            monitors, images = image
+            if is_window:
+                self.create_window_from_image(monitors, images)
             else:
-                for monitor in self.monitors:
-                    self.create_window(monitor)
+                for i, monitor in enumerate(monitors):
+                    self.create_window(monitor, images[i])
 
             self.root.after(50, self.process_keyboard_events)
             self.root.mainloop()
@@ -416,7 +413,7 @@ selector_process = None
 result_queue = None
 command_queue = None
 
-def get_screen_selection(pil_image, previous_coordinates, permanent_process):
+def get_screen_selection(image_data, previous_coordinates, is_window, permanent_process):
     global selector_process, result_queue, command_queue
 
     if not selector_available:
@@ -430,7 +427,7 @@ def get_screen_selection(pil_image, previous_coordinates, permanent_process):
         selector_process.daemon = True
         selector_process.start()
 
-    command_queue.put((pil_image, previous_coordinates))
+    command_queue.put((image_data, previous_coordinates, is_window))
 
     result = None
     while result is None and selector_process.is_alive():
@@ -445,5 +442,5 @@ def get_screen_selection(pil_image, previous_coordinates, permanent_process):
 
 def terminate_selector_if_running():
     if selector_process and selector_process.is_alive():
-        command_queue.put((False, None))
+        command_queue.put((False, None, None))
         selector_process.join()

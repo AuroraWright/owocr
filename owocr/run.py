@@ -17,7 +17,6 @@ import urllib.request
 
 import numpy as np
 import pyperclipfix
-import mss
 import psutil
 import asyncio
 import websockets
@@ -58,6 +57,12 @@ try:
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
 except ImportError:
     pass
+
+if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+    from . import wayland_mss_shim
+    mss = wayland_mss_shim.MSSModuleShim()
+else:
+    import mss
 
 
 class ClipboardThread(threading.Thread):
@@ -838,13 +843,13 @@ class TextFiltering:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
             line_width = max(bbox1.width, bbox2.width)
 
-            return vertical_overlap > 0.7 and horizontal_distance < line_width * 2
+            return vertical_overlap > 0.1 and horizontal_distance < line_width * 2
         else:
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             line_height = max(bbox1.height, bbox2.height)
 
-            return horizontal_overlap > 0.7 and vertical_distance < line_height * 2
+            return horizontal_overlap > 0.1 and vertical_distance < line_height * 2
 
     def _merge_overlapping_lines(self, lines, is_vertical):
         if len(lines) < 2:
@@ -937,15 +942,13 @@ class TextFiltering:
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
-            return (horizontal_overlap > 0.7 and
-                    vertical_overlap < 0.4)
+            return horizontal_overlap > 0.7 and vertical_overlap < 0.4
 
         else:
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
 
-            return (vertical_overlap > 0.7 and
-                    horizontal_overlap < 0.4)
+            return vertical_overlap > 0.7 and horizontal_overlap < 0.4
 
     def _furigana_filter(self, lines, is_vertical):
         filtered_lines = []
@@ -1083,12 +1086,12 @@ class TextFiltering:
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
 
-            return (vertical_distance <= 3 * character_size and horizontal_overlap > 0.4)
+            return vertical_distance <= 3 * character_size and horizontal_overlap > 0.4
         else:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
-            return (horizontal_distance <= 3 * character_size and vertical_overlap > 0.4)
+            return horizontal_distance <= 3 * character_size and vertical_overlap > 0.4
 
     def _merge_multiple_paragraphs(self, paragraphs, is_vertical):
         merged_lines = []
@@ -1397,6 +1400,11 @@ class ScreenshotThread(threading.Thread):
         self.current_coordinates = None
         self.area_mask = None
 
+        try:
+            self.sct = mss.mss()
+        except mss.exception.ScreenShotError as e:
+            exit_with_error(f'Error initializing screenshots: {e}')
+
         if screen_capture_area == '':
             self.screencapture_mode = 0
         elif screen_capture_area.startswith('screen_'):
@@ -1408,14 +1416,15 @@ class ScreenshotThread(threading.Thread):
         elif len(screen_capture_area.replace('_', ',').split(',')) % 4 == 0:
             self.screencapture_mode = 3
         else:
-            self.screencapture_mode = 2
+            if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+                self.screencapture_mode = 0
+            else:
+                self.screencapture_mode = 2
 
         if self.coordinate_selector_combo_enabled:
             self.launch_coordinate_picker(True, False)
 
         if self.screencapture_mode != 2:
-            self.sct = mss.mss()
-
             if self.screencapture_mode == 0:
                 self.launch_coordinate_picker(False, True)
             elif self.screencapture_mode == 1:
@@ -1500,7 +1509,7 @@ class ScreenshotThread(threading.Thread):
                 self.windows_window_tracker_instance.start()
                 logger.info(f'Selected window: {window_title}')
             else:
-                exit_with_error('Window capture is only currently supported on Windows and macOS')
+                exit_with_error('Window capture is only currently supported on Windows, macOS and Linux + Wayland')
 
             screen_capture_window_area = config.get_general('screen_capture_window_area')
             if screen_capture_window_area != 'window':
@@ -1816,6 +1825,10 @@ class ScreenshotThread(threading.Thread):
                         x += window_x
                         y += window_y
         else:
+            try:
+                self.sct = mss.mss()
+            except mss.exception.ScreenShotError:
+                return False, None
             sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
             x = self.sct_params['left']
@@ -1864,11 +1877,20 @@ class ScreenshotThread(threading.Thread):
     def launch_coordinate_picker(self, init, must_return):
         if init:
             logger.info('Preloading coordinate picker')
-            get_screen_selection(True, None, True)
+            get_screen_selection(True, None, None, True)
             return
+        monitors = self.sct.monitors[1:]
         if self.screencapture_mode != 2:
             logger.info('Launching screen coordinate picker')
-            screen_selection = get_screen_selection(None, self.current_coordinates, self.coordinate_selector_combo_enabled)
+            monitor_images = []
+            for monitor in monitors:
+                try:
+                    sct_img = self.sct.grab(monitor)
+                except mss.exception.ScreenShotError:
+                    exit_with_error(f'Error initializing picker window')
+                img = Image.frombytes('RGB', sct_img.size, sct_img.rgb)
+                monitor_images.append(img)
+            screen_selection = get_screen_selection((monitors, monitor_images), self.current_coordinates, False, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if must_return:
                     exit_with_error('Picker window was closed or an error occurred')
@@ -1916,7 +1938,7 @@ class ScreenshotThread(threading.Thread):
             if not img:
                 window_selection = False
             else:
-                window_selection = get_screen_selection(img, self.current_coordinates, self.coordinate_selector_combo_enabled)
+                window_selection = get_screen_selection((monitors, img), self.current_coordinates, True, self.coordinate_selector_combo_enabled)
             if not window_selection:
                 logger.warning('Picker window was closed or an error occurred, selecting whole window')
                 self.current_coordinates = None
@@ -1942,7 +1964,10 @@ class ScreenshotThread(threading.Thread):
 
     def run(self):
         if self.screencapture_mode != 2:
-            self.sct = mss.mss()
+            try:
+                self.sct = mss.mss()
+            except mss.exception.ScreenShotError as e:
+                exit_with_error(f'Error initializing screenshots: {e}')
         while not terminated.is_set():
             if coordinate_selector_event.is_set():
                 self.launch_coordinate_picker(False, False)
@@ -2142,6 +2167,15 @@ class OutputResult:
         else:
             pyperclipfix.copy(string)
 
+    def _send_output(self, string):
+        if self.write_to == 'websocket':
+            websocket_server_thread.send_text(string)
+        elif self.write_to == 'clipboard':
+            self._copy_to_clipboard(string)
+        else:
+            with Path(self.write_to).open('a', encoding='utf-8') as f:
+                f.write(string + '\n')
+
     def __call__(self, img_or_path, screen_capture_properties, filter_text, auto_pause, notify):
         engine_index_local = engine_index
         engine_instance = engine_instances[engine_index_local]
@@ -2241,13 +2275,7 @@ class OutputResult:
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
 
-        if self.write_to == 'websocket':
-            websocket_server_thread.send_text(output_string)
-        elif self.write_to == 'clipboard':
-            self._copy_to_clipboard(output_string)
-        else:
-            with Path(self.write_to).open('a', encoding='utf-8') as f:
-                f.write(output_string + '\n')
+        self._send_output(output_string)
 
         if auto_pause_handler and auto_pause:
             if not paused.is_set():
