@@ -28,7 +28,9 @@ dependencies = [
     "curl_cffi",
     "pywin32;platform_system=='Windows'",
     "pyobjc;platform_system=='Darwin'",
-    "pyperclipfix;platform_system=='Linux'"
+    "pyperclipfix;platform_system=='Linux'",
+    "PyGObject;platform_system=='Linux'",
+    "dbus-python;platform_system=='Linux'",
 ]
 
 [project.optional-dependencies]

@@ -27,7 +27,7 @@ This default behavior monitors the clipboard for images and outputs recognized t
 - Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
 - Multiple output destinations: clipboard, text files, and websockets
 - Pause/unpause with `p` or terminate with `t`/`q` in the terminal, switch between engines with `s` or the engine-specific keys (from the engine list below)
-- Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine with the `-es` option: `-es=oneocr` on Windows and `-es=alivetext` on macOS. With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
+- Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine with the `-es` option: `-es=oneocr` on Windows and `-es=alivetext` on macOS. With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
 - Multiple configurable keyboard combinations to control owocr from anywhere, including pausing, switching engines, taking a screenshot of the selected screen/window and running the automatic tool to re-select an area of the screen/window via drag and drop
 - Read from a unix domain socket `/tmp/owocr.sock` on macOS/Linux
 - Furigana filter, works by default with Japanese text (both vertical and horizontal)
@@ -50,6 +50,17 @@ There are many more options and customization features. For complete documentati
 - See a sample config file: [owocr_config.ini](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 
 The command-line options/config file allow you to configure OCR providers, hotkeys, screen capture settings, notifications, and much more.
+
+## Notes about Linux support
+
+While I've done all I could to support Linux (specifically Wayland), not everything might work with all setups. Specifically:
+
+- Reading images from clipboard on Wayland requires a compositor which supports the extensions "wlr_data_control" or "ext-data-control" and an updated version of wl-clipboard. There is no way around this, as you can only access the clipboard from a focused window otherwise.
+[wlr_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).
+Currently, you probably need to build wl-clipboard from source yourself using [these instructions](https://github.com/bugaevc/wl-clipboard/blob/master/BUILDING.md) - note you also need to have a very recent version of [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols), which probably means building that first before wl-clipboard).
+owocr will error out if your setup is not compatible.
+- Reading from screen capture works now on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr. By default owocr's coordinate picker will be launched to select one/more areas, as explained above. Using `owocr -r=screencapture -sa=screen_1` will use the whole selection. Using manual window names in `-sa=` is not supported and will be ignored.
+- X11 partially works but uses more resources for scanning the clipboard and doesn't support window capturing at all (only screens/screen selections).
 
 # Supported engines
 
