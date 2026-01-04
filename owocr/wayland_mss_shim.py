@@ -238,7 +238,6 @@ class ScreenCastManager:
         self.selected_event.set()
         self.ready_event.clear()
 
-
 class MSSWaylandShim:
     def __init__(self):
         global screencast
@@ -325,7 +324,6 @@ class MSSWaylandShim:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
-
 
 class MSSModuleShim:
     def mss(self):
