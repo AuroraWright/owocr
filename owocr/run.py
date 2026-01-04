@@ -68,7 +68,7 @@ else:
 class ClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
-        self.delay_secs = config.get_general('delay_secs')
+        self.delay_secs = config.get_general('delay_seconds')
         self.last_update = time.time()
 
     def are_images_identical(self, img1, img2):
@@ -153,12 +153,48 @@ class ClipboardThread(threading.Thread):
             ctypes.windll.user32.AddClipboardFormatListener(hwnd)
             win32gui.PumpMessages()
         else:
-            is_macos = sys.platform == 'darwin'
-            if is_macos:
-                pasteboard = NSPasteboard.generalPasteboard()
-                count = pasteboard.changeCount()
+            if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+                import subprocess
+                socket_path = Path('/tmp/owocr_clipboard.sock')
+
+                if socket_path.exists():
+                    try:
+                        test_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                        test_socket.connect(str(socket_path))
+                        test_socket.close()
+                        exit_with_error('Unix domain socket is already in use')
+                    except ConnectionRefusedError:
+                        socket_path.unlink()
+
+                try:
+                    self.wl_paste = subprocess.Popen(
+                        ['wl-paste', '-t', 'image', '-w', 'nc', '-U', socket_path],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    time.sleep(0.5)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    exit_with_error('wl-paste not found')
+                return_code = self.wl_paste.poll()
+                if return_code is not None and return_code != 0:
+                    stderr_output = self.wl_paste.stderr.read()
+                    exit_with_error(f'wl-paste exited with return code {return_code}: {stderr_output.decode().strip()}')
+
+                server = socketserver.UnixStreamServer(str(socket_path), UnixSocketRequestHandler)
+                server.timeout = 0.5
+
+                while not terminated.is_set():
+                    server.handle_request()
+                self.wl_paste.kill()
+                server.server_close()
             else:
-                from PIL import ImageGrab
+                is_macos = sys.platform == 'darwin'
+                if is_macos:
+                    pasteboard = NSPasteboard.generalPasteboard()
+                    count = pasteboard.changeCount()
+                else:
+                    from PIL import ImageGrab
+
             process_clipboard = False
             img = None
 
@@ -297,11 +333,9 @@ class UnixSocketRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
         conn = self.request
         conn.settimeout(3)
-        data = conn.recv(4)
-        img_size = int.from_bytes(data)
         img = bytearray()
         try:
-            while len(img) < img_size:
+            while True:
                 data = conn.recv(4096)
                 if not data:
                     break

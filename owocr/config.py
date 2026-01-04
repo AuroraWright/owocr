@@ -100,7 +100,7 @@ class Config:
         'engines': [],
         'logger_format': '<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>',
         'engine_color': 'cyan',
-        'delay_secs': 0.5,
+        'delay_seconds': 0.5,
         'websocket_port': 7331,
         'notifications': False,
         'combo_pause': '',
