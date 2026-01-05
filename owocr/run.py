@@ -332,19 +332,33 @@ class WebsocketServerThread(threading.Thread):
 class UnixSocketRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
         conn = self.request
-        conn.settimeout(3)
+        conn.settimeout(0.5)
         img = bytearray()
+        magic = b'IMG_SIZE'
         try:
-            while True:
-                data = conn.recv(4096)
+            img_size = sys.maxsize
+            header = conn.recv(len(magic))
+            if header == magic:
+                size_bytes = conn.recv(8)
+                if not size_bytes or len(size_bytes) < 8:
+                    raise ValueError
+                img_size = int.from_bytes(size_bytes)
+            else:
+                img.extend(header)
+            bytes_received = 0
+            while bytes_received < img_size:
+                remaining = img_size - bytes_received
+                chunk_size = min(4096, remaining)
+                data = conn.recv(chunk_size)
                 if not data:
                     break
                 img.extend(data)
-        except TimeoutError:
+                bytes_received += len(data)
+        except (TimeoutError, ValueError):
             pass
 
         try:
-            if not paused.is_set():
+            if not paused.is_set() and img:
                 image_queue.put((img, False, None))
                 conn.sendall(b'True')
             else:
