@@ -44,7 +44,7 @@ parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.S
                     help='Area to target when reading with screen capture. Can be either empty (automatic selector, hold CTRL/cmd to select multiple areas, click on an area to delete it, click outside of areas/press Backspace to reset), one or more sets of rectangle coordinates x1,y1,x2,y2_x1,y1,x2,y2[...], "screen_N" (captures a whole screen, where N is the screen number starting from 1) or a window name on Windows/macOS (the first matching window title will be used).')
 parser.add_argument('-swa', '--screen_capture_window_area', type=str, default=argparse.SUPPRESS,
                     help='If capturing with screen capture, subsection of the selected window. Can be either empty (automatic selector, hold CTRL/cmd to select multiple areas, click on an area to delete it, click outside of areas/press Backspace to reset), one or more sets of rectangle coordinates x1,y1,x2,y2_x1,y1,x2,y2[...], "window" to use the whole window.')
-parser.add_argument('-sd', '--screen_capture_delay_secs', type=float, default=argparse.SUPPRESS,
+parser.add_argument('-sd', '--screen_capture_delay_seconds', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between screenshots when reading with screen capture. -1 to disable periodic screenshots.')
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
@@ -107,7 +107,7 @@ class Config:
         'combo_engine_switch': '',
         'screen_capture_area': '',
         'screen_capture_window_area': 'window',
-        'screen_capture_delay_secs': 0,
+        'screen_capture_delay_seconds': 0,
         'screen_capture_only_active_windows': True,
         'screen_capture_frame_stabilization': -1,
         'screen_capture_line_recovery': True,

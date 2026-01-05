@@ -68,7 +68,7 @@ else:
 class ClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
-        self.delay_secs = config.get_general('delay_seconds')
+        self.delay_seconds = config.get_general('delay_seconds')
         self.last_update = time.time()
 
     def are_images_identical(self, img1, img2):
@@ -203,7 +203,7 @@ class ClipboardThread(threading.Thread):
                     sleep_time = 0.5
                     process_clipboard = False
                 else:
-                    sleep_time = self.delay_secs
+                    sleep_time = self.delay_seconds
                     if is_macos:
                         with objc.autorelease_pool():
                             old_count = count
@@ -237,7 +237,7 @@ class DirectoryWatcher(threading.Thread):
     def __init__(self, path):
         super().__init__(daemon=True)
         self.path = path
-        self.delay_secs = config.get_general('delay_secs')
+        self.delay_seconds = config.get_general('delay_seconds')
         self.last_update = time.time()
         self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
 
@@ -254,7 +254,7 @@ class DirectoryWatcher(threading.Thread):
             if paused.is_set():
                 sleep_time = 0.5
             else:
-                sleep_time = self.delay_secs
+                sleep_time = self.delay_seconds
                 for path in self.path.iterdir():
                     if path.suffix.lower() in self.allowed_extensions:
                         path_key = self.get_path_key(path)
@@ -371,7 +371,7 @@ class TextFiltering:
     def __init__(self):
         self.language = config.get_general('language')
         self.json_output = config.get_general('output_format') == 'json'
-        self.frame_stabilization = 0 if config.get_general('screen_capture_delay_secs') == -1 else config.get_general('screen_capture_frame_stabilization')
+        self.frame_stabilization = 0 if config.get_general('screen_capture_delay_seconds') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('furigana_filter')
         self.debug_filtering = config.get_general('uwu')
@@ -2137,7 +2137,7 @@ class SecondPassThread:
 
 class OutputResult:
     def __init__(self):
-        self.screen_capture_periodic = config.get_general('screen_capture_delay_secs') != -1
+        self.screen_capture_periodic = config.get_general('screen_capture_delay_seconds') != -1
         self.json_output = config.get_general('output_format') == 'json'
         self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
@@ -2573,7 +2573,7 @@ def run():
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
         global screenshot_request_queue
-        screen_capture_delay_secs = config.get_general('screen_capture_delay_secs')
+        screen_capture_delay_seconds = config.get_general('screen_capture_delay_seconds')
         screen_capture_combo = config.get_general('screen_capture_combo')
         coordinate_selector_combo = config.get_general('coordinate_selector_combo')
         last_screenshot_time = 0
@@ -2582,12 +2582,12 @@ def run():
             key_combos[screen_capture_combo] = on_screenshot_combo
         if coordinate_selector_combo != '':
             key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
-        if screen_capture_delay_secs != -1:
+        if screen_capture_delay_seconds != -1:
             global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
-            exit_with_error('screen_capture_delay_secs or screen_capture_combo need to be valid values')
+            exit_with_error('screen_capture_delay_seconds or screen_capture_combo need to be valid values')
         screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
@@ -2667,7 +2667,7 @@ def run():
                 pass
 
         if img is None and screen_capture_periodic:
-            if (not paused.is_set()) and (time.time() - last_screenshot_time) > screen_capture_delay_secs:
+            if (not paused.is_set()) and (time.time() - last_screenshot_time) > screen_capture_delay_seconds:
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
                 try:
