@@ -1,9 +1,11 @@
 import multiprocessing
 import queue
+import mss
 from loguru import logger
 from PIL import Image
 from pynput import keyboard
 import sys
+import os
 
 try:
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
@@ -30,6 +32,10 @@ class ScreenSelector:
         self.selections = []
         self.previous_coordinates = []
         self.keyboard_event_queue = queue.Queue()
+        self.real_monitors = []
+        if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+            self.real_monitors = mss.mss().monitors[1:]
+
         self.start_key_listener()
 
     def start_key_listener(self):
@@ -236,7 +242,7 @@ class ScreenSelector:
                     x1, y1, x2, y2 = selection['coordinates']
                     canvas.create_rectangle(x1, y1, x2, y2, outline='green', tags=('selection', 'permanent'))
 
-    def _setup_selection_canvas(self, canvas, img_tk, scale_x=1, scale_y=1, monitor=None):
+    def _setup_selection_canvas(self, canvas, img_tk, scale_x, scale_y, monitor):
         canvas.pack(fill=tk.BOTH, expand=True)
         canvas.image = img_tk
         canvas.create_image(0, 0, image=img_tk, anchor=tk.NW)
@@ -308,7 +314,7 @@ class ScreenSelector:
         canvas.bind('<ButtonRelease-1>', on_release)
         canvas.bind('<Leave>', reset_selection)
 
-    def _create_selection_window(self, img, geometry, scale_x=1, scale_y=1, monitor=None):
+    def _create_selection_window(self, img, geometry, scale_x, scale_y, monitor):
         window = tk.Toplevel(self.root)
         window.geometry(geometry)
         window.overrideredirect(1)
@@ -319,14 +325,20 @@ class ScreenSelector:
 
         self._setup_selection_canvas(canvas, img_tk, scale_x, scale_y, monitor)
 
-    def create_window_from_image(self, monitors, img):
+    def find_monitor_and_create_window(self, monitors, img, fake_monitor):
         original_width, original_height = img.size
         display_monitor = None
 
         for monitor in monitors:
-            if (monitor['width'] >= original_width and monitor['height'] >= original_height):
+            if (monitor['width'] == original_width and monitor['height'] == original_height):
                 display_monitor = monitor
                 break
+
+        if not display_monitor:
+            for monitor in monitors:
+                if (monitor['width'] > original_width and monitor['height'] > original_height):
+                    display_monitor = monitor
+                    break
 
         if not display_monitor:
             display_monitor = monitors[0]
@@ -346,7 +358,7 @@ class ScreenSelector:
             scale_x = 1
             scale_y = 1
 
-        self._create_selection_window(img, geometry, scale_x, scale_y, None)
+        self._create_selection_window(img, geometry, scale_x, scale_y, fake_monitor)
 
     def create_window(self, monitor, img):
         original_width, original_height = img.size
@@ -395,10 +407,13 @@ class ScreenSelector:
 
             monitors, images = image
             if is_window:
-                self.create_window_from_image(monitors, images)
+                self.find_monitor_and_create_window(monitors, images, None)
             else:
                 for i, monitor in enumerate(monitors):
-                    self.create_window(monitor, images[i])
+                    if self.real_monitors:
+                        self.find_monitor_and_create_window(self.real_monitors, images[i], monitor)
+                    else:
+                        self.create_window(monitor, images[i])
 
             self.root.after(50, self.process_keyboard_events)
             self.root.mainloop()
