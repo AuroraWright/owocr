@@ -55,11 +55,18 @@ The command-line options/config file allow you to configure OCR providers, hotke
 
 While I've done all I could to support Linux (specifically Wayland), not everything might work with all setups. Specifically:
 
-- Reading images from clipboard on Wayland requires a compositor which supports the extensions "wlr_data_control" or "ext-data-control" and an updated version of wl-clipboard. There is no way around this, as you can only access the clipboard from a focused window otherwise.
-[wlr_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).
-Currently, you probably need to build wl-clipboard from source yourself using [these instructions](https://github.com/bugaevc/wl-clipboard/blob/master/BUILDING.md) - note you also need to have a very recent version of [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols), which probably means building that first before wl-clipboard).
+- Reading images from clipboard on Wayland requires a compositor which supports the extensions "wlr_data_control" or "ext-data-control" and an updated version of wl-clipboard. There is no way around this, as you can only access the clipboard from a focused window otherwise.\
+[wlr_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).\
+Currently, you probably need to build wl-clipboard from source yourself using [these instructions](https://github.com/bugaevc/wl-clipboard/blob/master/BUILDING.md) - note you also need to have a very recent version of [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols), which probably means building that first before wl-clipboard).\
 owocr will error out if your setup is not compatible.
-- Reading from screen capture works now on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr. By default owocr's coordinate picker will be launched to select one/more areas, as explained above. Using `owocr -r=screencapture -sa=screen_1` will use the whole selection. Using manual window names in `-sa=` is not supported and will be ignored.
+- Reading from screen capture works now on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr.\
+By default the automatic coordinate selector will be launched to select one/more areas, as explained above.\
+Using `owocr -r=screencapture -sa=screen_1` will use the whole selection.\
+Using manual window names in `-sa=` is not supported and will be ignored.
+- Keyboard combos/keyboard inputs in the coordinate selector might not work on Wayland. From my own testing they work on KDE but not GNOME (it seems KDE exposes inputs through the X11 APIs). A workaround involves running pynput with the uinput backend, but this requires exposing your input devices (they will be accessible without root):\
+`sudo chmod u+s $(which dumpkeys)`\
+`sudo usermod -a -G $(stat -c %G /dev/input/event0) $(whoami)`\
+Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` or add `PYNPUT_BACKEND_KEYBOARD=uinput` to your environment variables.
 - X11 partially works but uses more resources for scanning the clipboard and doesn't support window capturing at all (only screens/screen selections).
 
 # Supported engines
