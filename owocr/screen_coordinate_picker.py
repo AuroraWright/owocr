@@ -1,5 +1,6 @@
 import multiprocessing
 import queue
+import ctypes
 import mss
 from loguru import logger
 from PIL import Image
@@ -35,6 +36,8 @@ class ScreenSelector:
         self.real_monitors = []
         if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
             self.real_monitors = mss.mss().monitors[1:]
+        elif sys.platform == 'win32':
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
         self.start_key_listener()
 
@@ -325,7 +328,15 @@ class ScreenSelector:
 
         self._setup_selection_canvas(canvas, img_tk, scale_x, scale_y, monitor)
 
-    def find_monitor_and_create_window(self, monitors, img, fake_monitor):
+    def find_monitor_and_create_window(self, monitors, window_scale, img, fake_monitor):
+        if window_scale != 1:
+            img = img.resize((int(img.width * window_scale), int(img.height * window_scale)), Image.Resampling.LANCZOS)
+            scale_x = 1 / window_scale
+            scale_y = 1 / window_scale
+        else:
+            scale_x = 1
+            scale_y = 1
+
         original_width, original_height = img.size
         display_monitor = None
 
@@ -352,11 +363,8 @@ class ScreenSelector:
 
         if img.width > window_width or img.height > window_height:
             img = img.resize((window_width, window_height), Image.Resampling.LANCZOS)
-            scale_x = original_width / window_width
-            scale_y = original_height / window_height
-        else:
-            scale_x = 1
-            scale_y = 1
+            scale_x *= original_width / window_width
+            scale_y *= original_height / window_height
 
         self._create_selection_window(img, geometry, scale_x, scale_y, fake_monitor)
 
@@ -405,13 +413,13 @@ class ScreenSelector:
 
             self.root.withdraw()
 
-            monitors, images = image
+            monitors, window_scale, images = image
             if is_window:
-                self.find_monitor_and_create_window(monitors, images, None)
+                self.find_monitor_and_create_window(monitors, window_scale, images, None)
             else:
                 for i, monitor in enumerate(monitors):
                     if self.real_monitors:
-                        self.find_monitor_and_create_window(self.real_monitors, images[i], monitor)
+                        self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
                     else:
                         self.create_window(monitor, images[i])
 

@@ -1542,12 +1542,13 @@ class ScreenshotThread(threading.Thread):
                     self.macos_window_tracker_instance.start()
                 logger.info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
                 self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
+                self.window_dpi = ctypes.windll.user32.GetDpiForWindow(self.window_handle)
 
                 if not self.window_handle:
                     exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
 
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)
                 self.window_visible = not win32gui.IsIconic(self.window_handle)
                 self.windows_window_mfc_dc = None
                 self.windows_window_save_dc = None
@@ -1793,6 +1794,7 @@ class ScreenshotThread(threading.Thread):
         y = None
         window_x = None
         window_y = None
+        window_scale = 1
         if self.screencapture_mode == 2:
             if self.window_closed:
                 return False, None
@@ -1830,6 +1832,21 @@ class ScreenshotThread(threading.Thread):
                     coord_left, coord_top, right, bottom = win32gui.GetWindowRect(self.window_handle)
                     coord_width = right - coord_left
                     coord_height = bottom - coord_top
+
+                    try:
+                        MONITOR_DEFAULTTONEAREST = 2
+                        MDT_EFFECTIVE_DPI = 0
+
+                        monitor_handle = ctypes.windll.user32.MonitorFromWindow(self.window_handle, MONITOR_DEFAULTTONEAREST)
+                        dpi_x = ctypes.c_uint()
+                        dpi_y = ctypes.c_uint()
+                        ctypes.windll.shcore.GetDpiForMonitor(monitor_handle, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+
+                        window_scale = dpi_x.value / self.window_dpi
+                        coord_width = int(coord_width / window_scale)
+                        coord_height = int(coord_height / window_scale)
+                    except AttributeError:
+                        pass
 
                     current_size = (coord_width, coord_height)
                     if self.window_size != current_size:
@@ -1869,6 +1886,8 @@ class ScreenshotThread(threading.Thread):
                 else:
                     img = img.crop(self.window_area_coordinates)
                     window_x, window_y, _, _ = self.window_area_coordinates
+                    window_x *= window_scale
+                    window_y *= window_scale
                     if x is not None and y is not None:
                         x += window_x
                         y += window_y
@@ -1886,7 +1905,7 @@ class ScreenshotThread(threading.Thread):
             white_bg = Image.new('RGB', img.size, (255, 255, 255))
             img = Image.composite(img, white_bg, self.area_mask)
 
-        return img, (x, y, self.window_handle, window_x, window_y)
+        return img, (x, y, self.window_handle, window_x, window_y, window_scale)
 
     def cleanup_window_screen_capture(self):
         if sys.platform == 'win32':
@@ -1938,7 +1957,7 @@ class ScreenshotThread(threading.Thread):
                     exit_with_error(f'Error initializing picker window')
                 img = Image.frombytes('RGB', sct_img.size, sct_img.rgb)
                 monitor_images.append(img)
-            screen_selection = get_screen_selection((monitors, monitor_images), self.current_coordinates, False, self.coordinate_selector_combo_enabled)
+            screen_selection = get_screen_selection((monitors, None, monitor_images), self.current_coordinates, False, self.coordinate_selector_combo_enabled)
             if not screen_selection:
                 if must_return:
                     exit_with_error('Picker window was closed or an error occurred')
@@ -1982,11 +2001,12 @@ class ScreenshotThread(threading.Thread):
             self.window_area_coordinates = None
             self.area_mask = None
             logger.info('Launching window coordinate picker')
-            img, _ = self.take_screenshot(True)
+            img, screen_capture_properties = self.take_screenshot(True)
             if not img:
                 window_selection = False
             else:
-                window_selection = get_screen_selection((monitors, img), self.current_coordinates, True, self.coordinate_selector_combo_enabled)
+                _, _, _, _, _, window_scale = screen_capture_properties
+                window_selection = get_screen_selection((monitors, window_scale, img), self.current_coordinates, True, self.coordinate_selector_combo_enabled)
             if not window_selection:
                 logger.warning('Picker window was closed or an error occurred, selecting whole window')
                 self.current_coordinates = None
@@ -2280,7 +2300,10 @@ class OutputResult:
 
         if isinstance(result_data, OcrResult):
             if screen_capture_properties:
-                x, y, window_handle, window_x, window_y = screen_capture_properties
+                x, y, window_handle, window_x, window_y, window_scale = screen_capture_properties
+                if window_scale != 1:
+                    result_data.image_properties.width = int(result_data.image_properties.width * window_scale)
+                    result_data.image_properties.height = int(result_data.image_properties.height * window_scale)
                 if x is not None and y is not None:
                     result_data.image_properties.x = int(x)
                     result_data.image_properties.y = int(y)
