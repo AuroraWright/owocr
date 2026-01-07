@@ -15,9 +15,9 @@ from mss.exception import ScreenShotError
 from mss.screenshot import ScreenShot, Size
 from mss.models import Monitor
 
-
 screencast = None
 screencast_lock = threading.Lock()
+
 
 class ScreenCastManager:
     def __init__(self):
@@ -114,7 +114,9 @@ class ScreenCastManager:
 
         pipeline_str = (
             f'pipewiresrc fd={fd} path={node_id} ! '
-            'video/x-raw,format={BGRA,BGRx} ! '
+            'videoconvert ! '
+            'videorate drop-only=true ! '
+            'video/x-raw,format={BGRA,BGRx},max-framerate=30/1 ! '
             'appsink name=sink max-buffers=1 drop=true emit-signals=true enable-last-sample=false qos=false sync=false'
         )
         self.pipeline = Gst.parse_launch(pipeline_str)
@@ -238,6 +240,7 @@ class ScreenCastManager:
         self.selected_event.set()
         self.ready_event.clear()
 
+
 class MSSWaylandShim:
     def __init__(self):
         global screencast
@@ -324,6 +327,7 @@ class MSSWaylandShim:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
+
 
 class MSSModuleShim:
     def mss(self):
