@@ -1543,12 +1543,12 @@ class ScreenshotThread(threading.Thread):
                 logger.info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
-                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
-                self.window_dpi = ctypes.windll.user32.GetDpiForWindow(self.window_handle)
+                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)                
 
                 if not self.window_handle:
                     exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
 
+                self.window_dpi = self.get_windows_window_dpi()
                 self.window_visible = not win32gui.IsIconic(self.window_handle)
                 self.windows_window_mfc_dc = None
                 self.windows_window_save_dc = None
@@ -1668,6 +1668,24 @@ class ScreenshotThread(threading.Thread):
                 return handle
 
         return (None, None)
+
+    def get_windows_window_dpi(self):
+        DPI_AWARENESS_UNAWARE = 0
+        DPI_AWARENESS_PER_MONITOR_AWARE = 2
+        DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = ctypes.c_void_p(-5)
+        dpi_awareness_context = ctypes.windll.user32.GetWindowDpiAwarenessContext(self.window_handle)
+        dpi_awareness = ctypes.windll.user32.GetAwarenessFromDpiAwarenessContext(dpi_awareness_context)
+
+        enable_manual_scaling = dpi_awareness != DPI_AWARENESS_PER_MONITOR_AWARE
+        is_gdi_scaled = False
+
+        if dpi_awareness == DPI_AWARENESS_UNAWARE:
+            is_gdi_scaled = ctypes.windll.user32.AreDpiAwarenessContextsEqual(dpi_awareness_context, DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED)
+
+        if enable_manual_scaling:
+            return (ctypes.windll.user32.GetDpiForWindow(self.window_handle), is_gdi_scaled)
+        else:
+            return False
 
     def windows_window_tracker(self):
         found = True
@@ -1833,7 +1851,7 @@ class ScreenshotThread(threading.Thread):
                     coord_width = right - coord_left
                     coord_height = bottom - coord_top
 
-                    try:
+                    if self.window_dpi:
                         MONITOR_DEFAULTTONEAREST = 2
                         MDT_EFFECTIVE_DPI = 0
 
@@ -1842,22 +1860,30 @@ class ScreenshotThread(threading.Thread):
                         dpi_y = ctypes.c_uint()
                         ctypes.windll.shcore.GetDpiForMonitor(monitor_handle, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
 
-                        window_scale = dpi_x.value / self.window_dpi
+                        window_scale = dpi_x.value / self.window_dpi[0]
                         coord_width = int(coord_width / window_scale)
                         coord_height = int(coord_height / window_scale)
-                    except AttributeError:
-                        pass
 
                     current_size = (coord_width, coord_height)
                     if self.window_size != current_size:
                         self.cleanup_window_screen_capture()
-                        hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+
+                        if self.window_dpi and self.window_dpi[1]:
+                            monitor_info = win32api.GetMonitorInfo(monitor_handle)
+                            hwnd_dc = win32gui.CreateDC(monitor_info['Device'], None, None)
+                        else:
+                            hwnd_dc = win32gui.GetWindowDC(self.window_handle)
+
                         self.windows_window_mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
                         self.windows_window_save_dc = self.windows_window_mfc_dc.CreateCompatibleDC()
                         self.windows_window_save_bitmap = win32ui.CreateBitmap()
                         self.windows_window_save_bitmap.CreateCompatibleBitmap(self.windows_window_mfc_dc, coord_width, coord_height)
                         self.windows_window_save_dc.SelectObject(self.windows_window_save_bitmap)
-                        win32gui.ReleaseDC(self.window_handle, hwnd_dc)
+
+                        if self.window_dpi and self.window_dpi[1]:
+                            win32gui.DeleteDC(hwnd_dc)
+                        else:
+                            win32gui.ReleaseDC(self.window_handle, hwnd_dc)
 
                     result = ctypes.windll.user32.PrintWindow(self.window_handle, self.windows_window_save_dc.GetSafeHdc(), 2)
                     bmpinfo = self.windows_window_save_bitmap.GetInfo()
@@ -2000,6 +2026,12 @@ class ScreenshotThread(threading.Thread):
         else:
             self.window_area_coordinates = None
             self.area_mask = None
+
+            if not self.window_visible:
+                logger.info('Window is minimized, selecting whole window')
+                self.current_coordinates = None
+                return
+
             logger.info('Launching window coordinate picker')
             img, screen_capture_properties = self.take_screenshot(True)
             if not img:
