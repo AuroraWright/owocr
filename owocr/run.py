@@ -1158,7 +1158,7 @@ class TextFiltering:
 
         components = self._find_connected_components(
             items=paragraphs,
-            should_connect=lambda p1, p2: self._check_vertical_overlap(p1.bounding_box, p2.bounding_box) > 0.4,
+            should_connect=lambda p1, p2: self._check_vertical_overlap(p1.bounding_box, p2.bounding_box) > 0.2,
             get_start_coord=lambda p: p.bounding_box.top,
             get_end_coord=lambda p: p.bounding_box.bottom
         )
