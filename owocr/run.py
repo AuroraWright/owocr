@@ -58,9 +58,15 @@ try:
 except ImportError:
     pass
 
-if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
+
+if is_wayland:
     from . import wayland_mss_shim
     mss = wayland_mss_shim.MSSModuleShim()
+    from pywayland.client import Display
+    from pywayland.protocol.wayland import WlSeat
+    from pywayland.protocol.ext_data_control_v1 import ExtDataControlManagerV1
+    import fcntl
 else:
     import mss
 
@@ -153,47 +159,12 @@ class ClipboardThread(threading.Thread):
             ctypes.windll.user32.AddClipboardFormatListener(hwnd)
             win32gui.PumpMessages()
         else:
-            if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
-                import subprocess
-                socket_path = Path('/tmp/owocr_clipboard.sock')
-
-                if socket_path.exists():
-                    try:
-                        test_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                        test_socket.connect(str(socket_path))
-                        test_socket.close()
-                        exit_with_error('Unix domain socket is already in use')
-                    except ConnectionRefusedError:
-                        socket_path.unlink()
-
-                try:
-                    self.wl_paste = subprocess.Popen(
-                        ['wl-paste', '-t', 'image', '-w', 'nc', '-U', socket_path],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    time.sleep(0.5)
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    exit_with_error('wl-paste not found')
-                return_code = self.wl_paste.poll()
-                if return_code is not None and return_code != 0:
-                    stderr_output = self.wl_paste.stderr.read()
-                    exit_with_error(f'wl-paste exited with return code {return_code}: {stderr_output.decode().strip()}')
-
-                server = socketserver.UnixStreamServer(str(socket_path), UnixSocketRequestHandler)
-                server.timeout = 0.5
-
-                while not terminated.is_set():
-                    server.handle_request()
-                self.wl_paste.kill()
-                server.server_close()
+            is_macos = sys.platform == 'darwin'
+            if is_macos:
+                pasteboard = NSPasteboard.generalPasteboard()
+                count = pasteboard.changeCount()
             else:
-                is_macos = sys.platform == 'darwin'
-                if is_macos:
-                    pasteboard = NSPasteboard.generalPasteboard()
-                    count = pasteboard.changeCount()
-                else:
-                    from PIL import ImageGrab
+                from PIL import ImageGrab
 
             process_clipboard = False
             img = None
@@ -231,6 +202,206 @@ class ClipboardThread(threading.Thread):
 
                 if not terminated.is_set():
                     time.sleep(sleep_time)
+
+
+class WaylandClipboardThread(threading.Thread):
+    def __init__(self, read):
+        super().__init__(daemon=True)
+        self.read = read
+        self.display = None
+        self.registry = None
+        self.manager = None
+        self.seat = None
+        self.data_device = None
+        self.globals_dict = {}
+        self.started = False
+
+    def setup(self):
+        try:
+            self.display = Display()
+            self.display.connect()
+
+            self.registry = self.display.get_registry()
+            self.registry.dispatcher['global'] = self.registry_handler
+            self.display.roundtrip()
+
+            if 'ext_data_control_manager_v1' not in self.globals_dict:
+                raise OSError('ext_data_control_manager_v1 is not available')
+
+            if 'wl_seat' not in self.globals_dict:
+                raise OSError('wl_seat is not available')
+
+            manager_id, manager_version = self.globals_dict['ext_data_control_manager_v1']
+            self.manager = self.registry.bind(manager_id, ExtDataControlManagerV1, min(manager_version, 1))
+            seat_id, seat_version = self.globals_dict['wl_seat']
+            self.seat = self.registry.bind(seat_id, WlSeat, min(seat_version, 7))
+
+            self.data_device = self.manager.get_data_device(self.seat)
+            if self.read:
+                self.data_device.dispatcher['data_offer'] = self.handle_data_offer
+                self.data_device.dispatcher['selection'] = self.handle_selection
+            self.display.roundtrip()
+            self.started = True
+        except Exception as e:
+            self.cleanup()
+            exit_with_error(f"Failed to setup Wayland clipboard: {e}")
+
+    def registry_handler(self, registry, id_num, interface, version):
+        self.globals_dict[interface] = (id_num, version)
+
+    def offer_handler(self, offer, mime_type):
+        if mime_type.startswith('image/'):
+            offer.mime_types.append(mime_type)
+
+    def handle_data_offer(self, data_device, offer):
+        offer.mime_types = []
+        offer.dispatcher['offer'] = self.offer_handler
+
+    def handle_selection(self, data_device, offer):
+        if offer is None:
+            return
+        if not self.started:
+            return
+
+        if hasattr(offer, 'mime_types') and offer.mime_types:
+            preferred_order = ['image/png', 'image/bmp', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/tiff']
+
+            chosen_mime = None
+            for mime in preferred_order:
+                if mime in offer.mime_types:
+                    chosen_mime = mime
+                    break
+
+            if not chosen_mime:
+                return
+
+            read_fd = None
+            write_fd = None
+            try:
+                # Create pipe for data transfer
+                read_fd, write_fd = os.pipe()
+
+                # Set pipe to non-blocking
+                flags = fcntl.fcntl(read_fd, fcntl.F_GETFL)
+                fcntl.fcntl(read_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                # Request data transfer
+                offer.receive(chosen_mime, write_fd)
+
+                # Flush to ensure request is sent
+                self.display.flush()
+
+                # Close write end in our process
+                os.close(write_fd)
+                write_fd = None
+
+                # Read data from pipe with timeout
+                img_data = bytearray()
+                start_time = time.time()
+
+                while time.time() - start_time < 2:
+                    try:
+                        # Try to read
+                        chunk = os.read(read_fd, 65536)
+                        if chunk:
+                            img_data.extend(chunk)
+                        else:
+                            # EOF reached
+                            break
+                    except BlockingIOError:
+                        # No data available, wait a bit
+                        time.sleep(0.01)
+                        continue
+                    except (OSError, IOError) as e:
+                        # Pipe closed or error
+                        break
+
+                os.close(read_fd)
+                read_fd = None
+
+                if img_data and not paused.is_set():
+                    image_queue.put((img_data, False, None))
+            finally:
+                if read_fd is not None:
+                    try:
+                        os.close(read_fd)
+                    except:
+                        pass
+                if write_fd is not None:
+                    try:
+                        os.close(write_fd)
+                    except:
+                        pass
+
+    def data_source_send(self, data_source, mime_type, fd):
+        try:
+            os.write(fd, data_source.text)
+        except:
+            pass
+        os.close(fd)
+        data_source.text_sent.set()
+
+    def data_source_cancelled(self, data_source):
+        data_source.destroy()
+
+    def cleanup(self):
+        if self.data_device is not None:
+            try:
+                self.data_device.destroy()
+            except:
+                pass
+            self.data_device = None
+        if self.seat is not None:
+            try:
+                self.seat.destroy()
+            except:
+                pass
+            self.seat = None
+        if self.manager is not None:
+            try:
+                self.manager.destroy()
+            except:
+                pass
+            self.manager = None
+        if self.registry is not None:
+            try:
+                self.registry.destroy()
+            except:
+                pass
+            self.registry = None
+        if self.display is not None:
+            try:
+                self.display.disconnect()
+            except:
+                pass
+            self.display = None
+
+    def copy_text(self, text):
+        text_sent = threading.Event()
+        data_source = self.manager.create_data_source()
+        data_source.text = text.encode()
+        data_source.text_sent = text_sent
+        data_source.offer('text/plain')
+        data_source.offer('text/plain;charset=utf-8')
+        data_source.offer('TEXT')
+        data_source.offer('STRING')
+        data_source.offer('UTF8_STRING')
+        data_source.dispatcher['send'] = self.data_source_send
+        data_source.dispatcher['cancelled'] = self.data_source_cancelled
+        self.data_device.set_selection(data_source)
+        wait_counter = 0
+        while not text_sent.is_set():
+            if wait_counter == 3:
+                break
+            wait_counter += 1
+            time.sleep(0.1)
+
+    def run(self):
+        self.setup()
+        while not terminated.is_set():
+            self.display.roundtrip()
+            time.sleep(0.05)
+        self.cleanup()
 
 
 class DirectoryWatcher(threading.Thread):
@@ -1464,7 +1635,7 @@ class ScreenshotThread(threading.Thread):
         elif len(screen_capture_area.replace('_', ',').split(',')) % 4 == 0:
             self.screencapture_mode = 3
         else:
-            if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+            if is_wayland:
                 self.screencapture_mode = 0
             else:
                 self.screencapture_mode = 2
@@ -2198,6 +2369,7 @@ class OutputResult:
         self.line_separator = '' if config.get_general('join_lines') else config.get_general('line_separator').encode().decode('unicode_escape')
         self.paragraph_separator = '' if config.get_general('join_paragraphs') else config.get_general('paragraph_separator').encode().decode('unicode_escape')
         self.write_to = config.get_general('write_to')
+        self.wayland_use_wlclipboard = config.get_general('wayland_use_wlclipboard')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
 
@@ -2264,6 +2436,8 @@ class OutputResult:
                 pb.clearContents()
                 ns_string = NSString.stringWithString_(string)
                 pb.writeObjects_([ns_string])
+        elif is_wayland and not self.wayland_use_wlclipboard:
+            clipboard_thread.copy_text(string)
         else:
             pyperclipfix.copy(string)
 
@@ -2582,6 +2756,7 @@ def run():
     global paused
     global notifier
     global auto_pause_handler
+    global clipboard_thread
     global websocket_server_thread
     global screenshot_thread
     global image_queue
@@ -2609,6 +2784,7 @@ def run():
     engine_color = config.get_general('engine_color')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
+    wayland_use_wlclipboard = config.get_general('wayland_use_wlclipboard')
     screen_capture_periodic = False
     screen_capture_on_combo = False
     coordinate_selector_event = threading.Event()
@@ -2621,6 +2797,9 @@ def run():
     if combo_engine_switch != '':
         key_combos[combo_engine_switch] = engine_change_handler
 
+    if is_wayland and not wayland_use_wlclipboard and ('clipboard' in (read_from, read_from_secondary) or write_to == 'clipboard'):
+        clipboard_thread = WaylandClipboardThread('clipboard' in (read_from, read_from_secondary))
+        clipboard_thread.start()
     if 'websocket' in (read_from, read_from_secondary) or write_to == 'websocket':
         websocket_port = config.get_general('websocket_port')
         logger.info(f"Starting websocket server on port {websocket_port}")
@@ -2666,8 +2845,9 @@ def run():
         unix_socket_server_thread.start()
         read_from_readable.append('unix socket')
     if 'clipboard' in (read_from, read_from_secondary):
-        clipboard_thread = ClipboardThread()
-        clipboard_thread.start()
+        if not clipboard_thread:
+            clipboard_thread = ClipboardThread()
+            clipboard_thread.start()
         read_from_readable.append('clipboard')
     if any(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):
         if all(i and i not in non_path_inputs for i in (read_from, read_from_secondary)):

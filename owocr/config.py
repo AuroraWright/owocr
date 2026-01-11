@@ -121,6 +121,7 @@ class Config:
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',
         'screen_capture_old_macos_api': True,
+        'wayland_use_wlclipboard': False,
         'language': 'ja',
         'output_format': 'text',
         'verbosity': -2,
