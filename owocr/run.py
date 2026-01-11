@@ -11,6 +11,7 @@ import inspect
 import os
 import json
 import collections
+import select
 from dataclasses import asdict
 import importlib
 import urllib.request
@@ -75,7 +76,7 @@ class ClipboardThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.delay_seconds = config.get_general('delay_seconds')
-        self.last_update = time.time()
+        self.last_update = time.monotonic()
 
     def are_images_identical(self, img1, img2):
         if None in (img1, img2):
@@ -117,7 +118,7 @@ class ClipboardThread(threading.Thread):
 
     def process_message(self, hwnd: int, msg: int, wparam: int, lparam: int):
         WM_CLIPBOARDUPDATE = 0x031D
-        timestamp = time.time()
+        timestamp = time.monotonic()
         if msg == WM_CLIPBOARDUPDATE and timestamp - self.last_update > 1 and not paused.is_set():
             self.last_update = timestamp
             wait_counter = 0
@@ -258,78 +259,65 @@ class WaylandClipboardThread(threading.Thread):
         offer.dispatcher['offer'] = self.offer_handler
 
     def handle_selection(self, data_device, offer):
-        if offer is None:
+        if offer is None or not self.started:
             return
-        if not self.started:
+        if not hasattr(offer, 'mime_types') or not offer.mime_types:
             return
 
-        if hasattr(offer, 'mime_types') and offer.mime_types:
-            preferred_order = ['image/png', 'image/bmp', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/tiff']
+        preferred_order = ['image/png', 'image/bmp', 'image/tiff', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
 
-            chosen_mime = None
-            for mime in preferred_order:
-                if mime in offer.mime_types:
-                    chosen_mime = mime
-                    break
+        chosen_mime = None
+        for mime in preferred_order:
+            if mime in offer.mime_types:
+                chosen_mime = mime
+                break
 
-            if not chosen_mime:
-                return
+        if not chosen_mime:
+            return
 
-            read_fd = None
+        read_fd = None
+        write_fd = None
+        try:
+            read_fd, write_fd = os.pipe()
+
+            # Set read end to non-blocking
+            flags = fcntl.fcntl(read_fd, fcntl.F_GETFL)
+            fcntl.fcntl(read_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+            # Request data transfer
+            offer.receive(chosen_mime, write_fd)
+            self.display.flush()
+
+            # Close write end in our process - Wayland compositor now owns it
+            os.close(write_fd)
             write_fd = None
-            try:
-                # Create pipe for data transfer
-                read_fd, write_fd = os.pipe()
 
-                # Set pipe to non-blocking
-                flags = fcntl.fcntl(read_fd, fcntl.F_GETFL)
-                fcntl.fcntl(read_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+            img_data = bytearray()
+            start_time = time.monotonic()
 
-                # Request data transfer
-                offer.receive(chosen_mime, write_fd)
+            while time.monotonic() - start_time < 2:
+                rlist, _, _ = select.select([read_fd], [], [], 0.1)
+                if not rlist:
+                    continue
 
-                # Flush to ensure request is sent
-                self.display.flush()
-
-                # Close write end in our process
-                os.close(write_fd)
-                write_fd = None
-
-                # Read data from pipe with timeout
-                img_data = bytearray()
-                start_time = time.time()
-
-                while time.time() - start_time < 2:
-                    try:
-                        # Try to read
-                        chunk = os.read(read_fd, 65536)
-                        if chunk:
-                            img_data.extend(chunk)
-                        else:
-                            # EOF reached
-                            break
-                    except BlockingIOError:
-                        # No data available, wait a bit
-                        time.sleep(0.01)
-                        continue
-                    except (OSError, IOError) as e:
-                        # Pipe closed or error
+                try:
+                    chunk = os.read(read_fd, 65536)
+                    if not chunk: # EOF
+                        break
+                    img_data.extend(chunk)
+                except BlockingIOError:
+                    continue
+                except (OSError, IOError) as e:
+                    if e.errno != errno.EAGAIN:
                         break
 
-                os.close(read_fd)
-                read_fd = None
-
-                if img_data and not paused.is_set():
-                    image_queue.put((img_data, False, None))
-            finally:
-                if read_fd is not None:
+            if img_data and not paused.is_set():
+                image_queue.put((img_data, False, None))
+        finally:
+            for fd in (read_fd, write_fd):
+                if fd is not None:
                     try:
-                        os.close(read_fd)
-                    except:
-                        pass
-                if write_fd is not None:
-                    try:
-                        os.close(write_fd)
+                        os.close(fd)
                     except:
                         pass
 
@@ -409,7 +397,7 @@ class DirectoryWatcher(threading.Thread):
         super().__init__(daemon=True)
         self.path = path
         self.delay_seconds = config.get_general('delay_seconds')
-        self.last_update = time.time()
+        self.last_update = time.monotonic()
         self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
 
     def get_path_key(self, path):
@@ -663,7 +651,7 @@ class TextFiltering:
         if frames_match:
             if self.processed_stable_frame:
                 return 0, 0, None
-            if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
+            if time.monotonic() - self.frame_stabilization_timestamp < self.frame_stabilization:
                 return 0, 0, None
             changed_lines = self._find_changed_lines_impl(current_result, self.stable_frame_data)
             if self.line_recovery and self.last_last_frame_data:
@@ -692,7 +680,7 @@ class TextFiltering:
             self.last_last_frame_data = self.last_frame_data
             self.last_frame_data = (pil_image, current_result)
             self.processed_stable_frame = False
-            self.frame_stabilization_timestamp = time.time()
+            self.frame_stabilization_timestamp = time.monotonic()
             return 0, 0, None
 
     def _find_changed_lines_impl(self, current_result, previous_result, next_result=None):
@@ -772,7 +760,7 @@ class TextFiltering:
         if frames_match:
             if self.processed_stable_frame:
                 return [], 0
-            if time.time() - self.frame_stabilization_timestamp < self.frame_stabilization:
+            if time.monotonic() - self.frame_stabilization_timestamp < self.frame_stabilization:
                 return [], 0
             if self.line_recovery and self.last_last_frame_text:
                 logger.debug('Checking for missed lines')
@@ -788,7 +776,7 @@ class TextFiltering:
             self.last_last_frame_text = self.last_frame_text
             self.last_frame_text = current_result
             self.processed_stable_frame = False
-            self.frame_stabilization_timestamp = time.time()
+            self.frame_stabilization_timestamp = time.monotonic()
             return [], 0
 
     def _find_changed_lines_text_impl(self, current_result, previous_result, next_result, recovered_lines, recovered_lines_count, regex_filter):
@@ -2340,9 +2328,9 @@ class SecondPassThread:
                 img, engine_index_local, recovered_lines_count = self.input_queue.get(timeout=0.5)
 
                 engine_instance = engine_instances[engine_index_local]
-                start_time = time.time()
+                start_time = time.monotonic()
                 res, result_data = engine_instance(img)
-                end_time = time.time()
+                end_time = time.monotonic()
 
                 self.output_queue.put((engine_instance.readable_name, res, result_data, end_time - start_time, recovered_lines_count))
             except queue.Empty:
@@ -2460,9 +2448,9 @@ class OutputResult:
             if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support:
                 two_pass_processing_active = True
                 engine_instance_2 = engine_instances[engine_index_2]
-                start_time = time.time()
+                start_time = time.monotonic()
                 res2, result_data_2 = engine_instance_2(img_or_path)
-                end_time = time.time()
+                end_time = time.monotonic()
 
                 if not res2:
                     logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
@@ -2491,9 +2479,9 @@ class OutputResult:
             auto_pause_handler.allow_auto_pause.clear()
 
         if not result_data:
-            start_time = time.time()
+            start_time = time.monotonic()
             res, result_data = engine_instance(img_or_path)
-            end_time = time.time()
+            end_time = time.monotonic()
             processing_time = end_time - start_time
             engine_name = engine_instance.readable_name
             recovered_lines_count = 0
@@ -2633,7 +2621,7 @@ def user_input_thread_run():
             else:
                 time.sleep(0.2)
     else:
-        import termios, select
+        import termios
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         new_settings = termios.tcgetattr(fd)
@@ -2902,13 +2890,13 @@ def run():
                 pass
 
         if img is None and screen_capture_periodic:
-            if (not paused.is_set()) and (time.time() - last_screenshot_time) > screen_capture_delay_seconds:
+            if (not paused.is_set()) and (time.monotonic() - last_screenshot_time) > screen_capture_delay_seconds:
                 if periodic_screenshot_queue.empty() and screenshot_request_queue.empty():
                     screenshot_request_queue.put(False)
                 try:
                     img, screen_capture_properties = periodic_screenshot_queue.get(timeout=0.5)
                     filter_text = True
-                    last_screenshot_time = time.time()
+                    last_screenshot_time = time.monotonic()
                 except queue.Empty:
                     skip_waiting = True
                     pass
