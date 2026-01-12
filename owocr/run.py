@@ -24,7 +24,7 @@ import websockets
 import socket
 import socketserver
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFile
 from loguru import logger
 from pynput import keyboard
 from desktop_notifier import DesktopNotifierSync, Urgency
@@ -70,6 +70,8 @@ if is_wayland:
     import fcntl
 else:
     import mss
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class ClipboardThread(threading.Thread):

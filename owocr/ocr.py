@@ -193,14 +193,17 @@ def input_to_pil_image(img):
     if isinstance(img, Image.Image):
         pil_image = img
     elif isinstance(img, (bytes, bytearray)):
-        pil_image = Image.open(io.BytesIO(img))
+        try:
+            pil_image = Image.open(io.BytesIO(img))
+        except (Image.UnidentifiedImageError, OSError):
+            return None, False
     elif isinstance(img, Path):
         is_path = True
         try:
             pil_image = Image.open(img)
             pil_image.load()
-        except (UnidentifiedImageError, OSError) as e:
-            return None
+        except (Image.UnidentifiedImageError, OSError):
+            return None, False
     else:
         raise ValueError(f'img must be a path, PIL.Image or bytes object, instead got: {img}')
     return pil_image, is_path
