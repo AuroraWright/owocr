@@ -55,10 +55,9 @@ The command-line options/config file allow you to configure OCR providers, hotke
 
 While I've done all I could to support Linux (specifically Wayland), not everything might work with all setups. Specifically:
 
-- Reading images from clipboard on Wayland requires a compositor which supports the extensions "wlr_data_control" or "ext-data-control" and an updated version of wl-clipboard. There is no way around this, as you can only access the clipboard from a focused window otherwise.\
-[wlr_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).\
-Currently, you probably need to build wl-clipboard from source yourself using [these instructions](https://github.com/bugaevc/wl-clipboard/blob/master/BUILDING.md) - note you also need to have a very recent version of [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols), which probably means building that first before wl-clipboard).\
-owocr will error out if your setup is not compatible.
+- There are two ways of reading images from and writing text to the clipboard on Wayland. One requires a compositor which supports the extension "ext-data-control" and this should work out of the box with owocr by default. [ext_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).\
+The alternative is through `wl-clipboard` (preinstalled in most distributions), but this will try to steal your focus constantly (due to Wayland's security design), limiting usability.\
+To switch to wl-clipboard, enable `wayland_use_wlclipboard` in the config file.
 - Reading from screen capture works now on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr.\
 By default the automatic coordinate selector will be launched to select one/more areas, as explained above.\
 Using `owocr -r=screencapture -sa=screen_1` will use the whole selection.\
