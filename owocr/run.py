@@ -217,6 +217,7 @@ class WaylandClipboardThread(threading.Thread):
         self.seat = None
         self.data_device = None
         self.globals_dict = {}
+        self.copy_queue = queue.Queue(maxsize=1)
         self.started = False
 
     def setup(self):
@@ -247,7 +248,7 @@ class WaylandClipboardThread(threading.Thread):
             self.started = True
         except Exception as e:
             self.cleanup()
-            exit_with_error(f"Failed to setup Wayland clipboard: {e}")
+            exit_with_error(f'Failed to setup Wayland clipboard: {e}')
 
     def registry_handler(self, registry, id_num, interface, version):
         self.globals_dict[interface] = (id_num, version)
@@ -367,6 +368,9 @@ class WaylandClipboardThread(threading.Thread):
             self.display = None
 
     def copy_text(self, text):
+        if not self.started:
+            return
+
         text_sent = threading.Event()
         data_source = self.manager.create_data_source()
         data_source.text = text.encode()
@@ -378,19 +382,31 @@ class WaylandClipboardThread(threading.Thread):
         data_source.offer('UTF8_STRING')
         data_source.dispatcher['send'] = self.data_source_send
         data_source.dispatcher['cancelled'] = self.data_source_cancelled
-        self.data_device.set_selection(data_source)
-        wait_counter = 0
-        while not text_sent.is_set():
-            if wait_counter == 3:
-                break
-            wait_counter += 1
-            time.sleep(0.1)
+
+        try:
+            self.copy_queue.put_nowait(data_source)
+        except queue.Full:
+            try:
+                self.copy_queue.get_nowait()
+            except queue.Empty:
+                pass
+            self.copy_queue.put_nowait(data_source)
+
+        text_sent.wait(timeout=0.4)
 
     def run(self):
         self.setup()
+        display_fd = self.display.get_fd()
         while not terminated.is_set():
-            self.display.roundtrip()
-            time.sleep(0.05)
+            rlist, _, _ = select.select([display_fd], [], [], 0.05)
+            if rlist:
+                self.display.dispatch(block=True)
+            try:
+                data_source = self.copy_queue.get_nowait()
+                self.data_device.set_selection(data_source)
+                self.display.dispatch(block=True)
+            except queue.Empty:
+                pass
         self.cleanup()
 
 
