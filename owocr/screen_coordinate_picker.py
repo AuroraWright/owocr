@@ -4,7 +4,7 @@ import ctypes
 import mss
 from loguru import logger
 from PIL import Image
-from pynput import keyboard
+from pynputfix import keyboard
 import sys
 import os
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.22.3"
+version = "1.22.4"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,7 @@ dependencies = [
     "loguru",
     "numpy",
     "Pillow>=10.0.0",
-    "pynput<=1.7.8",
+    "pynputfix",
     "websockets>=14.0",
     "desktop-notifier>=6.1.0",
     "mss>=10.1.0",
@@ -28,7 +28,7 @@ dependencies = [
     "curl_cffi",
     "pywin32;platform_system=='Windows'",
     "pyobjc;platform_system=='Darwin'",
-    "pyperclipfix;platform_system=='Linux'",
+    "pyperclip;platform_system=='Linux'",
     "PyGObject;platform_system=='Linux'",
     "dbus-python;platform_system=='Linux'",
     "pywayland;platform_system=='Linux'",

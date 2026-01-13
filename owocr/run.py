@@ -17,7 +17,7 @@ import importlib
 import urllib.request
 
 import numpy as np
-import pyperclipfix
+import pyperclip
 import psutil
 import asyncio
 import websockets
@@ -26,7 +26,7 @@ import socketserver
 
 from PIL import Image, ImageDraw, ImageFile
 from loguru import logger
-from pynput import keyboard
+from pynputfix import keyboard
 from desktop_notifier import DesktopNotifierSync, Urgency
 
 from .ocr import *
@@ -2445,7 +2445,7 @@ class OutputResult:
         elif is_wayland and not self.wayland_use_wlclipboard:
             clipboard_thread.copy_text(string)
         else:
-            pyperclipfix.copy(string)
+            pyperclip.copy(string)
 
     def _send_output(self, string):
         if self.write_to == 'websocket':
