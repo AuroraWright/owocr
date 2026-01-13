@@ -8,10 +8,8 @@ from pynputfix import keyboard
 import sys
 import os
 
-try:
+if sys.platform == 'darwin':
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
-except ImportError:
-    pass
 
 try:
     from PIL import ImageTk

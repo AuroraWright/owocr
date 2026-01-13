@@ -28,13 +28,11 @@ try:
 except ImportError:
     pass
 
-try:
+if sys.platform == 'darwin':
     import Vision
     import objc
     from AppKit import NSData, NSImage, NSBundle
     from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode, CFRunLoopStop, CFRunLoopGetCurrent
-except ImportError:
-    pass
 
 try:
     from google.cloud import vision

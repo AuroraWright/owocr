@@ -17,7 +17,6 @@ import importlib
 import urllib.request
 
 import numpy as np
-import pyperclip
 import psutil
 import asyncio
 import websockets
@@ -33,19 +32,8 @@ from .ocr import *
 from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
 
-try:
-    import win32gui
-    import win32ui
-    import win32api
-    import win32con
-    import win32process
-    import win32clipboard
-    import pywintypes
-    import ctypes
-except ImportError:
-    pass
-
-try:
+if sys.platform == 'darwin':
+    import termios
     import objc
     import platform
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
@@ -56,18 +44,30 @@ try:
                        kCGWindowImageNominalResolution
     from Foundation import NSString
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
-except ImportError:
-    pass
+elif sys.platform == 'win32':
+    import msvcrt
+    import win32gui
+    import win32ui
+    import win32api
+    import win32con
+    import win32process
+    import win32clipboard
+    import pywintypes
+    import ctypes
+elif sys.platform == 'linux':
+    import termios
+    from PIL import ImageGrab
+    import pyperclip
 
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
 if is_wayland:
+    import fcntl
     from . import wayland_mss_shim
     mss = wayland_mss_shim.MSSModuleShim()
     from pywayland.client import Display
     from pywayland.protocol.wayland import WlSeat
     from pywayland.protocol.ext_data_control_v1 import ExtDataControlManagerV1
-    import fcntl
 else:
     import mss
 
@@ -166,8 +166,6 @@ class ClipboardThread(threading.Thread):
             if is_macos:
                 pasteboard = NSPasteboard.generalPasteboard()
                 count = pasteboard.changeCount()
-            else:
-                from PIL import ImageGrab
 
             process_clipboard = False
             img = None
@@ -2619,7 +2617,6 @@ def exit_with_error(error):
 
 def user_input_thread_run():
     if sys.platform == 'win32':
-        import msvcrt
         while not terminated.is_set():
             if coordinate_selector_event.is_set():
                 while coordinate_selector_event.is_set():
@@ -2639,7 +2636,6 @@ def user_input_thread_run():
             else:
                 time.sleep(0.2)
     else:
-        import termios
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         new_settings = termios.tcgetattr(fd)
