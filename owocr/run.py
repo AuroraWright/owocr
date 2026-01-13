@@ -2434,7 +2434,7 @@ class OutputResult:
                 win32clipboard.CloseClipboard()
             except pywintypes.error:
                 pass
-        elif sys.platform == 'Darwin':
+        elif sys.platform == 'darwin':
             with objc.autorelease_pool():
                 pb = NSPasteboard.generalPasteboard()
                 pb.clearContents()
