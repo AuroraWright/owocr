@@ -161,8 +161,9 @@ class Config:
                     os.makedirs(config_folder)
                 urllib.request.urlretrieve('https://github.com/AuroraWright/owocr/raw/master/owocr_config.ini', self.config_path)
                 self.downloaded_config = True
-            finally:
-                return
+            except:
+                pass
+            return
 
         self.has_config = True
         for key in config:

@@ -67,7 +67,7 @@ if is_wayland:
     mss = wayland_mss_shim.MSSModuleShim()
     from pywayland.client import Display
     from pywayland.protocol.wayland import WlSeat
-    from pywayland.protocol.ext_data_control_v1 import ExtDataControlManagerV1
+    from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
 else:
     import mss
 
