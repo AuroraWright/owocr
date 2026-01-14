@@ -1,5 +1,6 @@
 import sys
 import signal
+import atexit
 import time
 import threading
 from pathlib import Path
@@ -2643,6 +2644,12 @@ def user_input_thread_run():
         new_settings[3] &= ~(termios.ICANON | termios.ECHO)
         new_settings[6][termios.VMIN] = 1
         new_settings[6][termios.VTIME] = 0
+
+        def restore_terminal_state():
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        atexit.register(restore_terminal_state)
+
         try:
             termios.tcsetattr(fd, termios.TCSANOW, new_settings)
             while not terminated.is_set():
@@ -2660,7 +2667,7 @@ def user_input_thread_run():
                     else:
                         engine_change_handler(user_input, False)
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            restore_terminal_state()
 
 
 def on_screenshot_combo():
