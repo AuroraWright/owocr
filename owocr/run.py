@@ -2469,7 +2469,10 @@ class OutputResult:
                 end_time = time.monotonic()
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {result_data_2}')
+                    logger.opt(colors=True).warning(
+                        f'<{self.engine_color}>{{name}}</> reported an error after {{duration:0.03f}}s: {{result}}',
+                        name=engine_instance_2.readable_name, duration=end_time - start_time, result=result_data_2,
+                    )
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
@@ -2505,7 +2508,10 @@ class OutputResult:
         if not res:
             if auto_pause_handler and auto_pause:
                 auto_pause_handler.stop_timer()
-            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</> reported an error after {processing_time:0.03f}s: {result_data}')
+            logger.opt(colors=True).warning(
+                f'<{self.engine_color}>{{name}}</> reported an error after {{time:0.03f}}s: {{result}}',
+                name=engine_name, time=processing_time, result=result_data
+            )
             return
 
         if isinstance(result_data, OcrResult):
@@ -2551,7 +2557,10 @@ class OutputResult:
             else:
                 log_message = ': ' + (output_text if len(output_text) <= self.verbosity else output_text[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</>{log_message}')
+            logger.opt(colors=True).info(
+                f'Text recognized in {{processing_time:0.03f}}s using <{self.engine_color}>{{engine_name}}</>{{log_message}}',
+                processing_time=processing_time, engine_name=engine_name, log_message=log_message,
+            )
 
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
@@ -2883,7 +2892,10 @@ def run():
     user_input_thread.start()
 
     if not terminated.is_set():
-        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
+        logger.opt(colors=True).info(
+            f"Reading from {{sources}}, writing to {{write_to_readable}} using <{engine_color}>{{engine}}</>{{pause}}",
+            sources=' and '.join(read_from_readable), write_to_readable=write_to_readable, engine=engine_instances[engine_index].readable_name, pause=' (paused)' if paused.is_set() else ''
+        )
 
     while not terminated.is_set():
         img = None
