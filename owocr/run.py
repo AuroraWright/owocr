@@ -335,6 +335,7 @@ class WaylandClipboardThread(threading.Thread):
         data_source.destroy()
 
     def cleanup(self):
+        self.started = False
         if self.data_device is not None:
             try:
                 self.data_device.destroy()
