@@ -216,6 +216,7 @@ class WaylandClipboardThread(threading.Thread):
         self.seat = None
         self.data_device = None
         self.globals_dict = {}
+        self.copy_lock = threading.Lock()
         self.copy_queue = queue.Queue(maxsize=1)
         self.started = False
 
@@ -335,62 +336,70 @@ class WaylandClipboardThread(threading.Thread):
         data_source.destroy()
 
     def cleanup(self):
-        self.started = False
-        if self.data_device is not None:
+        with self.copy_lock:
+            self.started = False
             try:
-                self.data_device.destroy()
-            except:
-                pass
-            self.data_device = None
-        if self.seat is not None:
-            try:
-                self.seat.destroy()
-            except:
-                pass
-            self.seat = None
-        if self.manager is not None:
-            try:
-                self.manager.destroy()
-            except:
-                pass
-            self.manager = None
-        if self.registry is not None:
-            try:
-                self.registry.destroy()
-            except:
-                pass
-            self.registry = None
-        if self.display is not None:
-            try:
-                self.display.disconnect()
-            except:
-                pass
-            self.display = None
-
-    def copy_text(self, text):
-        if not self.started:
-            return
-
-        text_sent = threading.Event()
-        data_source = self.manager.create_data_source()
-        data_source.text = text.encode()
-        data_source.text_sent = text_sent
-        data_source.offer('text/plain')
-        data_source.offer('text/plain;charset=utf-8')
-        data_source.offer('TEXT')
-        data_source.offer('STRING')
-        data_source.offer('UTF8_STRING')
-        data_source.dispatcher['send'] = self.data_source_send
-        data_source.dispatcher['cancelled'] = self.data_source_cancelled
-
-        try:
-            self.copy_queue.put_nowait(data_source)
-        except queue.Full:
-            try:
-                self.copy_queue.get_nowait()
+                data_source = self.copy_queue.get_nowait()
+                data_source.text_sent.set()
             except queue.Empty:
                 pass
-            self.copy_queue.put_nowait(data_source)
+            if self.data_device is not None:
+                try:
+                    self.data_device.destroy()
+                except:
+                    pass
+                self.data_device = None
+            if self.seat is not None:
+                try:
+                    self.seat.destroy()
+                except:
+                    pass
+                self.seat = None
+            if self.manager is not None:
+                try:
+                    self.manager.destroy()
+                except:
+                    pass
+                self.manager = None
+            if self.registry is not None:
+                try:
+                    self.registry.destroy()
+                except:
+                    pass
+                self.registry = None
+            if self.display is not None:
+                try:
+                    self.display.disconnect()
+                except:
+                    pass
+                self.display = None
+
+
+    def copy_text(self, text):
+        with self.copy_lock:
+            if not self.started:
+                return
+
+            text_sent = threading.Event()
+            data_source = self.manager.create_data_source()
+            data_source.text = text.encode()
+            data_source.text_sent = text_sent
+            data_source.offer('text/plain')
+            data_source.offer('text/plain;charset=utf-8')
+            data_source.offer('TEXT')
+            data_source.offer('STRING')
+            data_source.offer('UTF8_STRING')
+            data_source.dispatcher['send'] = self.data_source_send
+            data_source.dispatcher['cancelled'] = self.data_source_cancelled
+
+            try:
+                self.copy_queue.put_nowait(data_source)
+            except queue.Full:
+                try:
+                    self.copy_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                self.copy_queue.put_nowait(data_source)
 
         text_sent.wait(timeout=0.4)
 
