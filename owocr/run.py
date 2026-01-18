@@ -35,6 +35,8 @@ from .screen_coordinate_picker import get_screen_selection, terminate_selector_i
 
 if sys.platform == 'darwin':
     import termios
+    import fcntl
+    import errno
     import objc
     import platform
     from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
@@ -57,13 +59,14 @@ elif sys.platform == 'win32':
     import ctypes
 elif sys.platform == 'linux':
     import termios
+    import fcntl
+    import errno
     from PIL import ImageGrab
     import pyperclip
 
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
 if is_wayland:
-    import fcntl
     from . import wayland_mss_shim
     mss = wayland_mss_shim.MSSModuleShim()
     from pywayland.client import Display
@@ -2730,17 +2733,6 @@ def run():
     default_engine = ''
     engine_secondary = ''
 
-    owocr_running_event_handle = None
-    if sys.platform == 'win32':
-        owocr_running_event_handle = ctypes.windll.kernel32.CreateEventW(None, True, True, "OwOCR_Running")
-        last_error = ctypes.windll.kernel32.GetLastError()
-        if last_error:
-            ERROR_ALREADY_EXISTS = 183
-            if last_error == ERROR_ALREADY_EXISTS:
-                logger.warning("OwOCR_Running event already exists (another instance might be running).")
-            elif not owocr_running_event_handle:
-                logger.warning(f"Failed to create OwOCR_Running event. Error code: {last_error}")
-
     if len(engines_setting) > 0:
         for config_engine in engines_setting.split(','):
             config_engines.append(config_engine.strip().lower())
@@ -2910,6 +2902,48 @@ def run():
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
     user_input_thread.start()
 
+    if sys.platform == 'win32':
+        event_name = 'owocr_running'
+        running_event_handle = ctypes.windll.kernel32.CreateEventW(None, True, True, event_name)
+        last_error = ctypes.windll.kernel32.GetLastError()
+        if last_error:
+            ERROR_ALREADY_EXISTS = 183
+            if last_error == ERROR_ALREADY_EXISTS:
+                logger.warning(event_name + ' event already exists (another instance might be running)')
+            elif not running_event_handle:
+                logger.warning(f'Failed to create {event_name} event. Error code: {last_error}')
+    else:
+        lock_file = '/tmp/owocr.lock'
+        try:
+            lock_fd = os.open(lock_file, os.O_CREAT | os.O_WRONLY)
+            try:
+                fcntl.lockf(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                os.write(lock_fd, str(os.getpid()).encode())
+                os.fsync(lock_fd)
+            except (IOError, OSError) as e:
+                os.close(lock_fd)
+                lock_fd = None
+                if e.errno in (errno.EACCES, errno.EAGAIN):
+                    logger.warning(lock_file + ' already exists (another instance might be running)')
+                else:
+                    logger.warning(f'Failed to lock {lock_file}: {e}')
+        except Exception as e:
+            logger.warning(f'Failed to create {lock_file}: {e}')
+
+    def event_lock_cleanup():
+        if sys.platform == 'win32':
+            if running_event_handle:
+                ctypes.windll.kernel32.CloseHandle(running_event_handle)
+        elif lock_fd is not None:
+            try:
+                fcntl.lockf(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+                os.unlink(lock_file)
+            except:
+                pass
+
+    atexit.register(event_lock_cleanup)
+
     if not terminated.is_set():
         logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
 
@@ -2972,5 +3006,3 @@ def run():
         screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()
-    if sys.platform == 'win32' and owocr_running_event_handle:
-        ctypes.windll.kernel32.CloseHandle(owocr_running_event_handle)
