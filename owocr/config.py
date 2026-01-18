@@ -98,7 +98,7 @@ class Config:
         'auto_pause' : 0,
         'delete_images': False,
         'engines': [],
-        'logger_format': '<green>{time:HH:mm:ss.SSS}</green> | <level>{message}</level>',
+        'logger_format': '<green>{time:HH:mm:ss}</green> | <level>{message}</level>',
         'engine_color': 'cyan',
         'delay_seconds': 0.5,
         'websocket_port': 7331,
