@@ -2730,6 +2730,17 @@ def run():
     default_engine = ''
     engine_secondary = ''
 
+    owocr_running_event_handle = None
+    if sys.platform == 'win32':
+        owocr_running_event_handle = ctypes.windll.kernel32.CreateEventW(None, True, True, "OwOCR_Running")
+        last_error = ctypes.windll.kernel32.GetLastError()
+        if last_error:
+            ERROR_ALREADY_EXISTS = 183
+            if last_error == ERROR_ALREADY_EXISTS:
+                logger.warning("OwOCR_Running event already exists (another instance might be running).")
+            elif not owocr_running_event_handle:
+                logger.warning(f"Failed to create OwOCR_Running event. Error code: {last_error}")
+
     if len(engines_setting) > 0:
         for config_engine in engines_setting.split(','):
             config_engines.append(config_engine.strip().lower())
@@ -2961,3 +2972,5 @@ def run():
         screenshot_thread.join()
     if key_combo_listener:
         key_combo_listener.stop()
+    if sys.platform == 'win32' and owocr_running_event_handle:
+        ctypes.windll.kernel32.CloseHandle(owocr_running_event_handle)
