@@ -2907,6 +2907,7 @@ def run():
         running_event_handle = ctypes.windll.kernel32.CreateEventW(None, True, True, event_name)
         last_error = ctypes.windll.kernel32.GetLastError()
         if last_error:
+            running_event_handle = None
             ERROR_ALREADY_EXISTS = 183
             if last_error == ERROR_ALREADY_EXISTS:
                 logger.warning(event_name + ' event already exists (another instance might be running)')
