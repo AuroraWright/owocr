@@ -22,34 +22,30 @@ owocr
 
 This default behavior monitors the clipboard for images and outputs recognized text back to the clipboard.
 
+```
+owocr_config
+```
+
+This opens the interface where you can change all the options.
+
 ## Main features
 
 - Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
 - Multiple output destinations: clipboard, text files, and websockets
 - Pause/unpause with `p` or terminate with `t`/`q` in the terminal, switch between engines with `s` or the engine-specific keys (from the engine list below)
-- Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine with the `-es` option: `-es=oneocr` on Windows and `-es=alivetext` on macOS. With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
+- Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine (OneOCR on Windows, Apple Live Text on macOS and meikiocr on Linux). With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
 - Multiple configurable keyboard combinations to control owocr from anywhere, including pausing, switching engines, taking a screenshot of the selected screen/window and running the automatic tool to re-select an area of the screen/window via drag and drop
 - Read from a unix domain socket `/tmp/owocr.sock` on macOS/Linux
 - Furigana filter, works by default with Japanese text (both vertical and horizontal)
 
-## Common option examples
-
-- Write text to a file: `owocr -w=<txt file path>`
-- Read images from a folder: `owocr -r=<folder path>`
-- Write text to a websocket: `owocr -w=websocket` (default websocket port is 7331)
-- Read from the screen or one/more portion(s) of the screen (opens the automatic drag and drop selector, hold CTRL/cmd to select multiple areas and click to delete them or Backspace to reset): `owocr -r=screencapture`
-- Read from a window having "Notepad" in the title: `owocr -r=screencapture -sa=Notepad`
-- Read from one/more portion(s) of a window having "Notepad" in the title (opens the automatic drag and drop selector, hold CTRL/cmd to select multiple areas and click to delete them or Backspace to reset): `owocr -r=screencapture -sa=Notepad -swa`
-
 ## Configuration
 
-There are many more options and customization features. For complete documentation of all available settings:
+There are many options and customization features. They can be all be accessed with `owocr_config`, but if you prefer they can also be changed through manual command-line arguments, or by editing the configuration file.
+You can change the OCR engines, hotkeys, screen capture settings, notifications, and much more.
 
-- View all command-line options and their descriptions: `owocr -h`
-- Check the automatically generated config file at `~/.config/owocr_config.ini` on Linux/macOS, or `C:\Users\yourusername\.config\owocr_config.ini` on Windows
-- See a sample config file: [owocr_config.ini](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
-
-The command-line options/config file allow you to configure OCR providers, hotkeys, screen capture settings, notifications, and much more.
+- All manual command-line options and their descriptions can be viewed with: `owocr -h`
+- The configuration file is located at `~/.config/owocr_config.ini` on Linux/macOS, or `C:\Users\yourusername\.config\owocr_config.ini` on Windows
+- A sample config file is available at: [owocr_config.ini](https://raw.githubusercontent.com/AuroraWright/owocr/master/owocr_config.ini)
 
 ## Notes about Linux support
 
@@ -57,11 +53,11 @@ While I've done all I could to support Linux (specifically Wayland), not everyth
 
 - There are two ways of reading images from and writing text to the clipboard on Wayland. One requires a compositor which supports the extension "ext-data-control" and this should work out of the box with owocr by default. [ext_data_control compatibility chart](https://wayland.app/protocols/wayland-protocols/336#compositor-support) (worth noting GNOME/Mutter doesn't support it, but e.g. KDE/KWin does).\
 The alternative is through `wl-clipboard` (preinstalled in most distributions), but this will try to steal your focus constantly (due to Wayland's security design), limiting usability.\
-To switch to wl-clipboard, enable `wayland_use_wlclipboard` in the config file.
-- Reading from screen capture works now on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr.\
+To switch to wl-clipboard, enable `wayland_use_wlclipboard` in `owocr_config` -> Advanced.
+- Reading from screen capture works on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr.\
 By default the automatic coordinate selector will be launched to select one/more areas, as explained above.\
-Using `owocr -r=screencapture -sa=screen_1` will use the whole selection.\
-Using manual window names in `-sa=` is not supported and will be ignored.
+Using `owocr_config` -> Screen capture -> screen_capture_area -> "whole screen" 1/`owocr -r=screencapture -sa=screen_1` will use the whole selection.\
+Using manual window names is not supported and will be ignored.
 - Keyboard combos/keyboard inputs in the coordinate selector might not work on Wayland. From my own testing they work on KDE but not GNOME (it seems KDE exposes inputs through the X11 APIs). A workaround involves running pynput with the uinput backend, but this requires exposing your input devices (they will be accessible without root):\
 `sudo chmod u+s $(which dumpkeys)`\
 `sudo usermod -a -G $(stat -c %G /dev/input/event0) $(whoami)`\

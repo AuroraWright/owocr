@@ -228,7 +228,7 @@ class ConfigGUI:
                 ('screen_capture_window_area', 'special_screen_capture_window_area', 'Window subsection to capture'),
                 ('screen_capture_only_active_windows', 'bool', "Only capture a window while it's not in the background"),
                 ('screen_capture_delay_seconds', 'float', 'Capture every X seconds (-1 to disable continuous capture)'),
-                ('screen_capture_frame_stabilization', 'float', 'Wait X seconds until text is stable (-1 to disable)'),
+                ('screen_capture_frame_stabilization', 'float', 'Wait X seconds until text is stable:\n-1: wait for two frames\n0: disable (faster, only works when text is shown all at once)'),
                 ('screen_capture_line_recovery', 'bool', 'Try to recover lines missed by frame stabilization (can increase glitches)'),
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
                 ('language', 'dropdown', 'Language code, used to cleanup text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
