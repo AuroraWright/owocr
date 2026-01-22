@@ -37,14 +37,18 @@ class ScreenSelector:
         elif sys.platform == 'win32':
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
-        self.start_key_listener()
-
     def start_key_listener(self):
         self.keyboard_listener = keyboard.Listener(
             on_press=self.on_key_press,
             on_release=self.on_key_release
         )
         self.keyboard_listener.start()
+        if sys.platform != 'linux':
+            self.keyboard_listener.wait()
+
+    def stop_key_listener(self):
+        self.keyboard_listener.stop()
+        self.keyboard_listener.join()
 
     def on_key_press(self, key):
         if not self.root:
@@ -391,6 +395,7 @@ class ScreenSelector:
             self.keyboard_event_queue.get()
 
     def start(self):
+        self.start_key_listener()
         while True:
             command = self.command_queue.get()
             image, coordinates, is_window = command
@@ -424,6 +429,7 @@ class ScreenSelector:
             self.root.after(50, self.process_keyboard_events)
             self.root.mainloop()
             self.cleanup_ui()
+        self.stop_key_listener()
 
 
 def run_screen_selector(result_queue, command_queue):

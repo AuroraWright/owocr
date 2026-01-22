@@ -77,7 +77,7 @@ parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRES
 parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
                     help='Websocket port to use if reading or writing to websocket.')
 parser.add_argument('-ds', '--delay_seconds', type=float, default=argparse.SUPPRESS,
-                    help='Delay (in seconds) between checks when reading from clipboard (on macOS/Linux) or a directory.')
+                    help='Delay (in seconds) between checks when reading from clipboard (on macOS or Linux except for Wayland) or a directory.')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,
                     help='Terminal window verbosity. Can be -2 (all recognized text is showed whole, default), -1 (only timestamps are shown), 0 (nothing is shown but errors), or larger than 0 to cut displayed text to that amount of characters.')
 parser.add_argument('--uwu', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
@@ -88,7 +88,7 @@ class Config:
     config_path = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
     __general_config = {}
     __engine_config = {}
-    __default_config = {
+    default_config = {
         'read_from': 'clipboard',
         'read_from_secondary': '',
         'write_to': 'clipboard',
@@ -181,8 +181,8 @@ class Config:
         try:
             return self.__general_config[value]
         except KeyError:
-            if value in self.__default_config:
-                return self.__default_config[value]
+            if value in self.default_config:
+                return self.default_config[value]
             else:
                 return None
 

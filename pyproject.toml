@@ -88,6 +88,7 @@ Homepage = "https://github.com/AuroraWright/owocr"
 
 [project.scripts]
 owocr = "owocr.__main__:main"
+owocr_config = "owocr.config_editor:main"
 
 [tool.setuptools]
 include-package-data = true
