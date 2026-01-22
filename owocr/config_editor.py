@@ -68,7 +68,8 @@ class HotkeyRecorder:
 
     def stop_listener(self):
         self.listener.stop()
-        self.listener.join()
+        if sys.platform != 'linux':
+            self.listener.join()
 
     def _should_handle_event(self):
         if not self.recording:
@@ -317,15 +318,22 @@ class ConfigGUI:
         main_frame = ttk.Frame(self.root, padding=10)
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
+        if sys.platform == 'darwin':
+            notebook_padding = 0
+            status_bar_padding = 20
+        else:
+            notebook_padding = 10
+            status_bar_padding = 10
+
         self.notebook = ttk.Notebook(main_frame)
-        self.notebook.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.notebook.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, notebook_padding))
 
         self._create_category_tabs()
         self._create_buttons(main_frame)
 
         self.status_var = tk.StringVar()
         self.status_bar = ttk.Label(main_frame, textvariable=self.status_var,relief=tk.SUNKEN, anchor=tk.W)
-        self.status_bar.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0))
+        self.status_bar.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(status_bar_padding, 0))
 
         self._configure_grid_weights(main_frame)
 
@@ -413,7 +421,7 @@ class ConfigGUI:
 
     def _create_buttons(self, parent):
         button_frame = ttk.Frame(parent)
-        button_frame.grid(row=2, column=0, columnspan=2, pady=(0, 10))
+        button_frame.grid(row=2, column=0, columnspan=2)
 
         ttk.Button(button_frame, text='Save', command=self.save_config).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text='Reset to Defaults', command=self.reset_to_defaults).pack(side=tk.LEFT, padx=5)

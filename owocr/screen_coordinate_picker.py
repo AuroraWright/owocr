@@ -48,7 +48,8 @@ class ScreenSelector:
 
     def stop_key_listener(self):
         self.keyboard_listener.stop()
-        self.keyboard_listener.join()
+        if sys.platform != 'linux':
+            self.keyboard_listener.join()
 
     def on_key_press(self, key):
         if not self.root:
