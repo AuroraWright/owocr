@@ -1070,6 +1070,8 @@ class ConfigGUI:
 
     def _get_engine_dropdown_value(self, widget_info):
         display_name = widget_info['var'].get()
+        if not display_name:
+            return ''
         engine_class = self.engine_name_to_class.get(display_name)
         return engine_class.name
 

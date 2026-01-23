@@ -2113,10 +2113,9 @@ class ScreenshotThread(threading.Thread):
                         y += window_y
         else:
             try:
-                self.sct = mss.mss()
+                sct_img = self.sct.grab(self.sct_params)
             except mss.exception.ScreenShotError:
                 return False, None
-            sct_img = self.sct.grab(self.sct_params)
             img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
             x = self.sct_params['left']
             y = self.sct_params['top']
