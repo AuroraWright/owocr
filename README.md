@@ -32,6 +32,7 @@ This opens the interface where you can change all the options.
 
 - Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
 - Multiple output destinations: clipboard, text files, and websockets
+- Integrates well with Windows, macOS and Linux, supporting operating system features like notifications and a tray icon
 - Pause/unpause with `p` or terminate with `t`/`q` in the terminal, switch between engines with `s` or the engine-specific keys (from the engine list below)
 - Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine (OneOCR on Windows, Apple Live Text on macOS and meikiocr on Linux). With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
 - Multiple configurable keyboard combinations to control owocr from anywhere, including pausing, switching engines, taking a screenshot of the selected screen/window and running the automatic tool to re-select an area of the screen/window via drag and drop
@@ -41,7 +42,7 @@ This opens the interface where you can change all the options.
 ## Configuration
 
 There are many options and customization features. They can be all be accessed with `owocr_config`, but if you prefer they can also be changed through manual command-line arguments, or by editing the configuration file.
-You can change the OCR engines, hotkeys, screen capture settings, notifications, and much more.
+You can change the OCR engines, hotkeys, screen capture settings, notifications, add a tray icon and much more.
 
 - All manual command-line options and their descriptions can be viewed with: `owocr -h`
 - The configuration file is located at `~/.config/owocr_config.ini` on Linux/macOS, or `C:\Users\yourusername\.config\owocr_config.ini` on Windows

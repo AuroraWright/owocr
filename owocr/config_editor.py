@@ -1,11 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import PhotoImage, ttk, messagebox, filedialog
 import configparser
 import os
 import inspect
 import sys
 import ctypes
 import time
+import importlib.resources
 
 from pynputfix import keyboard
 
@@ -178,7 +179,13 @@ class ConfigGUI:
         self._load_config()
 
     def _setup_window(self):
+        def load_icon_image():
+            with importlib.resources.path(__name__, 'data/icon.png') as icon_path:
+                return str(icon_path)
+
         self.root.title('owocr Configuration Editor')
+        icon = PhotoImage(file=load_icon_image())
+        self.root.iconphoto(True, icon)
 
         width, height = 700, 700
         if sys.platform == 'win32':
@@ -209,14 +216,15 @@ class ConfigGUI:
                 ('read_from', 'dropdown', 'Input source', ['clipboard', 'websocket', 'unixsocket', 'screencapture']),
                 ('read_from_secondary', 'dropdown', 'Optional secondary input source', ['', 'clipboard', 'websocket', 'unixsocket', 'screencapture']),
                 ('write_to', 'dropdown', 'Output destination', ['clipboard', 'websocket']),
-                ('pause_at_startup', 'bool', 'Pause when owocr starts'),
-                ('notifications', 'bool', 'Show OS notifications with the detected text'),
-                ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
-                ('delete_images', 'bool', 'Delete images after processing'),
-                ('output_format', 'dropdown', 'Output format', ['text', 'json']),
-                ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
                 ('websocket_port', 'int', 'Websocket port'),
                 ('delay_seconds', 'float', 'Check the clipboard/directory every X seconds (ignored on Windows/Wayland)'),
+                ('delete_images', 'bool', 'Delete images from the folder after processing'),
+                ('pause_at_startup', 'bool', 'Pause when owocr starts'),
+                ('notifications', 'bool', 'Show OS notifications with the detected text'),
+                ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, and take a screenshot'),
+                ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
+                ('output_format', 'dropdown', 'Output format', ['text', 'json']),
+                ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
             ],
             'Engines': [
                 ('engines', 'multicheckbox', 'List of enabled OCR engines'),

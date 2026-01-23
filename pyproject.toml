@@ -9,7 +9,6 @@ description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    {name = "AuroraWright", email = "fallingluma@gmail.com"}
 ]
 license = "GPL-3.0-only"
 classifiers = [
@@ -23,6 +22,7 @@ dependencies = [
     "pynputfix",
     "websockets>=14.0",
     "desktop-notifier>=6.1.0",
+    "pystrayfix",
     "mss>=10.1.0",
     "psutil",
     "curl_cffi",

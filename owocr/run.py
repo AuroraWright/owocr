@@ -3,6 +3,7 @@ import signal
 import atexit
 import time
 import threading
+import multiprocessing
 from pathlib import Path
 import queue
 import io
@@ -32,6 +33,7 @@ from desktop_notifier import DesktopNotifierSync, Urgency
 from .ocr import *
 from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
+from .tray_icon import start_tray_process, terminate_tray_process_if_running
 
 if sys.platform == 'darwin':
     import termios
@@ -64,6 +66,11 @@ elif sys.platform == 'linux':
     from PIL import ImageGrab
     import pyperclip
 
+try:
+    multiprocessing.set_start_method('spawn')
+except RuntimeError:
+    pass
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
 if is_wayland:
@@ -74,8 +81,6 @@ if is_wayland:
     from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
 else:
     import mss
-
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class ClipboardThread(threading.Thread):
@@ -1626,7 +1631,7 @@ class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
-        self.coordinate_selector_combo_enabled = config.get_general('coordinate_selector_combo') != ''
+        self.coordinate_selector_combo_enabled = config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.window_handle = None
@@ -1732,7 +1737,7 @@ class ScreenshotThread(threading.Thread):
                 logger.info(f'Selected window: {window_title}')
             elif sys.platform == 'win32':
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
-                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)                
+                self.window_handle, window_title = self.get_windows_window_handle(screen_capture_area)
 
                 if not self.window_handle:
                     exit_with_error('"screen_capture_area" must be empty, "screen_N" where N is a screen number starting from 1, one or more sets of rectangle coordinates, or a window name')
@@ -2327,7 +2332,7 @@ class AutopauseTimer:
             if self.running and self.countdown_active.is_set() and self.seconds_remaining == 0:
                 self.countdown_active.clear()
                 if not (paused.is_set() or terminated.is_set()):
-                    pause_handler(True)
+                    pause_handler(True, True)
 
 
 class SecondPassThread:
@@ -2585,19 +2590,21 @@ def get_notification_urgency():
     return Urgency.Normal
 
 
-def pause_handler(is_combo=True):
+def pause_handler(notify=True, notify_tray=True):
     global paused
     message = 'Unpaused!' if paused.is_set() else 'Paused!'
 
     if auto_pause_handler:
         auto_pause_handler.stop_timer()
-    if is_combo:
+    if notify:
         notifier.send(title='owocr', message=message, urgency=get_notification_urgency())
     logger.info(message)
     paused.clear() if paused.is_set() else paused.set()
+    if notify_tray and config.get_general('tray_icon'):
+        tray_command_queue.put(('update_pause', paused.is_set()))
 
 
-def engine_change_handler(user_input='s', is_combo=True):
+def engine_change_handler(user_input='s', notify=True, notify_tray=True):
     global engine_index
     old_engine_index = engine_index
 
@@ -2610,8 +2617,10 @@ def engine_change_handler(user_input='s', is_combo=True):
         engine_index = engine_keys.index(user_input.lower())
     if engine_index != old_engine_index:
         new_engine_name = engine_instances[engine_index].readable_name
-        if is_combo:
+        if notify:
             notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
+        if notify_tray and config.get_general('tray_icon'):
+            tray_command_queue.put(('update_engine', engine_index))
         engine_color = config.get_general('engine_color')
         logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</>!')
 
@@ -2642,9 +2651,9 @@ def user_input_thread_run():
                     if user_input.lower() in 'tq':
                         terminate_handler()
                     elif user_input.lower() == 'p':
-                        pause_handler(False)
+                        pause_handler(False, True)
                     else:
-                        engine_change_handler(user_input, False)
+                        engine_change_handler(user_input, False, True)
                 except UnicodeDecodeError:
                     pass
             else:
@@ -2676,11 +2685,29 @@ def user_input_thread_run():
                     if user_input.lower() in 'tq':
                         terminate_handler()
                     elif user_input.lower() == 'p':
-                        pause_handler(False)
+                        pause_handler(False, True)
                     else:
-                        engine_change_handler(user_input, False)
+                        engine_change_handler(user_input, False, True)
         finally:
             restore_terminal_state()
+
+
+def tray_user_input_thread_run():
+    while not terminated.is_set():
+        try:
+            action, data = tray_result_queue.get(timeout=0.2)
+            if action == 'change_engine':
+                engine_change_handler(engine_keys[data], False, False)
+            elif action == 'toggle_pause':
+                pause_handler(False, False)
+            elif action == 'capture':
+                screenshot_request_queue.put(True)
+            elif action == 'capture_area_selector':
+                coordinate_selector_event.set()
+            elif action == 'terminate':
+                terminate_handler()
+        except queue.Empty:
+            continue
 
 
 def on_screenshot_combo():
@@ -2730,6 +2757,7 @@ def run():
     engine_instances = []
     config_engines = []
     engine_keys = []
+    engine_names = []
     default_engine = ''
     engine_secondary = ''
 
@@ -2758,6 +2786,7 @@ def run():
             if engine_instance.available:
                 engine_instances.append(engine_instance)
                 engine_keys.append(engine_class.key)
+                engine_names.append(engine_class.readable_name)
                 if default_engine_setting == engine_class.name:
                     default_engine = engine_class.key
                 if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
@@ -2791,6 +2820,7 @@ def run():
     write_to = config.get_general('write_to')
     terminated = threading.Event()
     paused = threading.Event()
+    tray_enabled = config.get_general('tray_icon')
     if config.get_general('pause_at_startup'):
         paused.set()
     auto_pause = config.get_general('auto_pause')
@@ -2824,7 +2854,7 @@ def run():
         clipboard_thread.start()
     if 'websocket' in (read_from, read_from_secondary) or write_to == 'websocket':
         websocket_port = config.get_general('websocket_port')
-        logger.info(f"Starting websocket server on port {websocket_port}")
+        logger.info(f'Starting websocket server on port {websocket_port}')
         websocket_server_thread = WebsocketServerThread('websocket' in (read_from, read_from_secondary))
         websocket_server_thread.start()
     if 'screencapture' in (read_from, read_from_secondary):
@@ -2833,8 +2863,9 @@ def run():
         screen_capture_combo = config.get_general('screen_capture_combo')
         coordinate_selector_combo = config.get_general('coordinate_selector_combo')
         last_screenshot_time = 0
-        if screen_capture_combo != '':
+        if tray_enabled or screen_capture_combo != '':
             screen_capture_on_combo = True
+        if screen_capture_combo != '':
             key_combos[screen_capture_combo] = on_screenshot_combo
         if coordinate_selector_combo != '':
             key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
@@ -2843,7 +2874,7 @@ def run():
             periodic_screenshot_queue = queue.Queue()
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
-            exit_with_error('screen_capture_delay_seconds or screen_capture_combo need to be valid values')
+            exit_with_error('tray_enabled, screen_capture_delay_seconds or screen_capture_combo need to be valid values')
         screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
@@ -2894,6 +2925,16 @@ def run():
         if Path(write_to).suffix.lower() != '.txt':
             exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
+
+    if tray_enabled:
+        global tray_result_queue
+        global tray_command_queue
+        tray_result_queue = multiprocessing.Queue()
+        tray_command_queue = multiprocessing.Queue()
+        logger.info(f'Starting tray icon')
+        start_tray_process(engine_names, engine_index, paused.is_set(), screenshot_thread is not None, tray_result_queue, tray_command_queue)
+        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, daemon=True)
+        tray_user_input_thread.start()
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
     signal.signal(signal.SIGINT, terminate_handler)
@@ -2988,6 +3029,9 @@ def run():
 
     terminate_selector_if_running()
     user_input_thread.join()
+    if tray_enabled:
+        tray_user_input_thread.join()
+        terminate_tray_process_if_running(tray_command_queue)
     output_result.second_pass_thread.stop()
     if auto_pause_handler:
         auto_pause_handler.stop()
