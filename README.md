@@ -97,3 +97,4 @@ This uses code from/references these people/projects:
 - [ocrmac](https://github.com/straussmaximilian/ocrmac) for the Apple Vision framework API
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code
 - vicky for the demo videos in this readme!
+- nao for the awesome icon!
