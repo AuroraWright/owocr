@@ -24,18 +24,14 @@ class ScreenSelector:
         self.root = None
         self.result_queue = result_queue
         self.command_queue = command_queue
-        self.mac_init_done = False
         self.ctrl_pressed = False
         self.drawing = False
+        self.windows = []
         self.canvases = []
         self.selections = []
         self.previous_coordinates = []
         self.keyboard_event_queue = queue.Queue()
         self.real_monitors = []
-        if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
-            self.real_monitors = mss.mss().monitors[1:]
-        elif sys.platform == 'win32':
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
     def start_key_listener(self):
         self.keyboard_listener = keyboard.Listener(
@@ -52,7 +48,7 @@ class ScreenSelector:
             self.keyboard_listener.join()
 
     def on_key_press(self, key):
-        if not self.root:
+        if not self.windows:
             return
 
         if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
@@ -60,7 +56,7 @@ class ScreenSelector:
             self.keyboard_event_queue.put('show_previous_selections')
 
     def on_key_release(self, key):
-        if not self.root:
+        if not self.windows:
             return
 
         if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.cmd_l, keyboard.Key.cmd_r):
@@ -73,25 +69,45 @@ class ScreenSelector:
         elif key == keyboard.Key.esc:
             self.keyboard_event_queue.put('return_empty')
 
-    def process_keyboard_events(self):
-        try:
-            while True:
-                event_type = self.keyboard_event_queue.get_nowait()
-                if event_type == 'return_selections':
-                    if self.selections and not self.drawing:
-                        self.return_all_selections()
-                        return
-                elif event_type == 'return_empty':
-                    self.return_empty()
-                    return
-                elif event_type == 'clear_selections':
-                    self.clear_all_selections()
-                elif event_type == 'show_previous_selections':
-                    self.show_previous_selections()
-        except queue.Empty:
-            pass
+    def process_events(self):
+        if self.windows:
+            try:
+                while True:
+                    event_type = self.keyboard_event_queue.get_nowait()
+                    if event_type == 'return_selections':
+                        if self.selections and not self.drawing:
+                            self.return_all_selections()
+                    elif event_type == 'return_empty':
+                        self.return_empty()
+                    elif event_type == 'clear_selections':
+                        self.clear_all_selections()
+                    elif event_type == 'show_previous_selections':
+                        self.show_previous_selections()
+            except queue.Empty:
+                pass
+        else:
+            command = self.command_queue.get()
+            image, coordinates, is_window = command
 
-        self.root.after(50, self.process_keyboard_events)
+            if image == False:
+                self.root.destroy()
+                return
+            elif image == True:
+                self.result_queue.put(False)
+            else:
+                self.previous_coordinates = coordinates if coordinates else []
+
+                monitors, window_scale, images = image
+                if is_window:
+                    self.find_monitor_and_create_window(monitors, window_scale, images, None)
+                else:
+                    for i, monitor in enumerate(monitors):
+                        if self.real_monitors:
+                            self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
+                        else:
+                            self.create_window(monitor, images[i])
+
+        self.root.after(50, self.process_events)
 
     def add_selection(self, monitor, scale_x, scale_y, coordinates):
         ctrl_pressed = self.ctrl_pressed
@@ -149,7 +165,23 @@ class ScreenSelector:
 
     def return_empty(self):
         self.result_queue.put(False)
-        self.root.destroy()
+        self.destroy_all_windows()
+
+    def destroy_all_windows(self):
+        for window in self.windows:
+            window.destroy()
+
+        self.selections.clear()
+        self.canvases.clear()
+        self.windows.clear()
+        self.ctrl_pressed = False
+        self.drawing = False
+        while not self.keyboard_event_queue.empty():
+            self.keyboard_event_queue.get()
+
+    def cleanup_ui(self):
+        self.root.update()
+        self.root = None
 
     def return_all_selections(self):
         selections_abs = []
@@ -179,7 +211,7 @@ class ScreenSelector:
             })
 
         self.result_queue.put(selections_abs)
-        self.root.destroy()
+        self.destroy_all_windows()
 
     def show_previous_selections(self):
         if not self.previous_coordinates:
@@ -325,6 +357,7 @@ class ScreenSelector:
         window.geometry(geometry)
         window.overrideredirect(1)
         window.attributes('-topmost', 1)
+        self.windows.append(window)
 
         img_tk = ImageTk.PhotoImage(img)
         canvas = tk.Canvas(window, cursor='cross', highlightthickness=0)
@@ -386,50 +419,24 @@ class ScreenSelector:
 
         self._create_selection_window(img, geometry, scale_x, scale_y, monitor)
 
-    def cleanup_ui(self):
-        self.root.update()
-        self.root = None
-        self.selections.clear()
-        self.canvases.clear()
-        self.drawing = False
-        while not self.keyboard_event_queue.empty():
-            self.keyboard_event_queue.get()
-
     def start(self):
         self.start_key_listener()
-        while True:
-            command = self.command_queue.get()
-            image, coordinates, is_window = command
 
-            if image == False:
-                break
-            if image == True:
-                self.result_queue.put(False)
-                continue
+        if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+            self.real_monitors = mss.mss().monitors[1:]
+        elif sys.platform == 'win32':
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
-            self.previous_coordinates = coordinates if coordinates else []
-            self.root = tk.Tk()
+        self.root = tk.Tk()
+        self.root.withdraw()
 
-            if not self.mac_init_done and sys.platform == 'darwin':
-                app = NSApplication.sharedApplication()
-                app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-                self.mac_init_done = True
+        if sys.platform == 'darwin':
+            app = NSApplication.sharedApplication()
+            app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-            self.root.withdraw()
-
-            monitors, window_scale, images = image
-            if is_window:
-                self.find_monitor_and_create_window(monitors, window_scale, images, None)
-            else:
-                for i, monitor in enumerate(monitors):
-                    if self.real_monitors:
-                        self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
-                    else:
-                        self.create_window(monitor, images[i])
-
-            self.root.after(50, self.process_keyboard_events)
-            self.root.mainloop()
-            self.cleanup_ui()
+        self.root.after(0, self.process_events)
+        self.root.mainloop()
+        self.cleanup_ui()
         self.stop_key_listener()
 
 
