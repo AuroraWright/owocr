@@ -946,7 +946,7 @@ class GoogleLens:
         if img.width * img.height > 3000000:
             aspect_ratio = img.width / img.height
             new_w = int(sqrt(3000000 * aspect_ratio))
-            new_h = new_w // aspect_ratio
+            new_h = int(new_w / aspect_ratio)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return pil_image_to_bytes(img), img.width, img.height
