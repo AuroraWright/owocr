@@ -188,15 +188,21 @@ class ConfigGUI:
         self.root.iconphoto(True, icon)
 
         width, height = 700, 700
+        window_scale = 1.0
         if sys.platform == 'win32':
             hwnd = self.root.winfo_id()
             dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
             window_scale = dpi / 96.0
-            width = int(width * window_scale)
-            height = int(height * window_scale)
             hotkey_recorder.window_scale = window_scale
 
-        self.root.geometry(f'{width}x{height}')
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        width = int(width * window_scale)
+        height = int(height * window_scale)
+        x = screen_width // 2 - width // 2
+        y = screen_height // 2 - height // 2
+
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
         self.root.resizable(False, False)
 
     def _initialize_styles(self):
@@ -945,7 +951,6 @@ class ConfigGUI:
             var.set(value)
 
     def _strip_quotes(self, value):
-        """Strip quotes from string value"""
         if (value.startswith('"') and value.endswith('"')) or \
            (value.startswith("'") and value.endswith("'")):
             return value[1:-1]

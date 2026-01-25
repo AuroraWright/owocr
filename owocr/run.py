@@ -2055,8 +2055,8 @@ class ScreenshotThread(threading.Thread):
                         ctypes.windll.shcore.GetDpiForMonitor(monitor_handle, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
 
                         window_scale = dpi_x.value / self.window_dpi[0]
-                        coord_width = int(coord_width / window_scale)
-                        coord_height = int(coord_height / window_scale)
+                        coord_width = coord_width // window_scale
+                        coord_height = coord_height // window_scale
 
                     current_size = (coord_width, coord_height)
                     if self.window_size != current_size:
@@ -2704,7 +2704,7 @@ def tray_user_input_thread_run():
             elif action == 'terminate':
                 state_handlers.terminate_handler()
         except queue.Empty:
-            continue
+            pass
 
 
 def get_current_version():
