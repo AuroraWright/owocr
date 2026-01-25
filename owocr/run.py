@@ -2276,7 +2276,7 @@ class ScreenshotThread(threading.Thread):
 
             if img == False:
                 logger.info('The window was closed or an error occurred')
-                terminate_handler()
+                state_handlers.terminate_handler()
                 break
 
         if self.screencapture_mode == 2:
@@ -2331,7 +2331,7 @@ class AutopauseTimer:
             if self.running and self.countdown_active.is_set() and self.seconds_remaining == 0:
                 self.countdown_active.clear()
                 if not (paused.is_set() or terminated.is_set()):
-                    pause_handler(True, True)
+                    state_handlers.pause_handler(True, True)
 
 
 class SecondPassThread:
@@ -2583,57 +2583,59 @@ class OutputResult:
                 auto_pause_handler.stop_timer()
 
 
+class StateHandlers:
+    def __init__(self):
+        self.engine_color = config.get_general('engine_color')
+        self.tray_enabled = config.get_general('tray_icon')
+
+    def pause_handler(self, notify=True, notify_tray=True):
+        global paused
+        message = 'Unpaused!' if paused.is_set() else 'Paused!'
+
+        if auto_pause_handler:
+            auto_pause_handler.stop_timer()
+        if notify:
+            notifier.send(title='owocr', message=message, urgency=get_notification_urgency())
+        logger.info(message)
+        paused.clear() if paused.is_set() else paused.set()
+        if notify_tray and self.tray_enabled:
+            tray_command_queue.put(('update_pause', paused.is_set()))
+
+    def engine_change_handler(self, user_input='s', notify=True, notify_tray=True):
+        global engine_index
+        old_engine_index = engine_index
+
+        if user_input.lower() == 's':
+            if engine_index == len(engine_keys) - 1:
+                engine_index = 0
+            else:
+                engine_index += 1
+        elif user_input.lower() != '' and user_input.lower() in engine_keys:
+            engine_index = engine_keys.index(user_input.lower())
+        if engine_index != old_engine_index:
+            new_engine_name = engine_instances[engine_index].readable_name
+            if notify:
+                notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
+            if notify_tray and self.tray_enabled:
+                tray_command_queue.put(('update_engine', engine_index))
+            logger.opt(colors=True).info(f'Switched to <{self.engine_color}>{new_engine_name}</>!')
+
+    def terminate_handler(self, sig=None, frame=None):
+        global terminated
+        if not terminated.is_set():
+            logger.info('Terminated!')
+            terminated.set()
+
+
 def get_notification_urgency():
     if sys.platform == 'win32':
         return Urgency.Low
     return Urgency.Normal
 
 
-def pause_handler(notify=True, notify_tray=True):
-    global paused
-    message = 'Unpaused!' if paused.is_set() else 'Paused!'
-
-    if auto_pause_handler:
-        auto_pause_handler.stop_timer()
-    if notify:
-        notifier.send(title='owocr', message=message, urgency=get_notification_urgency())
-    logger.info(message)
-    paused.clear() if paused.is_set() else paused.set()
-    if notify_tray and config.get_general('tray_icon'):
-        tray_command_queue.put(('update_pause', paused.is_set()))
-
-
-def engine_change_handler(user_input='s', notify=True, notify_tray=True):
-    global engine_index
-    old_engine_index = engine_index
-
-    if user_input.lower() == 's':
-        if engine_index == len(engine_keys) - 1:
-            engine_index = 0
-        else:
-            engine_index += 1
-    elif user_input.lower() != '' and user_input.lower() in engine_keys:
-        engine_index = engine_keys.index(user_input.lower())
-    if engine_index != old_engine_index:
-        new_engine_name = engine_instances[engine_index].readable_name
-        if notify:
-            notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
-        if notify_tray and config.get_general('tray_icon'):
-            tray_command_queue.put(('update_engine', engine_index))
-        engine_color = config.get_general('engine_color')
-        logger.opt(colors=True).info(f'Switched to <{engine_color}>{new_engine_name}</>!')
-
-
-def terminate_handler(sig=None, frame=None):
-    global terminated
-    if not terminated.is_set():
-        logger.info('Terminated!')
-        terminated.set()
-
-
 def exit_with_error(error):
     logger.error(error)
-    terminate_handler()
+    state_handlers.terminate_handler()
     sys.exit(1)
 
 
@@ -2648,11 +2650,11 @@ def user_input_thread_run():
                     user_input_bytes = msvcrt.getch()
                     user_input = user_input_bytes.decode()
                     if user_input.lower() in 'tq':
-                        terminate_handler()
+                        state_handlers.terminate_handler()
                     elif user_input.lower() == 'p':
-                        pause_handler(False, True)
+                        state_handlers.pause_handler(False, True)
                     else:
-                        engine_change_handler(user_input, False, True)
+                        state_handlers.engine_change_handler(user_input, False, True)
                 except UnicodeDecodeError:
                     pass
             else:
@@ -2678,11 +2680,11 @@ def user_input_thread_run():
                 if rlist:
                     user_input = sys.stdin.read(1)
                     if user_input.lower() in 'tq':
-                        terminate_handler()
+                        state_handlers.terminate_handler()
                     elif user_input.lower() == 'p':
-                        pause_handler(False, True)
+                        state_handlers.pause_handler(False, True)
                     else:
-                        engine_change_handler(user_input, False, True)
+                        state_handlers.engine_change_handler(user_input, False, True)
         finally:
             restore_terminal_state()
 
@@ -2692,25 +2694,17 @@ def tray_user_input_thread_run():
         try:
             action, data = tray_result_queue.get(timeout=0.2)
             if action == 'change_engine':
-                engine_change_handler(engine_keys[data], False, False)
+                state_handlers.engine_change_handler(engine_keys[data], False, False)
             elif action == 'toggle_pause':
-                pause_handler(False, False)
+                state_handlers.pause_handler(False, False)
             elif action == 'capture':
                 screenshot_request_queue.put(True)
             elif action == 'capture_area_selector':
                 coordinate_selector_event.set()
             elif action == 'terminate':
-                terminate_handler()
+                state_handlers.terminate_handler()
         except queue.Empty:
             continue
-
-
-def on_screenshot_combo():
-    screenshot_request_queue.put(True)
-
-
-def on_coordinate_selector_combo():
-    coordinate_selector_event.set()
 
 
 def get_current_version():
@@ -2800,6 +2794,7 @@ def run():
     global engine_index_2
     global terminated
     global paused
+    global state_handlers
     global notifier
     global auto_pause_handler
     global clipboard_thread
@@ -2835,14 +2830,15 @@ def run():
     screen_capture_periodic = False
     screen_capture_on_combo = False
     coordinate_selector_event = threading.Event()
+    state_handlers = StateHandlers()
     notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
     key_combos = {}
 
     if combo_pause != '':
-        key_combos[combo_pause] = pause_handler
+        key_combos[combo_pause] = state_handlers.pause_handler
     if combo_engine_switch != '':
-        key_combos[combo_engine_switch] = engine_change_handler
+        key_combos[combo_engine_switch] = state_handlers.engine_change_handler
 
     if is_wayland and not wayland_use_wlclipboard and ('clipboard' in (read_from, read_from_secondary) or write_to == 'clipboard'):
         clipboard_thread = WaylandClipboardThread('clipboard' in (read_from, read_from_secondary))
@@ -2861,9 +2857,9 @@ def run():
         if tray_enabled or screen_capture_combo != '':
             screen_capture_on_combo = True
         if screen_capture_combo != '':
-            key_combos[screen_capture_combo] = on_screenshot_combo
+            key_combos[screen_capture_combo] = lambda: screenshot_request_queue.put(True)
         if coordinate_selector_combo != '':
-            key_combos[coordinate_selector_combo] = on_coordinate_selector_combo
+            key_combos[coordinate_selector_combo] = lambda: coordinate_selector_event.set()
         if screen_capture_delay_seconds != -1:
             global periodic_screenshot_queue
             periodic_screenshot_queue = queue.Queue()
@@ -2932,7 +2928,7 @@ def run():
         tray_user_input_thread.start()
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
-    signal.signal(signal.SIGINT, terminate_handler)
+    signal.signal(signal.SIGINT, state_handlers.terminate_handler)
     if auto_pause != 0:
         auto_pause_handler = AutopauseTimer()
     user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
