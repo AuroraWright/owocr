@@ -2674,10 +2674,6 @@ def user_input_thread_run():
         try:
             termios.tcsetattr(fd, termios.TCSANOW, new_settings)
             while not terminated.is_set():
-                if coordinate_selector_event.is_set():
-                    while coordinate_selector_event.is_set():
-                        time.sleep(0.1)
-                    termios.tcsetattr(fd, termios.TCSANOW, new_settings)
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.2)
                 if rlist:
                     user_input = sys.stdin.read(1)
