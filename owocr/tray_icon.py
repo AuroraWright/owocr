@@ -26,11 +26,11 @@ class TrayGUI:
 
     def load_icon_image(self):
         if sys.platform == 'darwin':
-            filename = 'mac_tray_icon.png'
+            icon_name = 'mac_tray_icon.png'
         else:
-            filename = 'icon.png'
-        with importlib.resources.path(__name__, 'data/' + filename) as icon_path:
-            return Image.open(icon_path)
+            icon_name = 'icon.png'
+        icon_path = importlib.resources.files(__name__).joinpath('data', icon_name)
+        return Image.open(icon_path)
 
     def setup_menu(self):
         pause_item = pystrayfix.MenuItem(

@@ -179,12 +179,9 @@ class ConfigGUI:
         self._load_config()
 
     def _setup_window(self):
-        def load_icon_image():
-            with importlib.resources.path(__name__, 'data/icon.png') as icon_path:
-                return str(icon_path)
-
         self.root.title('owocr Configuration Editor')
-        icon = PhotoImage(file=load_icon_image())
+        icon_path = importlib.resources.files(__name__).joinpath('data', 'icon.png')
+        icon = PhotoImage(file=icon_path)
         self.root.iconphoto(True, icon)
 
         width, height = 700, 700
