@@ -656,14 +656,14 @@ class GoogleVision:
     manual_language = False
     coordinate_support = True
     threading_support = True
-    capabilities = {
-        'words': True,
-        'word_bounding_boxes': True,
-        'lines': True,
-        'line_bounding_boxes': False,
-        'paragraphs': True,
-        'paragraph_bounding_boxes': True
-    }
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=False,
+        paragraphs=True,
+        paragraph_bounding_boxes=True
+    )
 
     def __init__(self):
         if 'google.cloud' not in sys.modules:

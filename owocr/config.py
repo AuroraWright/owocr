@@ -35,7 +35,7 @@ parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=Tru
 parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture and periodic screenshots.')
 parser.add_argument('-t', '--tray_icon', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='Show an operating system tray icon, allowing to change the engine, pause/unpause, change the screen capture area selection, and take a screenshot.')
+                    help='Show an operating system tray icon, allowing to change the engine, pause/unpause, change the screen capture area selection, take a screenshot, and launch the configuration interface.')
 parser.add_argument('-a', '--auto_pause', type=float, default=argparse.SUPPRESS,
                     help='Automatically pause the program after the specified amount of seconds since the last successful text recognition. 0 to disable.')
 parser.add_argument('-cp', '--combo_pause', type=str, default=argparse.SUPPRESS,
@@ -105,7 +105,7 @@ class Config:
         'delay_seconds': 0.5,
         'websocket_port': 7331,
         'notifications': False,
-        'tray_icon': False,
+        'tray_icon': True,
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',

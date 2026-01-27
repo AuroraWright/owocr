@@ -26,16 +26,17 @@ This default behavior monitors the clipboard for images and outputs recognized t
 owocr_config
 ```
 
-This opens the interface where you can change all the options.
+This opens the interface where you can change all the options (it can also be opened from the tray icon).
 
 ## Main features
 
 - Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
 - Multiple output destinations: clipboard, text files, and websockets
 - Integrates well with Windows, macOS and Linux, supporting operating system features like notifications and a tray icon
-- Pause/unpause with `p` or terminate with `t`/`q` in the terminal, switch between engines with `s` or the engine-specific keys (from the engine list below)
 - Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine (OneOCR on Windows, Apple Live Text on macOS and meikiocr on Linux). With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
-- Multiple configurable keyboard combinations to control owocr from anywhere, including pausing, switching engines, taking a screenshot of the selected screen/window and running the automatic tool to re-select an area of the screen/window via drag and drop
+- Control from the tray icon: with a left click you can pause/unpause on Windows, from the right click menu (left click on macOS/Linux) you can change the engine, pause/unpause, change the screen capture area selection, take a screenshot of the selected screen/window, and launch the configuration
+- Control from the terminal window: pause/unpause with `p` or terminate with `t`/`q`, switch between engines with `s` or the engine-specific keys (from the engine list below)
+- Control from anywhere through keyboard shortcuts: you can set hotkeys for pausing, switching engines, taking a screenshot of the selected screen/window and changing the screen capture area selection
 - Read from a unix domain socket `/tmp/owocr.sock` on macOS/Linux
 - Furigana filter, works by default with Japanese text (both vertical and horizontal)
 
@@ -57,12 +58,13 @@ The alternative is through `wl-clipboard` (preinstalled in most distributions), 
 To switch to wl-clipboard, enable `wayland_use_wlclipboard` in `owocr_config` -> Advanced.
 - Reading from screen capture works on Wayland. The way it's designed is that your monitor/monitor selection/window selection in the operating system popup counts as a "virtual screen" to owocr.\
 By default the automatic coordinate selector will be launched to select one/more areas, as explained above.\
-Using `owocr_config` -> Screen capture -> screen_capture_area -> "whole screen" 1/`owocr -r=screencapture -sa=screen_1` will use the whole selection.\
+Using "whole screen" 1 in the configuration/`owocr -r=screencapture -sa=screen_1` will use the whole selection.\
 Using manual window names is not supported and will be ignored.
-- Keyboard combos/keyboard inputs in the coordinate selector might not work on Wayland. From my own testing they work on KDE but not GNOME (it seems KDE exposes inputs through the X11 APIs). A workaround involves running pynput with the uinput backend, but this requires exposing your input devices (they will be accessible without root):\
+- Keyboard combos/keyboard inputs in the coordinate selector might not work on Wayland. From my own testing they work on KDE (if you enable keyboard access in "Legacy X11 App Support" under "Application Permissions") but not GNOME. A workaround involves running pynput with the uinput backend, but this requires exposing your input devices (they will be accessible without root):\
 `sudo chmod u+s $(which dumpkeys)`\
 `sudo usermod -a -G $(stat -c %G /dev/input/event0) $(whoami)`\
 Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` or add `PYNPUT_BACKEND_KEYBOARD=uinput` to your environment variables.
+- The tray icon requires installing [this extension](https://extensions.gnome.org/extension/615/appindicator-support) on GNOME (works out of the box on KDE)
 - X11 partially works but uses more resources for scanning the clipboard and doesn't support window capturing at all (only screens/screen selections).
 
 # Supported engines

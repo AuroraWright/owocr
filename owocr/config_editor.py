@@ -224,7 +224,7 @@ class ConfigGUI:
                 ('delete_images', 'bool', 'Delete images from the folder after processing'),
                 ('pause_at_startup', 'bool', 'Pause when owocr starts'),
                 ('notifications', 'bool', 'Show OS notifications with the detected text'),
-                ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, and take a screenshot'),
+                ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, take a screenshot\nand launch this configuration'),
                 ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
                 ('output_format', 'dropdown', 'Output format', ['text', 'json']),
                 ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),

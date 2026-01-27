@@ -33,6 +33,7 @@ from desktop_notifier import DesktopNotifierSync, Urgency
 from .ocr import *
 from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
+from .config_editor import main as config_editor_main
 from .tray_icon import start_tray_process, terminate_tray_process_if_running
 
 if sys.platform == 'darwin':
@@ -2690,6 +2691,7 @@ def user_input_thread_run():
 
 
 def tray_user_input_thread_run():
+    config_process = None
     while not terminated.is_set():
         try:
             action, data = tray_result_queue.get(timeout=0.2)
@@ -2701,6 +2703,10 @@ def tray_user_input_thread_run():
                 screenshot_request_queue.put(True)
             elif action == 'capture_area_selector':
                 coordinate_selector_event.set()
+            elif action == 'launch_config':
+                if not config_process or not config_process.is_alive():
+                    config_process = multiprocessing.Process(target=config_editor_main, daemon=True)
+                    config_process.start()
             elif action == 'terminate':
                 state_handlers.terminate_handler()
         except queue.Empty:

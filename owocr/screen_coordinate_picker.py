@@ -458,8 +458,7 @@ def get_screen_selection(image_data, previous_coordinates, is_window, permanent_
     if selector_process is None or not selector_process.is_alive():
         result_queue = multiprocessing.Queue()
         command_queue = multiprocessing.Queue()
-        selector_process = multiprocessing.Process(target=run_screen_selector, args=(result_queue, command_queue))
-        selector_process.daemon = True
+        selector_process = multiprocessing.Process(target=run_screen_selector, args=(result_queue, command_queue), daemon=True)
         selector_process.start()
 
     command_queue.put((image_data, previous_coordinates, is_window))
