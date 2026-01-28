@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.23.4"
+version = "1.23.5"
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -68,7 +68,7 @@ winocr = [
 ]
 
 oneocr = [
-    "oneocr>=1.0.9"
+    "oneocr>=1.0.11"
 ]
 
 lens = [
