@@ -64,11 +64,11 @@ mangaocr = [
 ]
 
 winocr = [
-    "winocr"
+    "winocr;platform_system=='Windows'"
 ]
 
 oneocr = [
-    "oneocr>=1.0.11"
+    "oneocr>=1.0.11;platform_system=='Windows'"
 ]
 
 lens = [
