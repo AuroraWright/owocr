@@ -93,6 +93,9 @@ except:
 
 manga_ocr_model = None
 
+logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
+logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
+
 
 @dataclass
 class BoundingBox:
@@ -180,7 +183,6 @@ def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
     global manga_ocr_model
     if not manga_ocr_model:
         logger.disable('manga_ocr')
-        logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
         from manga_ocr import ocr
         ocr.post_process = empty_post_process
         logger.info(f'Loading Manga OCR model')
@@ -1509,7 +1511,7 @@ class OneOCR:
                 try:
                     self.model = oneocr.OcrEngine()
                 except RuntimeError as e:
-                    logger.warning(e + ', OneOCR will not work!')
+                    logger.warning(str(e) + ', OneOCR will not work!')
                 else:
                     self.available = True
                     logger.info('OneOCR ready')
@@ -1572,7 +1574,7 @@ class OneOCR:
             try:
                 raw_res = self.model.recognize_pil(img_processed)
             except RuntimeError as e:
-                return (False, e)
+                return (False, str(e))
         else:
             img_processed, img_width, img_height = self._preprocess_notwindows(img)
             try:
