@@ -7,10 +7,12 @@ OwOCR is a command-line text recognition tool that continuously scans for images
 
 ## Demo
 
-### Visual novel:
+### Visual novel
+
 https://github.com/user-attachments/assets/f2196b23-f2e7-4521-820a-88c8bedb9d8e
 
-### Manga:
+### Manga
+
 https://github.com/user-attachments/assets/f061854d-d20f-43e8-8c96-af5a0ea26f43
 
 ## Installation
@@ -70,9 +72,9 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 - The tray icon requires installing [this extension](https://extensions.gnome.org/extension/615/appindicator-support) on GNOME (works out of the box on KDE)
 - X11 partially works but uses more resources for scanning the clipboard and doesn't support window capturing at all (only screens/screen selections).
 
-# Supported engines
+## Supported engines
 
-## Local
+### Local
 - [Manga OCR](https://github.com/kha-white/manga-ocr) (with optional [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) - install: `pip install "owocr[mangaocr]"` → keys: `m` (regular, ideal for small text areas), `n` (segmented, ideal for manga panels/larger images with multiple text areas)
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) - install: `pip install "owocr[easyocr]"` → key: `e`
 - [RapidOCR](https://github.com/RapidAI/RapidOCR) - install: `pip install "owocr[rapidocr]"` → key: `r`
@@ -82,14 +84,14 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 - OneOCR - install: `pip install "owocr[oneocr]"`. Close second local best to the Apple one. You need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. **Windows 10/11 only - Recommended** → key: `z`
 - [meikiocr](https://github.com/rtr46/meikiocr) - install: `pip install "owocr[meikiocr]"`. Comparable to OneOCR in accuracy and CPU latency. Can be run on Nvidia GPUs via `pip uninstall onnxruntime && pip install onnxruntime-gpu` making it the fastest OCR available. Probably best option for Linux users. Can't process vertical text and is limited to 64 text lines and 48 characters per line.  → key: `k`
 
-## Cloud
+### Cloud
 - Google Lens - install: `pip install "owocr[lens]"`. Arguably the best OCR engine to date. **Recommended** → key: `l`
 - Bing - Close second best. **Recommended (pre-installed)** → key: `b`
 - Google Vision: install: `pip install "owocr[gvision]"`, you also need a service account .json file named google_vision.json in `user directory/.config/` → key: `g`
 - Azure Image Analysis: install: `pip install "owocr[azure]"`, you also need to specify an api key and an endpoint in the config file → key: `v`
 - OCRSpace: you need to specify an api key in the config file → key: `o`
 
-# Acknowledgments
+## Acknowledgments
 
 This uses code from/references these people/projects:
 - Viola for working on the Google Lens implementation (twice!) and helping with the pyobjc VisionKit code!
