@@ -11,6 +11,9 @@ requires-python = ">=3.11,<3.14"  # onnxruntime is not yet available for Python 
 authors = [
 ]
 license = "GPL-3.0-only"
+license-files = [
+    "LICENSE"
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
