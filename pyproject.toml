@@ -15,6 +15,10 @@ license = "GPL-3.0-only"
 license-files = [
     "LICENSE"
 ]
+keywords = [
+    "ocr",
+    "screen-capture",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
