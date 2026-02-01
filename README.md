@@ -19,13 +19,13 @@ OwOCR has been tested on Python 3.11, 3.12 and 3.13. It can be installed with `p
 
 ## Basic usage
 
-```
+```shell
 owocr
 ```
 
 This default behavior monitors the clipboard for images and outputs recognized text back to the clipboard.
 
-```
+```shell
 owocr_config
 ```
 
