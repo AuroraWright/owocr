@@ -32,6 +32,7 @@ dependencies = [
     "PyGObject;platform_system=='Linux'",
     "dbus-python;platform_system=='Linux'",
     "pywayland;platform_system=='Linux'",
+    "obsws-python>=1.8.0",
 ]
 
 [project.optional-dependencies]
