@@ -19,11 +19,23 @@ keywords = [
     "ocr",
     "screen-capture",
 ]
+# https://pypi.org/classifiers/
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Natural Language :: English",  # The software itself uses English in its messages
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python",
+    "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia",
+    "Topic :: Utilities",
 ]
 dependencies = [
     "jaconv",
