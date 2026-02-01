@@ -1,0 +1,116 @@
+%YAML 1.1
+---
+
+# [ Create a new package each time a tag starting with "v" is pushed ]
+#
+# Various sources used to build the workflow:
+# - https://docs.pypi.org/trusted-publishers/
+# - https://docs.pypi.org/trusted-publishers/using-a-publisher/
+# - https://docs.astral.sh/uv/guides/integration/github/#publishing-to-pypi
+# - https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job
+# - https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md
+#
+# The version of all actions is pinned with a Git commit hash instead of a Git tag.
+# Git tags can be overwritten, so the behavior of the action might unexpectedly change.
+# In case of a malicious overwrite, it can give an attacker control over the build process!
+#
+
+name: "Publish Python package"
+
+"on":
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: "Build package"
+    runs-on: ubuntu-slim
+
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      -
+        # https://github.com/actions/setup-python/releases/tag/v6.2.0
+        name: "Setup Python"
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          # Get the latest Python version allowed by the package
+          python-version-file: pyproject.toml
+          check-latest: true
+      -
+        # https://github.com/astral-sh/setup-uv/releases/tag/v7.2.1
+        name: "Setup uv"
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
+      -
+        name: "Install system dependencies"
+        run: |-
+          sudo apt-get update
+          sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          uv sync --locked --all-extras --all-groups --dev
+      -
+        name: "Build package"
+        run: |-
+          uv build
+      -
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: &artifact_name "package"
+          path: dist/
+  
+  # Publish in a separate job so that build steps do not have access to secrets
+  publish:
+    name: "Publish package"
+
+    # Wait for the build step to have completed
+    needs:
+      - build
+    
+    # ubuntu-slim does not work with pypa/gh-action-pypi-publish because it doesn't have Docker
+    # Using ubuntu-latest instead
+    runs-on: ubuntu-latest
+
+    # https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-pypi
+    # Get an OAuth2 ID token to use to authenticate to PyPI
+    permissions:
+      id-token: write
+
+    # Publish to multiple indexes
+    strategy:
+      matrix:
+        index:
+          - 
+            name: "pypi-test"
+            upload-to: "https://test.pypi.org/legacy/"
+            available-at: "https://test.pypi.org/project/owocr/"
+          -
+            name: "pypi"
+            upload-to: "https://pypi.org/legacy/"
+            available-at: "https://pypi.org/project/owocr/"
+
+    # Display environment badge on GitHub page
+    environment:
+      name: "${{ matrix.index.name }}"
+      url: "${{ matrix.index.available-at }}"
+
+    steps:
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: *artifact_name
+          path: dist/
+      -
+        # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
+        name: "Publish build artifacts to ${{ matrix.index.name }}"
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: "${{ matrix.index.upload-to }}"
