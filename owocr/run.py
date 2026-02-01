@@ -34,6 +34,7 @@ from .ocr import *
 from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
 from .config_editor import main as config_editor_main
+from .log_viewer import main as log_viewer_main
 from .tray_icon import start_tray_process, terminate_tray_process_if_running
 
 if sys.platform == 'darwin':
@@ -47,7 +48,9 @@ if sys.platform == 'darwin':
     from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
                        CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
                        kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
-                       kCGWindowImageNominalResolution
+                       kCGWindowImageNominalResolution, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
+    from HIServices import AXIsProcessTrustedWithOptions
+    from ApplicationServices import kAXTrustedCheckOptionPrompt
     from Foundation import NSString
     from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
 elif sys.platform == 'win32':
@@ -67,10 +70,6 @@ elif sys.platform == 'linux':
     from PIL import ImageGrab
     import pyperclip
 
-try:
-    multiprocessing.set_start_method('spawn')
-except RuntimeError:
-    pass
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
@@ -1632,7 +1631,7 @@ class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
-        self.coordinate_selector_combo_enabled = config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
+        self.coordinate_selector_combo_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.window_handle = None
@@ -2587,7 +2586,7 @@ class OutputResult:
 class StateHandlers:
     def __init__(self):
         self.engine_color = config.get_general('engine_color')
-        self.tray_enabled = config.get_general('tray_icon')
+        self.tray_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon')
 
     def pause_handler(self, notify=True, notify_tray=True):
         global paused
@@ -2637,6 +2636,9 @@ def get_notification_urgency():
 def exit_with_error(error):
     logger.error(error)
     state_handlers.terminate_handler()
+    if threading.current_thread() is threading.main_thread():
+        if log_viewer_process and log_viewer_process.is_alive():
+            log_viewer_process.join()
     sys.exit(1)
 
 
@@ -2690,7 +2692,9 @@ def user_input_thread_run():
             restore_terminal_state()
 
 
-def tray_user_input_thread_run():
+def tray_user_input_thread_run(log_buffer):
+    global log_viewer_process
+    global log_queue
     config_process = None
     while not terminated.is_set():
         try:
@@ -2707,7 +2711,16 @@ def tray_user_input_thread_run():
                 if not config_process or not config_process.is_alive():
                     config_process = multiprocessing.Process(target=config_editor_main, daemon=True)
                     config_process.start()
+            elif action == 'launch_log_viewer':
+                if not log_viewer_process.is_alive():
+                    log_queue = multiprocessing.Queue()
+                    for record in log_buffer:
+                        log_queue.put(record)
+                    log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue,), daemon=True)
+                    log_viewer_process.start()
             elif action == 'terminate':
+                if log_viewer_process and log_viewer_process.is_alive():
+                    log_viewer_process.terminate()
                 state_handlers.terminate_handler()
         except queue.Empty:
             pass
@@ -2729,9 +2742,44 @@ def get_latest_version():
         return 'N/A'
 
 
+def ensure_macos_permissions():
+    if not AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True}):
+        exit_with_error("Please grant the accessibility permission (it's necessary for keyboard inputs and screen capture to work correctly) and restart")
+    if not CGPreflightScreenCaptureAccess():
+        CGRequestScreenCaptureAccess()
+        exit_with_error("Please grant the screen capture permission (it's necessary for screen capture to work correctly) and restart")
+
+
 def run():
+    global terminated
+    global state_handlers
+    global log_viewer_process
+    global log_queue
+    terminated = threading.Event()
+    state_handlers = StateHandlers()
+    log_viewer_process = None
+    log_buffer = None
+    log_queue = None
+    is_bundled = getattr(sys, 'frozen', False)
+
+    if is_bundled:
+        log_buffer = collections.deque(maxlen=500)
+        log_queue = multiprocessing.Queue()
+
+        def gui_sink(msg):
+            record = msg.record
+            log_buffer.append(record)
+            if log_viewer_process.is_alive():
+                log_queue.put(record)
+
+        sink = gui_sink
+        log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue,), daemon=True)
+        log_viewer_process.start()
+    else:
+        sink = sys.stderr
+
     logger_level = 'DEBUG' if config.get_general('uwu') else 'INFO'
-    logger.configure(handlers=[{'sink': sys.stderr, 'format': config.get_general('logger_format'), 'level': logger_level}])
+    logger.configure(handlers=[{'sink': sink, 'format': config.get_general('logger_format'), 'level': logger_level}])
 
     logger.info(f'Starting owocr version {get_current_version()}')
     logger.info(f'Latest available version: {get_latest_version()}')
@@ -2741,6 +2789,9 @@ def run():
         logger.warning('No config file, defaults will be used')
         if config.downloaded_config:
             logger.info(f'A default config file has been downloaded to {config.config_path}')
+
+    if sys.platform == 'darwin':
+        ensure_macos_permissions()
 
     global engine_instances
     global engine_keys
@@ -2762,9 +2813,8 @@ def run():
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
         if len(config_engines) == 0 or engine_class.name in config_engines:
-
             if output_format == 'json' and not engine_class.coordinate_support:
-                logger.warning(f"Skipping {engine_class.readable_name} as it does not support JSON output")
+                logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
                 continue
 
             if not engine_class.config_entry:
@@ -2798,9 +2848,7 @@ def run():
 
     global engine_index
     global engine_index_2
-    global terminated
     global paused
-    global state_handlers
     global notifier
     global auto_pause_handler
     global clipboard_thread
@@ -2814,9 +2862,8 @@ def run():
     read_from_path = None
     read_from_readable = []
     write_to = config.get_general('write_to')
-    terminated = threading.Event()
     paused = threading.Event()
-    tray_enabled = config.get_general('tray_icon')
+    tray_enabled = is_bundled or config.get_general('tray_icon')
     if config.get_general('pause_at_startup'):
         paused.set()
     auto_pause = config.get_general('auto_pause')
@@ -2836,7 +2883,6 @@ def run():
     screen_capture_periodic = False
     screen_capture_on_combo = False
     coordinate_selector_event = threading.Event()
-    state_handlers = StateHandlers()
     notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
     key_combos = {}
@@ -2930,15 +2976,17 @@ def run():
         tray_command_queue = multiprocessing.Queue()
         logger.info(f'Starting tray icon')
         start_tray_process(engine_names, engine_index, paused.is_set(), screenshot_thread is not None, tray_result_queue, tray_command_queue)
-        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, daemon=True)
+        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
         tray_user_input_thread.start()
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
-    signal.signal(signal.SIGINT, state_handlers.terminate_handler)
     if auto_pause != 0:
         auto_pause_handler = AutopauseTimer()
-    user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
-    user_input_thread.start()
+
+    if not is_bundled:
+        signal.signal(signal.SIGINT, state_handlers.terminate_handler)
+        user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
+        user_input_thread.start()
 
     if sys.platform == 'win32':
         event_name = 'owocr_running'
@@ -3025,7 +3073,11 @@ def run():
             time.sleep(0.1)
 
     terminate_selector_if_running()
-    user_input_thread.join()
+    if is_bundled:
+        if log_viewer_process.is_alive():
+            log_viewer_process.join()
+    else:
+        user_input_thread.join()
     if tray_enabled:
         tray_user_input_thread.join()
         terminate_tray_process_if_running(tray_command_queue)
