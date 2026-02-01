@@ -91,6 +91,12 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 - Azure Image Analysis: install: `pip install "owocr[azure]"`, you also need to specify an api key and an endpoint in the config file → key: `v`
 - OCRSpace: you need to specify an api key in the config file → key: `o`
 
+## Links
+
+<a href="https://pypi.org/project/owocr">
+	<img alt="Available on PyPI" title="Available on PyPI" src="https://img.shields.io/pypi/v/owocr?label=pypi&color=ffd242">
+</a>
+
 ## Acknowledgments
 
 This uses code from/references these people/projects:
