@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import PhotoImage, ttk
-import multiprocessing
 import queue
 import sys
 import importlib.resources
+
 
 class LogViewer:
     def __init__(self, root, log_queue):
