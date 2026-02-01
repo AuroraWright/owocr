@@ -85,6 +85,7 @@ azure = [
 
 [project.urls]
 Homepage = "https://github.com/AuroraWright/owocr"
+Issues = "https://github.com/AuroraWright/owocr/issues"
 
 [project.scripts]
 owocr = "owocr.__main__:main"
