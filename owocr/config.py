@@ -84,6 +84,12 @@ parser.add_argument('-op', '--obs-port', type=int, default=argparse.SUPPRESS,
                     help='OBS port to use if reading from OBS.')
 parser.add_argument('-opw', '--obs-password', type=str, default=argparse.SUPPRESS,
                     help='OBS password to use if reading from OBS. (Leave blank if Enable Authentication is off)')
+parser.add_argument('-os', '--obs-scale', type=float, default=argparse.SUPPRESS,
+                    help='Scale factor to apply to the captured OBS image before processing. 1.0 means no scaling.')
+parser.add_argument('-oq', '--obs-quality', type=int, default=argparse.SUPPRESS,
+                    help='JPEG quality to use when capturing images from OBS. -1 means lossless png image will be used.')
+parser.add_argument('-on', '--obs-source-override', type=str, default=argparse.SUPPRESS,
+                    help='Override the source name to capture from OBS. By default, the current program scene is used.')
 parser.add_argument('-ds', '--delay_seconds', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between checks when reading from clipboard (on macOS or Linux except for Wayland) or a directory.')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,
@@ -113,6 +119,9 @@ class Config:
         'obs_host': 'localhost',
         'obs_port': 4455,
         'obs_password': '',
+        'obs_scale': 1.0,
+        'obs_quality': 100,
+        'obs_source_override': '',
         'notifications': False,
         'tray_icon': True,
         'combo_pause': '',
