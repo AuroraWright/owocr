@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "owocr"
-version = "1.23.5"
+dynamic = ["version"]
 description = "Japanese OCR"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -93,6 +93,9 @@ owocr_config = "owocr.config_editor:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "owocr.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["owocr*", "comic_text_detector*"]

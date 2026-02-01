@@ -2730,7 +2730,8 @@ def get_current_version():
     try:
         return importlib.metadata.version(__package__)
     except:
-        return 'N/A'
+        from . import __version_string__
+        return __version_string__
 
 
 def get_latest_version():
