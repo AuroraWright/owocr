@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import PhotoImage, ttk
 import queue
 import sys
+import ctypes
 import importlib.resources
 
 
@@ -122,6 +123,9 @@ class LogViewer:
 
 
 def main(log_queue):
+    if sys.platform == 'win32':
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+
     root = tk.Tk()
     app = LogViewer(root, log_queue)
 
