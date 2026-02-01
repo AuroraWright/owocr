@@ -1,4 +1,7 @@
-# OwOCR
+<div align="center">
+<img alt="" src="https://raw.githubusercontent.com/AuroraWright/owocr/refs/heads/master/owocr/data/icon.png" height="128" style="border-radius: 100%;">
+<h1>OwOCR</h1>
+</div>
 
 OwOCR is a command-line text recognition tool that continuously scans for images and performs OCR (Optical Character Recognition) on them. Its main focus is Japanese, but it works for many other languages.
 
