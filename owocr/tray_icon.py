@@ -25,6 +25,7 @@ class TrayGUI:
         self.comm_thread = None
         self.normal_icon = self.load_icon_image()
         self.paused_icon = self.create_paused_icon()
+        self.bundled = getattr(sys, 'frozen', False)
 
     def create_paused_icon(self):
         r, g, b, a = self.normal_icon.split()
@@ -67,6 +68,7 @@ class TrayGUI:
         capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=self.screen_capture_enabled)
         capture_area_selection_item = pystrayfix.MenuItem('Select capture area', self.on_capture_area_selector_clicked, visible=self.screen_capture_enabled)
         launch_config_item = pystrayfix.MenuItem('Configure', self.on_config_launch_clicked)
+        launch_log_viewer_item = pystrayfix.MenuItem('View log', self.on_log_viewer_launch_clicked, visible=self.bundled)
 
         menu = pystrayfix.Menu(
             pause_item,
@@ -74,6 +76,7 @@ class TrayGUI:
             capture_item,
             capture_area_selection_item,
             launch_config_item,
+            launch_log_viewer_item,
             pystrayfix.Menu.SEPARATOR,
             pystrayfix.MenuItem('Quit', self.on_quit_clicked)
         )
@@ -118,6 +121,9 @@ class TrayGUI:
 
     def on_config_launch_clicked(self, icon, item):
         self.send_to_main('launch_config')
+
+    def on_log_viewer_launch_clicked(self, icon, item):
+        self.send_to_main('launch_log_viewer')
 
     def on_engine_clicked(self, engine_index):
         if engine_index != self.current_engine_index:
