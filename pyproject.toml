@@ -7,7 +7,7 @@ name = "owocr"
 version = "1.23.5"
 description = "Japanese OCR"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"  # onnxruntime is not yet available for Python 3.14
 authors = [
 ]
 license = "GPL-3.0-only"
