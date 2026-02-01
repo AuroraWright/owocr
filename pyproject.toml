@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "owocr"
 version = "1.23.5"
-description = "Japanese OCR"
+description = "Optical character recognition for Japanese text"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"  # onnxruntime is not yet available for Python 3.14
 authors = [
