@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(prog='owocr', description=textwrap.dedent('''\
 '''))
 
 parser.add_argument('-r', '--read_from', type=str, default=argparse.SUPPRESS,
-                    help='Where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", or a path to a directory.')
+                    help='Where to read input images from. Can be either "clipboard", "websocket", "unixsocket" (on macOS/Linux), "screencapture", "obs", or a path to a directory.')
 parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.SUPPRESS,
                     help="Optional secondary source to read input images from. Same options as read_from, but they can't both be directory paths.")
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
@@ -47,17 +47,17 @@ parser.add_argument('-sa', '--screen_capture_area', type=str, default=argparse.S
 parser.add_argument('-swa', '--screen_capture_window_area', type=str, default=argparse.SUPPRESS,
                     help='If capturing with screen capture, subsection of the selected window. Can be either empty (automatic selector, hold CTRL/cmd to select multiple areas, click on an area to delete it, click outside of areas/press Backspace to reset), one or more sets of rectangle coordinates x1,y1,x2,y2_x1,y1,x2,y2[...], "window" to use the whole window.')
 parser.add_argument('-sd', '--screen_capture_delay_seconds', type=float, default=argparse.SUPPRESS,
-                    help='Delay (in seconds) between screenshots when reading with screen capture. -1 to disable periodic screenshots.')
+                    help='Delay (in seconds) between screenshots when reading with screen capture or obs. -1 to disable periodic screenshots.')
 parser.add_argument('-sw', '--screen_capture_only_active_windows', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help="When reading with screen capture and screen_capture_area is a window name, only target the window while it's active.")
 parser.add_argument('-sf', '--screen_capture_frame_stabilization', type=float, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.')
+                    help='When reading with screen capture or obs, delay to wait until text is stable before processing it. -1 waits for two OCR results to be the same. 0 to disable.')
 parser.add_argument('-sl', '--screen_capture_line_recovery', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
-                    help='When reading with screen capture and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.')
+                    help='When reading with screen capture or obs and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.')
 parser.add_argument('-sr', '--screen_capture_regex_filter', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, regex to filter unwanted text from the output. Example value: ▶|♥|・ to remove either of those characters.')
+                    help='When reading with screen capture or obs, regex to filter unwanted text from the output. Example value: ▶|♥|・ to remove either of those characters.')
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
-                    help='When reading with screen capture, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: <ctrl>+<shift>+s. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
+                    help='When reading with screen capture or obs, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: <ctrl>+<shift>+s. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture, combo to wait on for invoking the coordinate picker to change the screen/window area. Example value: <ctrl>+<shift>+c. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-l', '--language', type=str, default=argparse.SUPPRESS,
@@ -78,6 +78,12 @@ parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRES
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
                     help='Websocket port to use if reading or writing to websocket.')
+parser.add_argument('-oh', '--obs-host', type=str, default=argparse.SUPPRESS,
+                    help='OBS host to use if reading from OBS.')
+parser.add_argument('-op', '--obs-port', type=int, default=argparse.SUPPRESS,
+                    help='OBS port to use if reading from OBS.')
+parser.add_argument('-opw', '--obs-password', type=str, default=argparse.SUPPRESS,
+                    help='OBS password to use if reading from OBS. (Leave blank if Enable Authentication is off)')
 parser.add_argument('-ds', '--delay_seconds', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between checks when reading from clipboard (on macOS or Linux except for Wayland) or a directory.')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,
