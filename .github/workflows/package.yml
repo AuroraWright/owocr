@@ -45,7 +45,7 @@ jobs:
         name: "Setup uv"
         uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
       -
-        name: "Install system dependencies"
+        name: "Install Linux dependencies"
         run: |-
           sudo apt-get update
           sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
@@ -62,7 +62,7 @@ jobs:
         name: "Upload build artifacts"
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: &artifact_name "package"
+          name: "package"
           path: dist/
   
   installer:
@@ -106,8 +106,7 @@ jobs:
         name: "Setup uv"
         uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
       -
-        # What to install here?
-        name: "Install system dependencies"
+        name: "Install Linux dependencies"
         if: ${{ matrix.platform.name == 'linux' }}
         run: |-
           sudo apt-get update
@@ -117,10 +116,24 @@ jobs:
         run: |-
           uv sync --all-extras --group pyinstaller --dev
       -
-        name: "Build executable"
+        name: "Build binary"
         run: |-
           uv run pyinstaller ${{ matrix.platform.spec }}
-      # TODO
+      -
+        name: "Create MacOS .dmg"
+        if: ${{ matrix.platform.name == 'macos' }}
+        run: |-
+          mv dist dmg
+          ln -s /Applications dmg/Applications
+          mkdir dist
+          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr.dmg
+      - 
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: "binary_${{ matrix.platform.name }}"
+          path: dist/
   
   # Publish in a separate job so that build steps do not have access to secrets
   publish:
@@ -163,7 +176,7 @@ jobs:
         name: "Download build artifacts"
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: *artifact_name
+          name: "package"
           path: dist/
       -
         # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
