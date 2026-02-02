@@ -41,22 +41,21 @@ jobs:
           python-version-file: pyproject.toml
           check-latest: true
       -
-        # https://github.com/astral-sh/setup-uv/releases/tag/v7.2.1
-        name: "Setup uv"
-        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
+        name: "Update Ubuntu package indexes"
+        run: |-
+          sudo apt-get update
       -
         name: "Install Linux dependencies"
         run: |-
-          sudo apt-get update
           sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
       -
         name: "Setup Python dependencies"
         run: |-
-          uv sync --all-extras --dev
+          pip install .
       -
         name: "Build package"
         run: |-
-          uv build
+          python -m build
       -
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
         name: "Upload build artifacts"
@@ -109,23 +108,24 @@ jobs:
           brew install python-tk@3.13
           echo "$(brew --prefix python@3.13)/bin" >> $GITHUB_PATH
       -
-        # https://github.com/astral-sh/setup-uv/releases/tag/v7.2.1
-        name: "Setup uv"
-        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
+        name: "Update Ubuntu package indexes"
+        if: ${{ matrix.platform.name == 'linux' }}
+        run: |-
+          sudo apt-get update
       -
         name: "Install Linux dependencies"
         if: ${{ matrix.platform.name == 'linux' }}
         run: |-
-          sudo apt-get update
           sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
       -
         name: "Setup Python dependencies"
         run: |-
-          uv sync --all-extras --group pyinstaller --dev
+          pip install .
+          pip install pyinstaller
       -
         name: "Build binary"
         run: |-
-          uv run pyinstaller ${{ matrix.platform.spec }}
+          pyinstaller ${{ matrix.platform.spec }}
       -
         name: "Create MacOS .dmg"
         if: ${{ matrix.platform.name == 'macos' }}
