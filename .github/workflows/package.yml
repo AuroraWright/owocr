@@ -53,7 +53,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install .
+          pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
       -
         name: "Build package"
         run: |-
@@ -124,7 +124,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install .
+          pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
           pip install pyinstaller
       -
         name: "Build binary"
@@ -248,4 +248,18 @@ jobs:
         with:
           name: "binary_linux"
           path: dist/binary_linux/
-      # TODO
+      -
+        # Using action recommended by https://github.com/actions/download-artifact
+        # https://github.com/ncipollo/release-action/releases/tag/v1.20.0
+        name: "Create GitHub Actions release"
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b
+        with:
+          allowUpdates: true
+          artifacts: >-
+            dist/binary_macos/owocr.app,
+            dist/binary_linux/owocr.tgz
+          artifactErrorsFailBuild: true
+          draft: true
+          replacesArtifacts: true
+          tag: "${{ github.ref_name }}"
+          updateOnlyUnreleased: true
