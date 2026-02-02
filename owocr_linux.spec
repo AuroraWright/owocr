@@ -8,6 +8,7 @@ datas += [( 'owocr/data', 'owocr/data' )]
 hiddenimports = collect_submodules('pynputfix')
 hiddenimports += collect_submodules('pystrayfix')
 hiddenimports += collect_submodules('desktop_notifier')
+hiddenimports += collect_submodules('PIL')
 
 a = Analysis(
     ['owocr/__main__.py'],
