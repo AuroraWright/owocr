@@ -65,7 +65,7 @@ mangaocr = [
 ]
 
 winocr = [
-    "winocr;platform_system=='Windows'"
+    "winocrfix;platform_system=='Windows'"
 ]
 
 oneocr = [

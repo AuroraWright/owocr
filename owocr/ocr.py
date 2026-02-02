@@ -66,7 +66,7 @@ except ImportError:
     pass
 
 try:
-    import winocr
+    import winocrfix
 except ImportError:
     pass
 
@@ -1147,7 +1147,7 @@ class AppleVision:
 
     def __init__(self, language='ja', config={}):
         if sys.platform != 'darwin':
-            logger.warning('Apple Vision is not supported on non-macOS platforms!')
+            return
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
         else:
@@ -1248,7 +1248,7 @@ class AppleLiveText:
 
     def __init__(self, language='ja'):
         if sys.platform != 'darwin':
-            logger.warning('Apple Live Text is not supported on non-macOS platforms!')
+            return
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Live Text is not supported on macOS older than Ventura/13.0!')
         else:
@@ -1387,8 +1387,8 @@ class WinRTOCR:
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('WinRT OCR is not supported on Windows older than 10!')
-            elif 'winocr' not in sys.modules:
-                logger.warning('winocr not available, WinRT OCR will not work!')
+            elif 'winocrfix' not in sys.modules:
+                logger.warning('winocrfix not available, WinRT OCR will not work!')
             else:
                 self.language = language
                 self.available = True
@@ -1457,7 +1457,7 @@ class WinRTOCR:
             return (False, 'Invalid image provided')
 
         if sys.platform == 'win32':
-            res = winocr.recognize_pil_sync(img, lang=self.language)
+            res = winocrfix.recognize_pil_sync(img, lang=self.language)
         else:
             params = {'lang': self.language}
             try:

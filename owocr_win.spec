@@ -9,6 +9,10 @@ from PyInstaller.utils.win32.versioninfo import (
     VarFileInfo,
     VarStruct,
 )
+
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path().absolute()))
 from owocr import __version__, __version_string__
 
 datas = collect_data_files('rapidocr', include_py_files=False)
@@ -36,12 +40,12 @@ version_info = VSVersionInfo(
                 StringTable(
                     "040904B0",
                     [
-                        StringStruct("Comments", f"owocr {__version_string__}"),
+                        StringStruct("Comments", "owocr"),
                         StringStruct("CompanyName", "Aurora Wright"),
-                        StringStruct("FileDescription", f"owocr {__version_string__}"),
+                        StringStruct("FileDescription", "owocr"),
                         StringStruct("FileVersion", __version_string__),
                         StringStruct("LegalCopyright", "Aurora Wright"),
-                        StringStruct("ProductName", f"owocr {__version_string__}"),
+                        StringStruct("ProductName", "owocr"),
                         StringStruct("ProductVersion", __version_string__),
                     ],
                 )
@@ -69,16 +73,13 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='owocr',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -87,4 +88,14 @@ exe = EXE(
     entitlements_file=None,
     icon="owocr.ico",
     version=version_info,
+    contents_directory='data',
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='owocr',
 )
