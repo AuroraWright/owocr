@@ -1,6 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-from owocr import __version_string__
+
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path().absolute()))
+from owocr import __version__, __version_string__
 
 datas = collect_data_files('rapidocr', include_py_files=False)
 datas += collect_data_files('unidic_lite', include_py_files=False)
