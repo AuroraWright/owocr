@@ -7,7 +7,7 @@ name = "owocr"
 dynamic = ["version"]
 description = "Optical character recognition for Japanese text"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"  # onnxruntime is not yet available for Python 3.14
+requires-python = ">=3.11"  # onnxruntime is not yet available for Python 3.14
 authors = [
     {name = "AuroraWright", email = "fallingluma@gmail.com"}
 ]
