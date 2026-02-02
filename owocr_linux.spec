@@ -8,7 +8,6 @@ datas += [( 'owocr/data', 'owocr/data' )]
 hiddenimports = collect_submodules('pynputfix')
 hiddenimports += collect_submodules('pystrayfix')
 hiddenimports += collect_submodules('desktop_notifier')
-hiddenimports += collect_submodules('comic_text_detector')
 hiddenimports += collect_submodules('PIL')
 
 a = Analysis(
