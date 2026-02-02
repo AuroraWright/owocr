@@ -21,6 +21,7 @@ name: "Publish Python package"
   push:
     tags:
       - "v*"
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -157,6 +158,9 @@ jobs:
   publish:
     name: "Publish package"
 
+    # Only publish if this event has an associated tag, and not on manual builds
+    if: "${{ startsWith( github.ref, 'refs/tags/' ) }}"
+
     # Wait for the build step to have completed
     needs:
       - build
@@ -206,6 +210,9 @@ jobs:
 
   release:
     name: "Create GitHub release"
+    
+    # Only create if this event has an associated tag, and not on manual builds
+    if: "${{ startsWith( github.ref, 'refs/tags/' ) }}"
 
     needs:
       - build
