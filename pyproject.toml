@@ -21,7 +21,6 @@ keywords = [
 ]
 # https://pypi.org/classifiers/
 classifiers = [
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Natural Language :: English",  # The software itself uses English in its messages
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
