@@ -167,7 +167,7 @@ jobs:
           path: dist/
       -
         # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
-        name: "Publish build artifacts to ${{ matrix.index.name }}"
+        name: "Publish build artifacts"
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
           repository-url: "${{ matrix.index.upload-to }}"
