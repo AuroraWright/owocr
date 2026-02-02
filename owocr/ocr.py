@@ -19,14 +19,11 @@ from PIL import Image
 from loguru import logger
 import curl_cffi
 
-try:
-    from manga_ocr import MangaOcr as MOCR
-    from comic_text_detector.inference import TextDetector
-    from scipy.signal.windows import gaussian
-    import torch
-    import cv2
-except ImportError:
-    pass
+from manga_ocr import MangaOcr as MOCR
+from comic_text_detector.inference import TextDetector
+from scipy.signal.windows import gaussian
+import torch
+import cv2
 
 if sys.platform == 'darwin':
     import Vision
