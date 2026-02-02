@@ -56,11 +56,6 @@ dependencies = [
     "pywayland;platform_system=='Linux'",
 ]
 
-[dependency-groups]
-pyinstaller = [
-    "pyinstaller"
-]
-
 [project.optional-dependencies]
 faster-png = [
     "fpng-py-fix"
