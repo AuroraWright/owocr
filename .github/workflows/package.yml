@@ -52,7 +52,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          uv sync --all-extras --all-groups --dev
+          uv sync --all-extras --dev
       -
         name: "Build package"
         run: |-
