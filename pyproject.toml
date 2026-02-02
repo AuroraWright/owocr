@@ -61,7 +61,8 @@ mangaocr = [
     "torchvision",
     "torch-summary",
     "opencv-python",
-    "shapely"
+    "shapely",
+    "transformers<5.0.0"
 ]
 
 winocr = [
