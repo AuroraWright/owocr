@@ -65,6 +65,63 @@ jobs:
           name: &artifact_name "package"
           path: dist/
   
+  installer:
+    name: "Build executable"
+
+    # Build on multiple platforms
+    strategy:
+      matrix:
+        platform:
+          -
+            name: "windows"
+            runner: "windows-latest"
+            spec: "./owocr_win.spec"
+          -
+            name: "macos"
+            runner: "macos-latest"
+            spec: "./owocr_mac.spec"
+          -
+            name: "linux"
+            runner: "ubuntu-latest"
+            spec: "./owocr_linux.spec"
+    
+    # Get the runner from the matrix
+    runs-on: "${{ matrix.platform.runner }}"
+
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      -
+        # https://github.com/actions/setup-python/releases/tag/v6.2.0
+        name: "Setup Python"
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          # Get the latest Python version allowed by the package
+          python-version-file: pyproject.toml
+          check-latest: true
+      -
+        # https://github.com/astral-sh/setup-uv/releases/tag/v7.2.1
+        name: "Setup uv"
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41
+      -
+        # What to install here?
+        name: "Install system dependencies"
+        if: ${{ matrix.platform.name == 'linux' }}
+        run: |-
+          sudo apt-get update
+          sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          uv sync --all-extras --group pyinstaller --dev
+      -
+        name: "Build executable"
+        run: |-
+          uv run pyinstaller ${{ matrix.platform.spec }}
+      # TODO
+  
   # Publish in a separate job so that build steps do not have access to secrets
   publish:
     name: "Publish package"
