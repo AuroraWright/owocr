@@ -86,7 +86,7 @@ except ImportError:
     pass
 
 try:
-    import fpng_py
+    import fpng_py_fix
     optimized_png_encode = True
 except:
     optimized_png_encode = False
@@ -211,7 +211,7 @@ def input_to_pil_image(img):
 def pil_image_to_bytes(img, img_format='png', png_compression=6, jpeg_quality=80, optimize=False):
     if img_format == 'png' and optimized_png_encode and not optimize:
         raw_data = img.convert('RGBA').tobytes()
-        image_bytes = fpng_py.fpng_encode_image_to_memory(raw_data, img.width, img.height)
+        image_bytes = fpng_py_fix.fpng_encode_image_to_memory(raw_data, img.width, img.height)
     else:
         image_bytes = io.BytesIO()
         if img_format == 'jpeg':

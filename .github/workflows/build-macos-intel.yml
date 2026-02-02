@@ -1,5 +1,5 @@
-# .github/workflows/build-macos.yml
-name: macOS build
+# .github/workflows/build-macos-intel.yml
+name: macOS Intel build
 
 on:
   workflow_call:
@@ -10,12 +10,12 @@ on:
         type: string
     outputs:
       artifact_name:
-        description: 'macOS artifact name'
-        value: ${{ jobs.build-macos.outputs.artifact_name }}
+        description: "macOS Intel artifact name"
+        value: ${{ jobs.build-macos-intel.outputs.artifact_name }}
 
 jobs:
-  build-macos:
-    runs-on: macos-latest
+  build-macos-intel:
+    runs-on: macos-15-intel
     outputs:
       artifact_name: ${{ steps.upload.outputs.artifact-name }}
     steps:
@@ -23,15 +23,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Configure Homebrew Python 3.13
+      - name: Configure Homebrew Python 3.12
         run: |
-          brew install python-tk@3.13
+          brew install python@3.12 || true
+          brew install python-tk@3.12
           # Add Homebrew's Python to PATH
-          echo "$(brew --prefix python@3.13)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix python@3.12)/bin" >> $GITHUB_PATH
 
       - name: Create and activate virtual environment
         run: |
-          python3.13 -m venv venv
+          python3.12 -m venv venv
           source venv/bin/activate
           echo "VIRTUAL_ENV=$PWD/venv" >> $GITHUB_ENV
           echo "$PWD/venv/bin" >> $GITHUB_PATH
@@ -40,6 +41,7 @@ jobs:
         run: |
           source venv/bin/activate
           pip install --upgrade pip
+          pip install transformers==4.49 numpy==1.26.4 opencv-python==4.10.0.84 opencv-python-headless==4.10.0.84
           pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
           pip install pyinstaller
 
@@ -74,6 +76,6 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
+          name: macos-build-intel
           path: |
             dist/owocr.dmg

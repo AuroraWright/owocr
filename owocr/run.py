@@ -2736,7 +2736,7 @@ def get_current_version():
 
 def get_latest_version():
     try:
-        with urllib.request.urlopen(f'https://pypi.org/pypi/{__package__}/json', timeout=5) as response:
+        with urllib.request.urlopen(f'https://pypi.org/pypi/owocr/json', timeout=5) as response:
             data = json.load(response)
             return data['info']['version']
     except:
