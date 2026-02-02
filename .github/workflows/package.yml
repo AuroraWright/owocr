@@ -95,12 +95,19 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
       -
         # https://github.com/actions/setup-python/releases/tag/v6.2.0
-        name: "Setup Python"
+        name: "Setup Python via actions/setup-python"
+        if: ${{ matrix.platform.name != 'macos' }}
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           # Get the latest Python version allowed by the package
           python-version-file: pyproject.toml
           check-latest: true
+      - 
+        name: "Setup Python via Homebrew"
+        if: ${{ matrix.platform.name == 'macos' }}
+        run: |-
+          brew install python-tk@3.13
+          echo "$(brew --prefix python@3.13)/bin" >> $GITHUB_PATH
       -
         # https://github.com/astral-sh/setup-uv/releases/tag/v7.2.1
         name: "Setup uv"
