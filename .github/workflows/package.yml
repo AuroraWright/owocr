@@ -138,6 +138,13 @@ jobs:
           ln -s /Applications dmg/Applications
           mkdir dist
           hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr.dmg
+      -
+        name: "Create Linux tarball"
+        if: ${{ matrix.platform.name == 'linux' }}
+        run: |-
+          mv dist tar
+          mkdir dist
+          tar --verbose --create --gzip --file dist/owocr.tgz --directory tar/ .
       - 
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
         name: "Upload build artifacts"
