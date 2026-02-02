@@ -148,6 +148,7 @@ jobs:
     runs-on: ubuntu-latest
 
     # https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-pypi
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idpermissions
     # Get an OAuth2 ID token to use to authenticate to PyPI
     permissions:
       id-token: write
@@ -184,3 +185,49 @@ jobs:
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
           repository-url: "${{ matrix.index.upload-to }}"
+
+  release:
+    name: "Create GitHub release"
+
+    needs:
+      - build
+      - installer
+    
+    runs-on: ubuntu-slim
+
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idpermissions
+    permissions: 
+      # Release requires contents: write permission.
+      # Kinda weird, but I guess it's because it might need to create a tag?
+      contents: write
+
+    steps:
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download package build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: "package"
+          path: dist/package/
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download Windows binary build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: "binary_windows"
+          path: dist/binary_windows/
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download MacOS binary build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: "binary_macos"
+          path: dist/binary_macos/
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download Linux binary build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: "binary_linux"
+          path: dist/binary_linux/
+      # TODO
