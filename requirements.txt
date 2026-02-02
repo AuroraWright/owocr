@@ -16,7 +16,7 @@ PyGObject;sys_platform=='linux'
 dbus-python;sys_platform=='linux'
 pywayland;sys_platform=='linux'
 
-fpng-py
+fpng-py-fix
 
 easyocr
 

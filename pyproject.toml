@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 faster-png = [
-    "fpng-py"
+    "fpng-py-fix"
 ]
 
 easyocr = [
