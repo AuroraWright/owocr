@@ -87,7 +87,7 @@ parser.add_argument('-opw', '--obs-password', type=str, default=argparse.SUPPRES
 parser.add_argument('-oq', '--obs-quality', type=int, default=argparse.SUPPRESS,
                     help='JPEG quality to use when capturing images from OBS. -1 means lossless png image will be used.')
 parser.add_argument('-on', '--obs-source-override', type=str, default=argparse.SUPPRESS,
-                    help='Override the source name to capture from OBS. By default, the current program scene is used.')
+                    help='Override the source name to capture from OBS. By default, the current program scene is used. Setting the value to "preview" will use the preview scene instead.')
 parser.add_argument('-ds', '--delay_seconds', type=float, default=argparse.SUPPRESS,
                     help='Delay (in seconds) between checks when reading from clipboard (on macOS or Linux except for Wayland) or a directory.')
 parser.add_argument('-v', '--verbosity', type=int, default=argparse.SUPPRESS,

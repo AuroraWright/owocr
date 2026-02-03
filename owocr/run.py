@@ -1643,7 +1643,12 @@ class OBSScreenshotThread(threading.Thread):
         self.quality = None if self.quality == -1 else self.quality
 
         self.source_override = config.get_general("obs_source_override")
-        self.source_override = None if self.source_override == '' else self.source_override
+        if self.source_override == '':
+            self.source_override = None
+            self.is_current_preview_scene = False
+        elif self.source_override == 'preview':
+            self.source_override = None
+            self.is_current_preview_scene = True
         
     def _is_connected(self):
         if not self.client:
@@ -1666,6 +1671,18 @@ class OBSScreenshotThread(threading.Thread):
             logger.error(f"Failed to connect to OBS: {e}")
             return False
         return True
+    
+    def _get_source(self):
+        if self.source_override:
+            return self.source_override
+        try:
+            if not self.is_current_preview_scene:
+                return self.client.get_current_program_scene().scene_name
+            else:
+                return self.client.get_current_preview_scene().scene_name
+        except Exception as e:
+            logger.debug(f"OBS get source error: {e}")
+            return None
 
     def write_result(self, result, is_combo, screen_capture_properties=None):
         if is_combo:
@@ -1675,7 +1692,7 @@ class OBSScreenshotThread(threading.Thread):
 
     def take_screenshot(self):
         try:
-            scene = self.source_override if self.source_override else self.client.get_current_program_scene().scene_name
+            scene = self._get_source()
             logger.info(f"Taking OBS screenshot of scene/source: {scene}")
 
             response = self.client.get_source_screenshot(
