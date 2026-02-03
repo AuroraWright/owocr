@@ -1693,6 +1693,7 @@ class OBSScreenshotThread(threading.Thread):
     def take_screenshot(self):
         try:
             scene = self._get_source()
+            logger.info(f"Taking OBS screenshot of scene/source: {scene}")
 
             response = self.client.get_source_screenshot(
                 name=scene, img_format=self.img_format, width=None, height=None, quality=self.quality
