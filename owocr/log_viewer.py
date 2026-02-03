@@ -122,7 +122,7 @@ class LogViewer:
             self.status_label.config(text='Stopped', foreground='red')
 
 
-def main(log_queue):
+def main(log_queue, started_event):
     if sys.platform == 'win32':
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
@@ -135,5 +135,7 @@ def main(log_queue):
         root.destroy()
 
     root.protocol('WM_DELETE_WINDOW', on_closing)
+    if started_event:
+        started_event.set()
     root.mainloop()
     root.update()

@@ -15,10 +15,14 @@ hiddenimports += collect_submodules('pystrayfix')
 hiddenimports += collect_submodules('desktop_notifier')
 
 info_plist = {
-    "CFBundleShortVersionString": __version_string__,
-    "NSHumanReadableCopyright": "©2026 Aurora Wright and contributors",
-    "LSUIElement": 1,
-    "LSMultipleInstancesProhibited": 1,
+    'CFBundleShortVersionString': __version_string__,
+    'CFBundleVersion': __version_string__,
+    'CFBundleSupportedPlatforms': ['MacOSX'],
+    'NSHumanReadableCopyright': '©2026 Aurora Wright and contributors',
+    'LSMinimumSystemVersion': '10.15',
+    'LSApplicationCategoryType': 'public.app-category.utilities',
+    'LSUIElement': 1,
+    'LSMultipleInstancesProhibited': 1,
 }
 
 a = Analysis(
