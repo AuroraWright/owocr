@@ -120,7 +120,7 @@ class Config:
         'obs_port': 4455,
         'obs_password': '',
         'obs_scale': 1.0,
-        'obs_quality': 100,
+        'obs_quality': 75,
         'obs_source_override': '',
         'notifications': False,
         'tray_icon': True,

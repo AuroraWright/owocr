@@ -1638,7 +1638,13 @@ class OBSScreenshotThread(threading.Thread):
         self.port = config.get_general("obs_port")
         self.password = config.get_general("obs_password")
 
+        MIN_OBS_SCALE = 0.5
+        MAX_OBS_SCALE = 1.0
         self.scale = config.get_general("obs_scale")
+        if self.scale < MIN_OBS_SCALE or self.scale > MAX_OBS_SCALE:
+            logger.warning(f"OBS scale {self.scale} is out of bounds, resetting to 1.0")
+            self.scale = 1.0
+
         self.quality = config.get_general("obs_quality")
         self.img_format = "png" if self.quality == -1 else "jpeg"
         self.quality = None if self.quality == -1 else self.quality
@@ -1689,6 +1695,7 @@ class OBSScreenshotThread(threading.Thread):
     def take_screenshot(self):
         try:
             scene = self.source_override if self.source_override else self.client.get_current_program_scene().scene_name
+            logger.info(f"Taking OBS screenshot of scene/source: {scene}")
             scaled_width, scaled_height = self._get_screenshot_resolution()
 
             response = self.client.get_source_screenshot(
