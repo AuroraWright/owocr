@@ -1,0 +1,14 @@
+name: Manual Build (Windows)
+
+on:
+  workflow_dispatch:  # This enables manual triggering
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  call-reusable-windows-build:
+    uses: ./.github/workflows/build-windows.yml

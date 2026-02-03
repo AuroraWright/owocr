@@ -1,6 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+import sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path().absolute()))
+from owocr import __version__, __version_string__
+
 datas = collect_data_files('rapidocr', include_py_files=False)
 datas += collect_data_files('unidic_lite', include_py_files=False)
 datas += collect_data_files('manga_ocr', include_py_files=False)
@@ -8,6 +13,13 @@ datas += [( 'owocr/data', 'owocr/data' )]
 hiddenimports = collect_submodules('pynputfix')
 hiddenimports += collect_submodules('pystrayfix')
 hiddenimports += collect_submodules('desktop_notifier')
+
+info_plist = {
+    "CFBundleShortVersionString": __version_string__,
+    "NSHumanReadableCopyright": "Aurora Wright",
+    "LSUIElement": 1,
+    "LSMultipleInstancesProhibited": 1,
+}
 
 a = Analysis(
     ['owocr/__main__.py'],
@@ -55,4 +67,5 @@ app = BUNDLE(
     name='owocr.app',
     icon='owocr.icns',
     bundle_identifier='com.aury.owocr',
+    info_plist=info_plist,
 )

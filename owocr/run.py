@@ -2836,12 +2836,13 @@ def get_current_version():
     try:
         return importlib.metadata.version(__package__)
     except:
-        return 'N/A'
+        from . import __version_string__
+        return __version_string__
 
 
 def get_latest_version():
     try:
-        with urllib.request.urlopen(f'https://pypi.org/pypi/{__package__}/json', timeout=5) as response:
+        with urllib.request.urlopen(f'https://pypi.org/pypi/owocr/json', timeout=5) as response:
             data = json.load(response)
             return data['info']['version']
     except:
