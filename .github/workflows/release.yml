@@ -72,6 +72,8 @@ name: "Release"
         required: true
         default: true
 
+run-name: "Release ${{ inputs.tag || github.ref_name }}"
+
 jobs:
   build-sdist-wheel:
     if: ${{ inputs.build-sdist-wheel || github.event_name == 'push' }}
