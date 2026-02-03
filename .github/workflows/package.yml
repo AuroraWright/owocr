@@ -197,11 +197,11 @@ jobs:
       matrix:
         index:
           - 
-            name: "pypitest"
+            name: "pypi-test"
             upload-to: "https://test.pypi.org/legacy/"
             available-at: "https://test.pypi.org/project/owocr/"
           -
-            name: "pypi"
+            name: "pypi-prod"
             upload-to: "https://pypi.org/legacy/"
             available-at: "https://pypi.org/project/owocr/"
 
