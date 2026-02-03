@@ -116,6 +116,7 @@ binary = [
 [project.urls]
 Repository = "https://github.com/AuroraWright/owocr"
 Issues = "https://github.com/AuroraWright/owocr/issues"
+Sponsor = "https://github.com/sponsors/AuroraWright"
 
 [project.scripts]
 owocr = "owocr.__main__:main"
