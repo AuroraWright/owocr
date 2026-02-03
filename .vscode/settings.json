@@ -1,5 +1,8 @@
 {
     "files.associations": {
         "*.spec": "python",
-    }
+    },
+    "python.analysis.exclude": [
+        "dist/"
+    ]
 }
