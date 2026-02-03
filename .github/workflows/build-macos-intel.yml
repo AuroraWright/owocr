@@ -51,27 +51,54 @@ jobs:
           source venv/bin/activate
           pyinstaller owocr_mac.spec
 
-      - name: Create DMG
+      - name: Setup keychain
+        env: 
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+          MACOS_CI_KEYCHAIN_PWD: ${{ secrets.MACOS_CI_KEYCHAIN_PWD }}
         run: |
-          # Create a temporary directory structure for the DMG
+          echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain 
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+
+      - name: Codesign app bundle
+        env: 
+          MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+          /usr/bin/codesign --force --timestamp --deep --verbose --options runtime --entitlements entitlements.plist --sign "$MACOS_CERTIFICATE_NAME" dist/owocr.app
+
+      - name: Create dmg
+        run: |
           mkdir -p dist/dmg_contents
-          
-          # Move the app to the directory
           mv dist/owocr.app dist/dmg_contents/
-          
-          # Create a symlink to /Applications
           ln -s /Applications dist/dmg_contents/Applications
-          
-          # Create the DMG
           hdiutil create \
             -volname "owocr" \
             -srcfolder dist/dmg_contents \
             -ov \
             -format UDZO \
             dist/owocr.dmg
-          
-          # Clean up temporary directory
           rm -rf dist/dmg_contents
+
+      - name: Codesign dmg
+        env: 
+          MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+         /usr/bin/codesign --force --timestamp --verbose --sign "$MACOS_CERTIFICATE_NAME" dist/owocr.dmg
+
+      - name: Notarize dmg
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+          MACOS_NOTARIZATION_PWD: ${{ secrets.MACOS_NOTARIZATION_PWD }}
+        run: |
+          xcrun notarytool store-credentials "notarytool-profile" --apple-id "$MACOS_NOTARIZATION_APPLE_ID" --team-id "$MACOS_NOTARIZATION_TEAM_ID" --password "$MACOS_NOTARIZATION_PWD"
+          xcrun notarytool submit dist/owocr.dmg --keychain-profile "notarytool-profile" --wait
+          xcrun stapler staple dist/owocr.dmg
 
       - name: Upload macOS artifact
         id: upload

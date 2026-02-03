@@ -23,15 +23,18 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
 
   call-reusable-macos-build:
     if: github.event.inputs.platform == 'macos'
     uses: ./.github/workflows/build-macos.yml
     with:
       branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
 
   call-reusable-macos-intel-build:
     if: github.event.inputs.platform == 'macos-intel'
     uses: ./.github/workflows/build-macos-intel.yml
     with:
       branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
