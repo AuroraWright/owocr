@@ -41,10 +41,10 @@ version_info = VSVersionInfo(
                     "040904B0",
                     [
                         StringStruct("Comments", "owocr"),
-                        StringStruct("CompanyName", "Aurora Wright"),
+                        StringStruct("CompanyName", "©2026 Aurora Wright and contributors"),
                         StringStruct("FileDescription", "owocr"),
                         StringStruct("FileVersion", __version_string__),
-                        StringStruct("LegalCopyright", "Aurora Wright"),
+                        StringStruct("LegalCopyright", "©2026 Aurora Wright and contributors"),
                         StringStruct("ProductName", "owocr"),
                         StringStruct("ProductVersion", __version_string__),
                     ],

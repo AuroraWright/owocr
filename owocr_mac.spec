@@ -16,7 +16,7 @@ hiddenimports += collect_submodules('desktop_notifier')
 
 info_plist = {
     "CFBundleShortVersionString": __version_string__,
-    "NSHumanReadableCopyright": "Aurora Wright",
+    "NSHumanReadableCopyright": "©2026 Aurora Wright and contributors",
     "LSUIElement": 1,
     "LSMultipleInstancesProhibited": 1,
 }

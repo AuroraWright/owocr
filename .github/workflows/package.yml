@@ -81,6 +81,10 @@ jobs:
             runner: "windows-2025"
             spec: "./owocr_win.spec"
           -
+            name: "macos-intel"
+            runner: "macos-15-intel"
+            spec: "./owocr_mac.spec"
+          -
             name: "macos-arm64"
             runner: "macos-15"
             spec: "./owocr_mac.spec"
