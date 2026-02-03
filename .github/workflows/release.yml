@@ -54,7 +54,7 @@ name: "Release"
         default: false
       publish-github:
         description: |-
-          Whether a GitHub release should be draft.
+          Whether a GitHub release should be drafted.
         type: boolean
         required: true
         default: true
