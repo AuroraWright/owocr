@@ -31,6 +31,8 @@ name: "Build Linux binary"
 
 jobs:
   build:
+    name: "Build Linux binary"
+
     runs-on: "${{ inputs.runner }}"
     
     steps:

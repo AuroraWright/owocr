@@ -31,6 +31,8 @@ name: "Build Windows binary"
 
 jobs:
   build:
+    name: "Build Windows binary"
+
     runs-on: "${{ inputs.runner }}"
     
     steps:
