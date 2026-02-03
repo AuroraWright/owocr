@@ -52,9 +52,11 @@ jobs:
         run: |-
           sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
       -
+        # There's something overriding the "build" module, this fixes it
         name: "Setup Python dependencies"
         run: |-
           pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+          pip install build
       -
         name: "Build package"
         run: |-
