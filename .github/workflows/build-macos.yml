@@ -1,11 +1,16 @@
 # .github/workflows/build-macos.yml
-name: reusable macos build
+name: macOS build
 
 on:
   workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        type: string
     outputs:
       artifact_name:
-        description: "the name of the macOS artifact"
+        description: 'macOS artifact name'
         value: ${{ jobs.build-macos.outputs.artifact_name }}
 
 jobs:
@@ -35,7 +40,7 @@ jobs:
         run: |
           source venv/bin/activate
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
           pip install pyinstaller
 
       - name: Build with PyInstaller (macOS)
@@ -65,7 +70,7 @@ jobs:
           # Clean up temporary directory
           rm -rf dist/dmg_contents
 
-      - name: Upload macOS artifacts
+      - name: Upload macOS artifact
         id: upload
         uses: actions/upload-artifact@v4
         with:
