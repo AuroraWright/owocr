@@ -45,13 +45,13 @@ name: "Release"
           Whether a x64 Linux binary should be built.
         type: boolean
         required: true
-        default: true
+        default: false
       build-binary-linux-arm64:
         description: |-
           Whether a ARM64 Linux binary should be built.
         type: boolean
         required: true
-        default: true
+        default: false
       publish-github:
         description: |-
           Whether a GitHub release should be draft.
@@ -103,14 +103,14 @@ jobs:
       runner: macos-15
 
   build-binary-linux-x64:
-    if: ${{ inputs.build-binary-linux-x64 || github.event_name == 'push' }}
+    if: ${{ inputs.build-binary-linux-x64 }}
     uses: "./.github/workflows/build-binary-linux.yml"
     with:
       name: "binary-linux-x64"
       runner: ubuntu-24.04
 
   build-binary-linux-arm64:
-    if: ${{ inputs.build-binary-linux-arm64 || github.event_name == 'push' }}
+    if: ${{ inputs.build-binary-linux-arm64 }}
     uses: "./.github/workflows/build-binary-linux.yml"
     with:
       name: "binary-linux-arm64"
