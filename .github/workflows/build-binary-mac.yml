@@ -60,12 +60,13 @@ jobs:
         # while installing Python directly like this does not.
         name: "Setup Python via Homebrew"
         run: |-
+          brew install python@$(cat .python-version)
           brew install python-tk@$(cat .python-version)
           echo "$(brew --prefix python@$(cat .python-version))/bin" >> $GITHUB_PATH
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install --group="binary" .${{ inputs.extras }}
+          python$(cat .python-version) -m pip install --group="binary" .${{ inputs.extras }}
       -
         name: "Build binary"
         run: |-
