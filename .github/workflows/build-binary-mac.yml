@@ -60,9 +60,8 @@ jobs:
         # while installing Python directly like this does not.
         name: "Setup Python via Homebrew"
         run: |-
-          brew install python@$(cat .python-version)
-          brew install python-tk@$(cat .python-version)
-          echo "$(brew --prefix python@$(cat .python-version))/bin" >> $GITHUB_PATH
+          brew install --overwrite python@$(cat .python-version)
+          brew install --overwrite python-tk@$(cat .python-version)
       -
         name: "Setup Python dependencies"
         run: |-
