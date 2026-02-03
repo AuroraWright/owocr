@@ -225,6 +225,8 @@ jobs:
         with:
           repository-url: "${{ matrix.index.upload-to }}"
 
+  # Creating a release is necessary because you can't rely on build artifacts to remain available
+  # They are not downloadable if you aren't signed onto GitHub, and they are deleted after a while has passed
   release:
     name: "Create GitHub release"
     
