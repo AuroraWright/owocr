@@ -53,6 +53,8 @@ jobs:
           # Get the latest Python version allowed by the package
           python-version-file: .python-version
           check-latest: true
+          # Make caching explicit
+          cache: pip
       -
         name: "Update Ubuntu package indexes"
         run: |-
@@ -126,6 +128,8 @@ jobs:
           # Get the latest Python version allowed by the package
           python-version-file: .python-version
           check-latest: true
+          # Make caching explicit
+          cache: pip
       - 
         # Potential issue: 
         # the actions/setup-python action also sets up pip dependency caching,
