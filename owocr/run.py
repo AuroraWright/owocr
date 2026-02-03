@@ -2826,7 +2826,7 @@ def tray_user_input_thread_run(log_buffer):
                     log_queue = multiprocessing.Queue()
                     for record in log_buffer:
                         log_queue.put(record)
-                    log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue,), daemon=True)
+                    log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, None), daemon=True)
                     log_viewer_process.start()
             elif action == 'terminate':
                 if log_viewer_process and log_viewer_process.is_alive():
@@ -2876,6 +2876,7 @@ def run():
     if is_bundled:
         log_buffer = collections.deque(maxlen=500)
         log_queue = multiprocessing.Queue()
+        started_event = multiprocessing.Event()
 
         def gui_sink(msg):
             record = msg.record
@@ -2884,8 +2885,9 @@ def run():
                 log_queue.put(record)
 
         sink = gui_sink
-        log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue,), daemon=True)
+        log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
         log_viewer_process.start()
+        started_event.wait()
     else:
         sink = sys.stderr
 
