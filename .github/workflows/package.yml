@@ -107,6 +107,9 @@ jobs:
           python-version-file: .python-version
           check-latest: true
       - 
+        # Potential issue: 
+        # the actions/setup-python action also sets up pip dependency caching,
+        # while installing Python directly like this does not.
         name: "Setup Python via Homebrew"
         if: ${{ matrix.platform.name == 'macos' }}
         run: |-
