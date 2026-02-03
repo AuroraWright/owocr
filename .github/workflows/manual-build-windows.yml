@@ -1,4 +1,4 @@
-name: Manual Build
+name: Manual Build (Windows)
 
 on:
   workflow_dispatch:  # This enables manual triggering
@@ -10,5 +10,5 @@ on:
         type: string
 
 jobs:
-  call-reusable-macos-build:
-    uses: ./.github/workflows/build-macos.yml
+  call-reusable-windows-build:
+    uses: ./.github/workflows/build-windows.yml

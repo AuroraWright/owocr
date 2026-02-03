@@ -1,0 +1,14 @@
+name: Manual Build (macOS)
+
+on:
+  workflow_dispatch:  # This enables manual triggering
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  call-reusable-macos-build:
+    uses: ./.github/workflows/build-macos.yml

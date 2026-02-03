@@ -1,0 +1,45 @@
+# .github/workflows/build-windows.yml
+name: reusable windows build
+
+on:
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: "the name of the windows artifact"
+        value: ${{ jobs.build-windows.outputs.artifact_name }}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.upload.outputs.artifact-name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
+
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: build with pyinstaller (windows)
+        run: pyinstaller owocr_win.spec
+
+      - name: build windows archive
+        run: |
+          powershell -Command "Compress-Archive -Path dist/owocr -DestinationPath dist/owocr.windows.zip"
+
+      - name: upload windows artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/owocr.windows.zip
