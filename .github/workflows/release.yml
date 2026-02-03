@@ -102,14 +102,14 @@ jobs:
 
   build-binary-linux-x64:
     if: ${{ inputs.build-binary-linux-x64 || github.event_name == 'push' }}
-    uses: "./.github/workflows/build-binary-mac.yml"
+    uses: "./.github/workflows/build-binary-linux.yml"
     with:
       name: "binary-linux-x64"
       runner: ubuntu-24.04
 
   build-binary-linux-arm64:
     if: ${{ inputs.build-binary-linux-arm64 || github.event_name == 'push' }}
-    uses: "./.github/workflows/build-binary-mac.yml"
+    uses: "./.github/workflows/build-binary-linux.yml"
     with:
       name: "binary-linux-arm64"
       runner: ubuntu-24.04-arm
