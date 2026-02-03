@@ -40,18 +40,6 @@ name: "Release"
         type: boolean
         required: true
         default: true
-      build-binary-linux-x64:
-        description: |-
-          Whether a x64 Linux binary should be built.
-        type: boolean
-        required: true
-        default: false
-      build-binary-linux-arm64:
-        description: |-
-          Whether a ARM64 Linux binary should be built.
-        type: boolean
-        required: true
-        default: false
       publish-github:
         description: |-
           Whether a GitHub release should be drafted.
@@ -101,20 +89,6 @@ jobs:
     with:
       name: "binary-mac-arm64"
       runner: macos-15
-
-  build-binary-linux-x64:
-    if: ${{ inputs.build-binary-linux-x64 }}
-    uses: "./.github/workflows/build-binary-linux.yml"
-    with:
-      name: "binary-linux-x64"
-      runner: ubuntu-24.04
-
-  build-binary-linux-arm64:
-    if: ${{ inputs.build-binary-linux-arm64 }}
-    uses: "./.github/workflows/build-binary-linux.yml"
-    with:
-      name: "binary-linux-arm64"
-      runner: ubuntu-24.04-arm
   
   publish-github:
     name: "Draft GitHub release"
@@ -127,8 +101,6 @@ jobs:
       - build-binary-win-x64
       - build-binary-mac-intel
       - build-binary-mac-arm64
-      - build-binary-linux-x64
-      - build-binary-linux-arm64
 
     permissions:
       contents: write  # Required to create a tag.
