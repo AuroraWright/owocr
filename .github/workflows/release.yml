@@ -157,7 +157,7 @@ jobs:
     name: "Publish package to Test PyPI"
     runs-on: ubuntu-latest
 
-    if: ${{ ( inputs.publish-pypi-test || github.event_name == 'push' ) && jobs.build-sdist-wheel.result == 'success' }}
+    if: ${{ ( inputs.publish-pypi-test || github.event_name == 'push' ) && needs.build-sdist-wheel.result == 'success' }}
     needs:
       - build-sdist-wheel
 
@@ -190,7 +190,7 @@ jobs:
     name: "Publish package to Production PyPI"
     runs-on: ubuntu-latest
 
-    if: ${{ ( inputs.publish-pypi-prod || github.event_name == 'push' ) && jobs.build-sdist-wheel.result == 'success' && jobs.publish-pypi-test.result == 'success' }}
+    if: ${{ ( inputs.publish-pypi-prod || github.event_name == 'push' ) && needs.build-sdist-wheel.result == 'success' && needs.publish-pypi-test.result == 'success' }}
     needs:
       - build-sdist-wheel
       - publish-pypi-test
