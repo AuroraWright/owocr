@@ -25,11 +25,13 @@ name: "Publish Python package"
     inputs:
       # TODO: Is the default taken properly when running because of a tag push?
       extras:
-        description: "The extras to include in the build. Include square brackets at end and start."
+        description: |-
+          The extras to include in the build. 
+          Include square brackets at end and start.
+          For all extras, specify `[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]`.
         type: string
         required: false  # Allow specifying an empty string
-        default: >-
-          [faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+        default: ""  # Value that the input takes if an empty string is specified
 
 jobs:
   build:
