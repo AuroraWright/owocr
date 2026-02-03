@@ -95,7 +95,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=True,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='owocr',
 )
