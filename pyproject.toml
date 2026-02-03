@@ -107,6 +107,11 @@ azure = [
     "azure-ai-vision-imageanalysis"
 ]
 
+[dependency-groups]
+binary = [
+    "pyinstaller"
+]
+
 [project.urls]
 Repository = "https://github.com/AuroraWright/owocr"
 Issues = "https://github.com/AuroraWright/owocr/issues"

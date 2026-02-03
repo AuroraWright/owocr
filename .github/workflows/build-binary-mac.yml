@@ -53,8 +53,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install .
-          pip install pyinstaller
+          pip install --group="binary" .
       -
         name: "Build binary"
         run: |-
