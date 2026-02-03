@@ -63,13 +63,17 @@ jobs:
           brew install --overwrite python@$(cat .python-version)
           brew install --overwrite python-tk@$(cat .python-version)
       -
+        name: "Create venv"
+        run: |-
+          python$(cat .python-version) -m venv .venv
+      -
         name: "Setup Python dependencies"
         run: |-
-          python$(cat .python-version) -m pip install --group="binary" .${{ inputs.extras }}
+          .venv/bin/python -m pip install --group="binary" .${{ inputs.extras }}
       -
         name: "Build binary"
         run: |-
-          pyinstaller ./owocr_mac.spec
+          .venv/bin/pyinstaller ./owocr_mac.spec
       -
         name: "Create disk image"
         run: |-
