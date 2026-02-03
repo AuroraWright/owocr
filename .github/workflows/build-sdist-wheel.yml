@@ -1,0 +1,71 @@
+%YAML 1.1
+---
+
+name: "Build Python source distribution and wheel"
+
+"on":
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        required: true
+  
+  workflow_dispatch:
+    inputs:
+      name:
+        description: |-
+          The name of the created artifact.
+        type: string
+        required: true
+        default: "package-sdist-wheel"
+
+jobs:
+  build:
+    name: "Build Python source distribution and wheel"
+    runs-on: ubuntu-slim
+
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      -
+        # https://github.com/actions/setup-python/releases/tag/v6.2.0
+        name: "Setup Python"
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          # Get the Python version specified in the .python-version file
+          python-version-file: .python-version
+          # Make caching explicit
+          cache: pip
+      -
+        name: "Update Ubuntu package indexes"
+        run: |-
+          sudo apt-get update
+      -
+        name: "Install Linux dependencies"
+        run: |-
+          sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          pip install .
+      -
+        # There's some dependency that's overriding the "build" module.
+        # This restores its functionality.
+        name: "Fix build module"
+        run: |-
+          pip install build
+      -
+        name: "Build package"
+        run: |-
+          python -m build
+      -
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: "package"
+          path: dist/

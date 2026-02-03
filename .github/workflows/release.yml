@@ -1,0 +1,150 @@
+%YAML 1.1
+---
+
+name: "Release"
+
+"on":
+  push:
+    tags:
+      - "v*"
+  
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: |-
+          The name of the release to create.
+          For example, "v12.345.67".
+        type: string
+        required: true
+
+jobs:
+  build-sdist-wheel:
+    uses: "./.github/workflows/build-sdist-wheel.yml"
+    with:
+      name: &package-sdist-wheel "package-sdist-wheel"
+  
+  build-binary-win-x64:
+    uses: "./.github/workflows/build-binary-win.yml"
+    with:
+      name: "binary-win-x64"
+      runner: windows-2025
+  
+  build-binary-mac-intel:
+    uses: "./.github/workflows/build-binary-mac.yml"
+    with:
+      name: "binary-mac-intel"
+      runner: macos-15-intel
+  
+  build-binary-mac-arm64:
+    uses: "./.github/workflows/build-binary-mac.yml"
+    with:
+      name: "binary-mac-arm64"
+      runner: macos-15
+
+  build-binary-linux-x64:
+    uses: "./.github/workflows/build-binary-mac.yml"
+    with:
+      name: "binary-linux-x64"
+      runner: ubuntu-24.04
+
+  build-binary-linux-arm64:
+    uses: "./.github/workflows/build-binary-mac.yml"
+    with:
+      name: "binary-linux-arm64"
+      runner: ubuntu-24.04-arm
+  
+  publish-github:
+    name: "Draft GitHub release"
+    runs-on: ubuntu-slim
+    
+    needs:
+      - build-sdist-wheel
+      - build-binary-win-x64
+      - build-binary-mac-intel
+      - build-binary-mac-arm64
+      - build-binary-linux-x64
+      - build-binary-linux-arm64
+
+    permissions:
+      contents: write  # Required to create a tag.
+
+    steps:
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download all build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          path: dist/
+      -
+        # https://github.com/ncipollo/release-action/releases/tag/v1.20.0
+        # This action isn't by GitHub, but is one of the officialy recommended successors of https://github.com/actions/download-artifact .
+        name: "Draft GitHub release"
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b
+        with:
+          tag: "${{ inputs.tag || github.ref_name }}"
+          draft: true
+          # If the release hasn't been published yet, update it.
+          allowUpdates: true
+          updateOnlyUnreleased: true
+          # Attach all build artifacts starting with owocr- .
+          artifacts: >-
+            dist/*/owocr-*
+          replacesArtifacts: true
+  
+  publish-pypi-test:
+    name: "Publish package to Test PyPI"
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    environment:
+      name: "pypi-test"
+      url: "https://test.pypi.org/project/owocr/"
+
+    steps:
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: *package-sdist-wheel
+          path: dist/
+      -
+        # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
+        # Note that this action:
+        # - MUST be in the top level workflow, and not in a reusable one
+        # - MUST be run in a ubuntu-latest runner specifically
+        name: "Publish build artifacts"
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: "https://test.pypi.org/legacy/"
+  
+  publish-pypi-prod:
+    name: "Publish package to Production PyPI"
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    environment:
+      name: "pypi-prod"
+      url: "https://pypi.org/project/owocr/"
+
+    steps:
+      -
+        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
+        name: "Download build artifacts"
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: "${{ inputs.artifact }}"
+          path: dist/
+      -
+        # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
+        # Note that this action:
+        # - MUST be in the top level workflow, and not in a reusable one
+        # - MUST be run in a ubuntu-latest runner specifically
+        name: "Publish build artifacts"
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: "https://test.pypi.org/legacy/"

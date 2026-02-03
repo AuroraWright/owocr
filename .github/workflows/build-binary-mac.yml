@@ -1,0 +1,73 @@
+%YAML 1.1
+---
+
+name: "Build Mac binary"
+
+"on":
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+  
+  workflow_dispatch:
+    inputs:
+      name:
+        description: |-
+          The name of the created artifact.
+        type: string
+        required: true
+        default: "binary-macos-arm64"
+      runner:
+        description: |-
+          The runner to use for the job.
+          Must run MacOS.
+        type: string
+        required: true
+        default: "macos-15"
+
+jobs:
+  build:
+    runs-on: "${{ inputs.runner }}"
+
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      - 
+        # Potential issue: 
+        # the actions/setup-python action also sets up pip dependency caching,
+        # while installing Python directly like this does not.
+        name: "Setup Python via Homebrew"
+        run: |-
+          brew install python-tk@3.13
+          echo "$(brew --prefix python@3.13)/bin" >> $GITHUB_PATH
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          pip install .
+          pip install pyinstaller
+      -
+        name: "Build binary"
+        run: |-
+          pyinstaller ./owocr_mac.spec
+      -
+        name: "Create disk image"
+        run: |-
+          mv dist dmg
+          ln -s /Applications dmg/Applications
+          mkdir dist
+          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+      - 
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: "${{ inputs.name }}"
+          path: dist/

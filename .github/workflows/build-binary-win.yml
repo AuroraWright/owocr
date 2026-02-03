@@ -1,0 +1,75 @@
+%YAML 1.1
+---
+
+name: "Build Windows binary"
+
+"on":
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+  
+  workflow_dispatch:
+    inputs:
+      name:
+        description: |-
+          The name of the created artifact.
+        type: string
+        required: true
+        default: "binary-windows-x64"
+      runner:
+        description: |-
+          The runner to use for the job.
+          Must run Windows.
+        type: string
+        required: true
+        default: "windows-2025"
+
+jobs:
+  build:
+    runs-on: "${{ inputs.runner }}"
+    
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      -
+        # https://github.com/actions/setup-python/releases/tag/v6.2.0
+        name: "Setup Python via actions/setup-python"
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          # Get the latest Python version allowed by the package
+          python-version-file: .python-version
+          check-latest: true
+          # Make caching explicit
+          cache: pip
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          pip install .
+          pip install pyinstaller
+      -
+        name: "Build binary"
+        run: |-
+          pyinstaller ./owocr_win.spec
+      -
+        name: "Create zip"
+        shell: pwsh
+        run: |-
+          mv dist zip
+          New-Item -ItemType Directory -Path dist
+          Compress-Archive -Path zip/owocr -DestinationPath dist/owocr-${{ inputs.name }}.zip
+      - 
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: "${{ inputs.name }}"
+          path: dist/
