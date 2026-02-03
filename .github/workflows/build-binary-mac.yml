@@ -79,6 +79,18 @@ jobs:
         name: "Build binary"
         run: |-
           .venv/bin/pyinstaller ./owocr_mac.spec
+      - 
+        # https://github.com/lando/code-sign-action/releases/tag/v3.0.0
+        name: "Sign binary"
+        uses: lando/code-sign-action@a5703d3b5486ada6e8efd08912110f8756e873e8
+        with:
+          file: "dist/owocr.app"
+          apple-team-id: "LUZK6JBS9B"
+          certificate-data: ${{ secrets.APPLE_CERT_DATA }}
+          certificate-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          options: >-
+            --options runtime 
+            --entitlements entitlements.plist
       -
         name: "Create disk image"
         run: |-
@@ -86,6 +98,21 @@ jobs:
           ln -s /Applications dmg/Applications
           mkdir dist
           hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+      - 
+        # https://github.com/lando/code-sign-action/releases/tag/v3.0.0
+        name: "Notarize disk image"
+        uses: lando/code-sign-action@a5703d3b5486ada6e8efd08912110f8756e873e8
+        with:
+          file: "dist/owocr.dmg"
+          certificate-data: ${{ secrets.APPLE_CERT_DATA }}
+          certificate-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          apple-notary-user: ${{ secrets.APPLE_NOTARY_USER }}
+          apple-notary-password: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          apple-notary-tool: notarytool
+          apple-team-id: "LUZK6JBS9B"
+          apple-product-id: "moe.aury.owocr"
+          options: >-
+            --options runtime
       - 
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
         name: "Upload build artifacts"

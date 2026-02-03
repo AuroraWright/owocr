@@ -82,6 +82,7 @@ jobs:
     with:
       name: "binary-mac-intel"
       runner: macos-15-intel
+    secrets: inherit
   
   build-binary-mac-arm64:
     if: ${{ inputs.build-binary-mac-arm64 || github.event_name == 'push' }}
@@ -89,6 +90,7 @@ jobs:
     with:
       name: "binary-mac-arm64"
       runner: macos-15
+    secrets: inherit
   
   publish-github:
     name: "Draft GitHub release"
