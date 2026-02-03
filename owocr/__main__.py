@@ -14,4 +14,6 @@ def main():
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+    import pip_system_certs.wrapt_requests
+    pip_system_certs.wrapt_requests.inject_truststore()
     main()

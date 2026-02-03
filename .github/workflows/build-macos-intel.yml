@@ -43,6 +43,7 @@ jobs:
           pip install --upgrade pip
           pip install transformers==4.49 numpy==1.26.4 opencv-python==4.10.0.84 opencv-python-headless==4.10.0.84
           pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+          pip install pip_system_certs
           pip install pyinstaller
 
       - name: Build with PyInstaller (macOS)

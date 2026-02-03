@@ -41,6 +41,7 @@ jobs:
           source venv/bin/activate
           pip install --upgrade pip
           pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+          pip install pip_system_certs
           pip install pyinstaller
 
       - name: Build with PyInstaller (macOS)
