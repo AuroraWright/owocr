@@ -1109,9 +1109,16 @@ class Bing:
         return x
 
     def _preprocess(self, img):
+        min_pixel_size = 50
         max_pixel_size = 4000
         max_byte_size = 767772
         res = None
+
+        if any(x < min_pixel_size for x in img.size):
+            resize_factor = max(min_pixel_size / img.width, min_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         if any(x > max_pixel_size for x in img.size):
             resize_factor = min(max_pixel_size / img.width, max_pixel_size / img.height)
