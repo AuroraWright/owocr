@@ -120,7 +120,8 @@ jobs:
     name: "Draft GitHub release"
     runs-on: ubuntu-slim
     
-    if: ${{ inputs.publish-github || github.event_name == 'push' }}
+    # Draft release even if one of the prerequisites failed
+    if: ${{ !cancelled() && ( inputs.publish-github || github.event_name == 'push' ) }}
     needs:
       - build-sdist-wheel
       - build-binary-win-x64
@@ -159,7 +160,7 @@ jobs:
     name: "Publish package to Test PyPI"
     runs-on: ubuntu-latest
 
-    if: ${{ ( inputs.publish-pypi-test || github.event_name == 'push' ) && needs.build-sdist-wheel.result == 'success' }}
+    if: ${{ inputs.publish-pypi-test || github.event_name == 'push' }}
     needs:
       - build-sdist-wheel
 
@@ -192,7 +193,7 @@ jobs:
     name: "Publish package to Production PyPI"
     runs-on: ubuntu-latest
 
-    if: ${{ ( inputs.publish-pypi-prod || github.event_name == 'push' ) && needs.build-sdist-wheel.result == 'success' && needs.publish-pypi-test.result == 'success' }}
+    if: ${{ inputs.publish-pypi-prod || github.event_name == 'push' }}
     needs:
       - build-sdist-wheel
       - publish-pypi-test
