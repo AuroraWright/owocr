@@ -82,7 +82,7 @@ jobs:
       - 
         # https://github.com/lando/code-sign-action/releases/tag/v3.0.0
         name: "Sign binary"
-        uses: lando/code-sign-action@a5703d3b5486ada6e8efd08912110f8756e873e8
+        uses: patroza/code-sign-action@fd06b04bd24e224ec6ce131c904363a06e3c4efa
         with:
           file: "dist/owocr.app"
           apple-team-id: "LUZK6JBS9B"
@@ -101,7 +101,7 @@ jobs:
       - 
         # https://github.com/lando/code-sign-action/releases/tag/v3.0.0
         name: "Notarize disk image"
-        uses: lando/code-sign-action@a5703d3b5486ada6e8efd08912110f8756e873e8
+        uses: patroza/code-sign-action@fd06b04bd24e224ec6ce131c904363a06e3c4efa
         with:
           file: "dist/owocr.dmg"
           certificate-data: ${{ secrets.APPLE_CERT_DATA }}
