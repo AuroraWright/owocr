@@ -27,7 +27,7 @@ name: "Publish Python package"
       extras:
         description: "The extras to include in the build. Include square brackets at end and start."
         type: string
-        required: true
+        required: false  # Allow specifying an empty string
         default: >-
           [faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
 
