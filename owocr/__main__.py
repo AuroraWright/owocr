@@ -13,7 +13,8 @@ def main():
     run()
 
 if __name__ == '__main__':
-    import pip_system_certs.wrapt_requests
-    multiprocessing.freeze_support()
-    pip_system_certs.wrapt_requests.inject_truststore()
+    if getattr(sys, 'frozen', False):
+        import pip_system_certs.wrapt_requests
+        multiprocessing.freeze_support()
+        pip_system_certs.wrapt_requests.inject_truststore()
     main()
