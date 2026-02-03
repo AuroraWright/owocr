@@ -49,6 +49,15 @@ jobs:
           source venv/bin/activate
           pyinstaller owocr_mac.spec
 
+      - name: Sign binary
+        uses: lando/code-sign-action@v3
+        with:
+          file: dist/owocr.app
+          certificate-data: ${{ secrets.APPLE_CERT_DATA }}
+          apple-team-id: LUZK6JBS9B
+          certificate-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          options: --options runtime --entitlements entitlements.plist
+
       - name: Create DMG
         run: |
           # Create a temporary directory structure for the DMG
@@ -70,6 +79,19 @@ jobs:
           
           # Clean up temporary directory
           rm -rf dist/dmg_contents
+
+      - name: Sign DMG
+        uses: lando/code-sign-action@v3
+        with:
+          file: dist/owocr.dmg
+          certificate-data: ${{ secrets.APPLE_CERT_DATA }}
+          certificate-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          apple-notary-user: ${{ secrets.APPLE_NOTARY_USER }}
+          apple-notary-password: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          apple-notary-tool: altool
+          apple-team-id: LUZK6JBS9B
+          apple-product-id: com.aury.owocr
+          options: --options runtime
 
       - name: Upload macOS artifact
         id: upload
