@@ -23,22 +23,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: set up python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: install dependencies
+      - name: Install pip dependencies
         run: |
           python -m pip install --upgrade pip
           pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
           pip install pip_system_certs
           pip install pyinstaller
 
-      - name: build with pyinstaller (windows)
+      - name: Build with PyInstaller (Windows)
         run: pyinstaller owocr_win.spec
 
-      - name: build windows archive
+      - name: Build zip
         run: |
           powershell -Command "Compress-Archive -Path dist/owocr -DestinationPath dist/owocr.windows.zip"
 
