@@ -52,44 +52,63 @@ name: "Release"
         type: boolean
         required: true
         default: true
+      publish-github:
+        description: |-
+          Whether a GitHub release should be draft.
+        type: boolean
+        required: true
+        default: true
+      publish-pypi-test:
+        description: |-
+          Whether the package should be published on Test PyPI.
+        type: boolean
+        required: true
+        default: true
+      publish-pypi-prod:
+        description: |-
+          Whether the package should be published on Production PyPI.
+          Requires a successful publish on Test PyPI first.
+        type: boolean
+        required: true
+        default: true
 
 jobs:
   build-sdist-wheel:
-    if: ${{ inputs.build-sdist-wheel }}
+    if: ${{ inputs.build-sdist-wheel || github.event_name == 'push' }}
     uses: "./.github/workflows/build-sdist-wheel.yml"
     with:
       name: &package-sdist-wheel "package-sdist-wheel"
   
   build-binary-win-x64:
-    if: ${{ inputs.build-binary-win-x64 }}
+    if: ${{ inputs.build-binary-win-x64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-win.yml"
     with:
       name: "binary-win-x64"
       runner: windows-2025
   
   build-binary-mac-intel:
-    if: ${{ inputs.build-binary-mac-intel }}
+    if: ${{ inputs.build-binary-mac-intel || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
       name: "binary-mac-intel"
       runner: macos-15-intel
   
   build-binary-mac-arm64:
-    if: ${{ inputs.build-binary-mac-arm64 }}
+    if: ${{ inputs.build-binary-mac-arm64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
       name: "binary-mac-arm64"
       runner: macos-15
 
   build-binary-linux-x64:
-    if: ${{ inputs.build-binary-linux-x64 }}
+    if: ${{ inputs.build-binary-linux-x64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
       name: "binary-linux-x64"
       runner: ubuntu-24.04
 
   build-binary-linux-arm64:
-    if: ${{ inputs.build-binary-linux-arm64 }}
+    if: ${{ inputs.build-binary-linux-arm64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
       name: "binary-linux-arm64"
@@ -99,8 +118,7 @@ jobs:
     name: "Draft GitHub release"
     runs-on: ubuntu-slim
     
-    # Always run, even one of the dependencies is failed or skipped.
-    if: ${{ always() }}
+    if: ${{ inputs.publish-github || github.event_name == 'push' }}
     needs:
       - build-sdist-wheel
       - build-binary-win-x64
@@ -139,6 +157,10 @@ jobs:
     name: "Publish package to Test PyPI"
     runs-on: ubuntu-latest
 
+    if: ${{ ( inputs.publish-pypi-test || github.event_name == 'push' ) && jobs.build-sdist-wheel.result == 'success' }}
+    needs:
+      - build-sdist-wheel
+
     permissions:
       id-token: write
 
@@ -167,6 +189,11 @@ jobs:
   publish-pypi-prod:
     name: "Publish package to Production PyPI"
     runs-on: ubuntu-latest
+
+    if: ${{ ( inputs.publish-pypi-prod || github.event_name == 'push' ) && jobs.build-sdist-wheel.result == 'success' && jobs.publish-pypi-test.result == 'success' }}
+    needs:
+      - build-sdist-wheel
+      - publish-pypi-test
 
     permissions:
       id-token: write
