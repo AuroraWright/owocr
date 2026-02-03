@@ -1638,13 +1638,6 @@ class OBSScreenshotThread(threading.Thread):
         self.port = config.get_general("obs_port")
         self.password = config.get_general("obs_password")
 
-        MIN_OBS_SCALE = 0.5
-        MAX_OBS_SCALE = 1.0
-        self.scale = config.get_general("obs_scale")
-        if self.scale < MIN_OBS_SCALE or self.scale > MAX_OBS_SCALE:
-            logger.warning(f"OBS scale {self.scale} is out of bounds, resetting to 1.0")
-            self.scale = 1.0
-
         self.quality = config.get_general("obs_quality")
         self.img_format = "png" if self.quality == -1 else "jpeg"
         self.quality = None if self.quality == -1 else self.quality
@@ -1673,18 +1666,6 @@ class OBSScreenshotThread(threading.Thread):
             logger.error(f"Failed to connect to OBS: {e}")
             return False
         return True
-    
-    def _get_screenshot_resolution(self):
-        if self.scale == 1.0:
-            return None, None
-        try:
-            resolution = self.client.get_video_settings()
-            width = resolution.base_width * self.scale
-            height = resolution.base_height * self.scale
-            return width, height
-        except Exception as e:
-            logger.debug(f"OBS resolution fetch error: {e}")
-            return None, None
 
     def write_result(self, result, is_combo, screen_capture_properties=None):
         if is_combo:
@@ -1696,10 +1677,9 @@ class OBSScreenshotThread(threading.Thread):
         try:
             scene = self.source_override if self.source_override else self.client.get_current_program_scene().scene_name
             logger.info(f"Taking OBS screenshot of scene/source: {scene}")
-            scaled_width, scaled_height = self._get_screenshot_resolution()
 
             response = self.client.get_source_screenshot(
-                name=scene, img_format=self.img_format, width=scaled_width, height=scaled_height, quality=self.quality
+                name=scene, img_format=self.img_format, width=None, height=None, quality=self.quality
             )
 
             if response and hasattr(response, "image_data") and response.image_data:
