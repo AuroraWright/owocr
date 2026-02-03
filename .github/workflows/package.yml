@@ -21,7 +21,15 @@ name: "Publish Python package"
   push:
     tags:
       - "v*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      # TODO: Is the default taken properly when running because of a tag push?
+      extras:
+        description: "The extras to include in the build. Include square brackets at end and start."
+        type: string
+        required: true
+        default: >-
+          [faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
 
 jobs:
   build:
@@ -55,7 +63,7 @@ jobs:
         # There's something overriding the "build" module, this fixes it
         name: "Setup Python dependencies"
         run: |-
-          pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+          pip install .${{ inputs.extras }}
           pip install build
       -
         name: "Build package"
@@ -138,7 +146,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install .[faster-png,easyocr,rapidocr,meikiocr,mangaocr,winocr,oneocr,lens,gvision,azure]
+          pip install .${{ inputs.extras }}
           pip install pyinstaller
       -
         name: "Build binary"
