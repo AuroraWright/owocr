@@ -1,0 +1,14 @@
+name: Manual Build (Linux ARM)
+
+on:
+  workflow_dispatch:  # This enables manual triggering
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  call-reusable-linux-arm-build:
+    uses: ./.github/workflows/build-linux-arm.yml
