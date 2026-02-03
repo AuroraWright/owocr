@@ -75,16 +75,20 @@ jobs:
       matrix:
         platform:
           -
-            name: "windows"
-            runner: "windows-latest"
+            name: "windows-x64"
+            runner: "windows-2025"
             spec: "./owocr_win.spec"
           -
-            name: "macos"
-            runner: "macos-latest"
+            name: "macos-arm64"
+            runner: "macos-15"
             spec: "./owocr_mac.spec"
           -
-            name: "linux"
-            runner: "ubuntu-latest"
+            name: "linux-x64"
+            runner: "ubuntu-24.04"
+            spec: "./owocr_linux.spec"
+          -
+            name: "linux-arm64"
+            runner: "ubuntu-24.04-arm"
             spec: "./owocr_linux.spec"
     
     # Get the runner from the matrix
@@ -111,18 +115,18 @@ jobs:
         # the actions/setup-python action also sets up pip dependency caching,
         # while installing Python directly like this does not.
         name: "Setup Python via Homebrew"
-        if: ${{ matrix.platform.name == 'macos' }}
+        if: ${{ startsWith( matrix.platform.name, 'macos-' ) }}
         run: |-
           brew install python-tk@3.13
           echo "$(brew --prefix python@3.13)/bin" >> $GITHUB_PATH
       -
         name: "Update Ubuntu package indexes"
-        if: ${{ matrix.platform.name == 'linux' }}
+        if: ${{ startsWith( matrix.platform.name, 'linux-' ) }}
         run: |-
           sudo apt-get update
       -
         name: "Install Linux dependencies"
-        if: ${{ matrix.platform.name == 'linux' }}
+        if: ${{ startsWith( matrix.platform.name, 'linux-' ) }}
         run: |-
           sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
       -
@@ -135,26 +139,34 @@ jobs:
         run: |-
           pyinstaller ${{ matrix.platform.spec }}
       -
+        name: "Create Windows .zip"
+        if: ${{ startsWith( matrix.platform.name, 'windows-' ) }}
+        shell: pwsh
+        run: |-
+          mv dist zip
+          New-Item -ItemType Directory -Path dist
+          Compress-Archive -Path zip/owocr -DestinationPath dist/owocr-${{ matrix.platform.name }}.zip
+      -
         name: "Create MacOS .dmg"
-        if: ${{ matrix.platform.name == 'macos' }}
+        if: ${{ startsWith( matrix.platform.name, 'macos-' ) }}
         run: |-
           mv dist dmg
           ln -s /Applications dmg/Applications
           mkdir dist
-          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr.dmg
+          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr-${{ matrix.platform.name }}.dmg
       -
         name: "Create Linux tarball"
-        if: ${{ matrix.platform.name == 'linux' }}
+        if: ${{ startsWith( matrix.platform.name, 'linux-' ) }}
         run: |-
           mv dist tar
           mkdir dist
-          tar --verbose --create --gzip --file dist/owocr.tgz --directory tar/ .
+          tar --verbose --create --gzip --file dist/owocr-${{ matrix.platform.name }}.tgz --directory tar/ .
       - 
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
         name: "Upload build artifacts"
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: "binary_${{ matrix.platform.name }}"
+          name: "binary-${{ matrix.platform.name }}"
           path: dist/
   
   # Publish in a separate job so that build steps do not have access to secrets
@@ -183,7 +195,7 @@ jobs:
       matrix:
         index:
           - 
-            name: "pypi-test"
+            name: "pypitest"
             upload-to: "https://test.pypi.org/legacy/"
             available-at: "https://test.pypi.org/project/owocr/"
           -
@@ -232,32 +244,10 @@ jobs:
     steps:
       -
         # https://github.com/actions/download-artifact/releases/tag/v7.0.0
-        name: "Download package build artifacts"
+        name: "Download all build artifacts"
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: "package"
-          path: dist/package/
-      -
-        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
-        name: "Download Windows binary build artifacts"
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: "binary_windows"
-          path: dist/binary_windows/
-      -
-        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
-        name: "Download MacOS binary build artifacts"
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: "binary_macos"
-          path: dist/binary_macos/
-      -
-        # https://github.com/actions/download-artifact/releases/tag/v7.0.0
-        name: "Download Linux binary build artifacts"
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: "binary_linux"
-          path: dist/binary_linux/
+          path: dist/
       -
         # Using action recommended by https://github.com/actions/download-artifact
         # https://github.com/ncipollo/release-action/releases/tag/v1.20.0
@@ -266,8 +256,7 @@ jobs:
         with:
           allowUpdates: true
           artifacts: >-
-            dist/binary_macos/owocr.app,
-            dist/binary_linux/owocr.tgz
+            dist/**/*
           artifactErrorsFailBuild: true
           draft: true
           replacesArtifacts: true
