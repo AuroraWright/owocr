@@ -258,7 +258,7 @@ jobs:
         with:
           allowUpdates: true
           artifacts: >-
-            dist/**/*
+            dist/*/*
           artifactErrorsFailBuild: true
           draft: true
           replacesArtifacts: true
