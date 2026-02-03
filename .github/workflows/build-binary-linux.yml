@@ -12,6 +12,10 @@ name: "Build Linux binary"
       runner:
         type: string
         required: true
+      extras:
+        type: string
+        required: false
+        default: &default_extras "[faster-png,easyocr,rapidocr,meikiocr,lens,gvision,azure]"
   
   workflow_dispatch:
     inputs:
@@ -28,6 +32,14 @@ name: "Build Linux binary"
         type: string
         required: true
         default: "ubuntu-24.04"
+      extras:
+        description: |-
+          The extras to include.
+          This is added as suffix to `pip install .`.
+          If specified, make sure to include square brackets.
+        type: string
+        required: true
+        default: *default_extras
 
 jobs:
   build:

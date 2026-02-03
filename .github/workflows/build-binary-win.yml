@@ -12,6 +12,10 @@ name: "Build Windows binary"
       runner:
         type: string
         required: true
+      extras:
+        type: string
+        required: false
+        default: &default_extras "[faster-png,easyocr,rapidocr,meikiocr,winocr,oneocr,lens,gvision,azure]"
   
   workflow_dispatch:
     inputs:
@@ -28,6 +32,14 @@ name: "Build Windows binary"
         type: string
         required: true
         default: "windows-2025"
+      extras:
+        description: |-
+          The extras to include.
+          This is added as suffix to `pip install .`.
+          If specified, make sure to include square brackets.
+        type: string
+        required: false
+        default: *default_extras
 
 jobs:
   build:
@@ -55,7 +67,7 @@ jobs:
       -
         name: "Setup Python dependencies"
         run: |-
-          pip install --group="binary" .
+          pip install --group="binary" .${{ inputs.extras }}
       -
         name: "Build binary"
         run: |-
