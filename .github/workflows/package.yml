@@ -278,7 +278,7 @@ jobs:
         with:
           allowUpdates: true
           artifacts: >-
-            dist/*/*
+            dist/*/owocr-*
           artifactErrorsFailBuild: true
           draft: true
           replacesArtifacts: true
