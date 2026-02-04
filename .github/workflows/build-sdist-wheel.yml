@@ -10,13 +10,13 @@ name: "Build Python source distribution and wheel"
         description: |-
           The name of the created artifact.
         type: string
-        required: false
+        required: true
         default: "package-sdist-wheel"
       python:
         description: |-
           The Python version to use for the job.
         type: string
-        required: false
+        required: true
         default: "3.13"
       extras:
         description: |-
