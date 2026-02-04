@@ -28,7 +28,7 @@ name: "Build Mac binary"
           This is added as suffix to `pip install .`.
           If specified, make sure to include square brackets.
         type: string
-        default: "[faster-png,easyocr,rapidocr,meikiocr,lens,gvision,azure]"
+        default: "[faster-png,easyocr,rapidocr,meikiocr,mangaocr,lens,gvision,azure]"
     
     secrets:
       apple-certificate-base64:
@@ -88,6 +88,47 @@ jobs:
     runs-on: "${{ inputs.runner }}"
 
     steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      - 
+        # Potential issue: 
+        # the actions/setup-python action also sets up pip dependency caching,
+        # while installing Python directly like this does not.
+        name: "Setup Python via Homebrew"
+        run: |-
+          brew install --overwrite python@${{ inputs.python }}
+          brew install --overwrite python-tk@${{ inputs.python }}
+      -
+        name: "Create venv"
+        run: |-
+          python${{ inputs.python }} -m venv venv
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          source venv/bin/activate
+          pip install --group="binary" .${{ inputs.extras }}
+          pip uninstall -y opencv-python opencv-python-headless
+      -
+        name: "Pin specific Python dependencies for Intel Macs"
+        if: ${{ endsWith( inputs.runner, '-intel' ) }}
+        run: |-
+          source venv/bin/activate
+          pip install transformers==4.49 numpy==1.26.4 opencv-python-headless==4.10.0.84
+      -
+        name: "Install opencv headless for ARM Macs"
+        if: ${{ !endsWith( inputs.runner, '-intel' ) }}
+        run: |-
+          source venv/bin/activate
+          pip install opencv-python-headless
+      -
+        name: "Build binary"
+        run: |-
+          source venv/bin/activate
+          pyinstaller ./owocr_mac.spec
       -
         id: generate
         name: "Generate secure keychain password"
@@ -114,9 +155,8 @@ jobs:
         if: ${{ env.APPLE_CERTIFICATE_BASE64 && env.APPLE_CERTIFICATE_NAME && env.APPLE_CERTIFICATE_PASSWORD }}
         run: |-
           echo $APPLE_CERTIFICATE_BASE64 | base64 --decode > certificate.p12
-          security import-certificate certificate.p12 -k build.keychain -P "$MACOS_KEYCHAIN_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
-          rm certificate.p12
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
       -
         id: import-notarization
         name: "Import notarization credentials"
@@ -127,37 +167,6 @@ jobs:
         if: ${{ steps.import-codesign.outcome == 'success' && env.APPLE_NOTARIZATION_USERNAME && env.APPLE_NOTARIZATION_TEAM && env.APPLE_NOTARIZATION_PASSWORD }}
         run: |-
           xcrun notarytool store-credentials "notarytool-profile" --apple-id "$APPLE_NOTARIZATION_USERNAME" --team-id "$APPLE_NOTARIZATION_TEAM" --password "$APPLE_NOTARIZATION_PASSWORD"
-      - 
-        # https://github.com/actions/checkout/releases/tag/v6.0.1
-        name: "Checkout repository"
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-        with:
-          submodules: recursive
-      - 
-        # Potential issue: 
-        # the actions/setup-python action also sets up pip dependency caching,
-        # while installing Python directly like this does not.
-        name: "Setup Python via Homebrew"
-        run: |-
-          brew install --overwrite python@${{ inputs.python }}
-          brew install --overwrite python-tk@${{ inputs.python }}
-      -
-        name: "Create venv"
-        run: |-
-          python${{ inputs.python }} -m venv .venv
-      -
-        name: "Setup Python dependencies"
-        run: |-
-          .venv/bin/python -m pip install --group="binary" .${{ inputs.extras }}
-      -
-        name: "Pin specific Python dependencies for Intel Macs"
-        if: ${{ endsWith( inputs.runner, '-intel' ) }}
-        run: |-
-          .venv/bin/python -m pip install transformers==4.49 numpy==1.26.4 opencv-python-headless==4.10.0.84
-      -
-        name: "Build binary"
-        run: |-
-          .venv/bin/pyinstaller ./owocr_mac.spec
       -
         id: codesign-app
         name: "Codesign app bundle"
@@ -169,10 +178,11 @@ jobs:
       -
         name: "Create disk image"
         run: |-
-          mv dist dmg
-          ln -s /Applications dmg/Applications
-          mkdir dist
-          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+          mkdir -p dist/dmg_contents
+          mv dist/owocr.app dist/dmg_contents/
+          ln -s /Applications dist/dmg_contents/Applications
+          hdiutil create -volname "owocr" -srcfolder dist/dmg_contents -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+          rm -rf dist/dmg_contents
       -
         id: codesign-dmg
         name: "Codesign disk image"
@@ -180,14 +190,14 @@ jobs:
           APPLE_CERTIFICATE_NAME: "${{ secrets.apple-certificate-name }}"
         if: ${{ steps.import-codesign.outcome == 'success' && steps.codesign-app.outcome == 'success' }}
         run: |-
-          /usr/bin/codesign --force --timestamp --verbose --sign "$APPLE_CERTIFICATE_NAME" dist/owocr.dmg
+          /usr/bin/codesign --force --timestamp --verbose --sign "$APPLE_CERTIFICATE_NAME" dist/owocr-${{ inputs.name }}.dmg
       -
         id: notarize-dmg
         name: "Notarize disk image"
         if: ${{ steps.import-notarization.outcome == 'success' && steps.codesign-dmg.outcome == 'success' }}
         run: |-
-          xcrun notarytool submit dist/owocr.dmg --keychain-profile "notarytool-profile" --wait
-          xcrun stapler staple dist/owocr.dmg
+          xcrun notarytool submit dist/owocr-${{ inputs.name }}.dmg --keychain-profile "notarytool-profile" --wait
+          xcrun stapler staple dist/owocr-${{ inputs.name }}.dmg
       - 
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
         id: upload
@@ -195,7 +205,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: &artifact_name "${{ inputs.name }}"
-          path: dist/
+          path: dist/owocr-${{ inputs.name }}.dmg
     
     outputs:
       artifact-name: *artifact_name
