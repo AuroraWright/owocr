@@ -84,7 +84,7 @@ jobs:
         name: "Pin specific Python dependencies for Intel Macs"
         if: ${{ endsWith( inputs.runner, '-intel' ) }}
         run: |-
-          .venv/bin/python -m pip install transformers==4.49 numpy==1.26.4 opencv-python==4.10.0.84 opencv-python-headless==4.10.0.84
+          .venv/bin/python -m pip install transformers==4.49 numpy==1.26.4 opencv-python-headless==4.10.0.84
       -
         name: "Build binary"
         run: |-

@@ -34,7 +34,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -48,7 +48,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=True,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='owocr',
 )

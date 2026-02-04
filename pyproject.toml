@@ -82,7 +82,7 @@ mangaocr = [
     "pyclipper",
     "torchvision",
     "torch-summary",
-    "opencv-python",
+    "opencv-python-headless",
     "shapely",
     "transformers<5.0.0"
 ]

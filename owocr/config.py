@@ -87,7 +87,7 @@ parser.add_argument('--uwu', type=str2bool, nargs='?', const=True, default=argpa
 class Config:
     has_config = False
     downloaded_config = False
-    config_path = os.path.join(os.path.expanduser('~'),'.config','owocr_config.ini')
+    config_path = os.path.join(os.path.expanduser('~'), '.config', 'owocr_config.ini')
     __general_config = {}
     __engine_config = {}
     default_config = {
