@@ -1,0 +1,80 @@
+# .github/workflows/release.yml
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  build-windows:
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
+
+  build-macos:
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
+
+  build-macos-intel:
+    uses: ./.github/workflows/build-macos-intel.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+    secrets: inherit
+
+  create-release:
+    needs: [build-windows, build-macos, build-macos-intel]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: artifacts/windows
+
+      - name: Download macOS Apple Silicon artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-applesilicon-build
+          path: artifacts/macos-applesilicon
+
+      - name: Download macOS Intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-intel-build
+          path: artifacts/macos-intel
+
+      - name: Rename and organize artifacts
+        run: |
+          mv artifacts/windows/owocr.zip owocr-windows.zip
+          mv artifacts/macos-applesilicon/owocr.dmg owocr-mac_applesilicon.dmg
+          mv artifacts/macos-intel/owocr.dmg owocr-mac_intel.dmg
+          echo "Generated files:"
+          ls -la *.zip *.dmg
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: Release ${{ github.event.inputs.tag }}
+          draft: false
+          prerelease: true
+          files: |
+            owocr-windows.zip
+            owocr-mac_applesilicon.dmg
+            owocr-mac_intel.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
