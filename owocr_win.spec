@@ -38,20 +38,20 @@ version_info = VSVersionInfo(
         StringFileInfo(
             [
                 StringTable(
-                    "040904B0",
+                    '040904B0',
                     [
-                        StringStruct("Comments", "owocr"),
-                        StringStruct("CompanyName", "©2026 Aurora Wright and contributors"),
-                        StringStruct("FileDescription", "owocr"),
-                        StringStruct("FileVersion", __version_string__),
-                        StringStruct("LegalCopyright", "©2026 Aurora Wright and contributors"),
-                        StringStruct("ProductName", "owocr"),
-                        StringStruct("ProductVersion", __version_string__),
+                        StringStruct('Comments', 'owocr'),
+                        StringStruct('CompanyName', '©2026 Aurora Wright and contributors'),
+                        StringStruct('FileDescription', 'owocr'),
+                        StringStruct('FileVersion', __version_string__),
+                        StringStruct('LegalCopyright', '©2026 Aurora Wright and contributors'),
+                        StringStruct('ProductName', 'owocr'),
+                        StringStruct('ProductVersion', __version_string__),
                     ],
                 )
             ]
         ),
-        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
+        VarFileInfo([VarStruct('Translation', [1033, 1200])]),
     ],
 )
 
@@ -86,7 +86,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="owocr.ico",
+    icon='owocr/data/icon.png',
     version=version_info,
     contents_directory='data',
 )

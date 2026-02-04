@@ -2271,7 +2271,7 @@ class ScreenshotThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            img, screen_capture_properties = self.take_screenshot(False)
+            img, screen_capture_properties = self.take_screenshot(is_combo)
             self.write_result(img, is_combo, screen_capture_properties)
 
             if img == False:
