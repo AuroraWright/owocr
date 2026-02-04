@@ -44,10 +44,6 @@ name: "Build Python source distribution and wheel"
         description: |-
           SHA-256 digest of the artifact produced by the build.
         value: "${{ jobs.build.outputs.artifact-digest }}"
-  
-  workflow_dispatch:
-    inputs:
-      <<: *inputs_call
 
 jobs:
   build:
