@@ -5,15 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "owocr"
 dynamic = ["version"]
-description = "Japanese OCR"
+description = "Optical character recognition for Japanese text"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11"  # onnxruntime is not yet available for Python 3.14
 authors = [
     {name = "AuroraWright", email = "fallingluma@gmail.com"}
 ]
 license = "GPL-3.0-only"
+license-files = [
+    "LICENSE"
+]
+keywords = [
+    "ocr",
+    "screen-capture",
+]
+# https://pypi.org/classifiers/
 classifiers = [
+    "Natural Language :: English",  # The software itself uses English in its messages
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python",
+    "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia",
+    "Topic :: Utilities",
 ]
 dependencies = [
     "jaconv",
@@ -35,6 +56,7 @@ dependencies = [
     "pywayland;platform_system=='Linux'",
 ]
 
+# If adding a new extra, remember to add it to the GitHub Actions workflow too!
 [project.optional-dependencies]
 faster-png = [
     "fpng-py-fix"
@@ -85,8 +107,17 @@ azure = [
     "azure-ai-vision-imageanalysis"
 ]
 
+[dependency-groups]
+binary = [
+    "pyinstaller",
+    "pip_system_certs",
+]
+
 [project.urls]
-Homepage = "https://github.com/AuroraWright/owocr"
+Repository = "https://github.com/AuroraWright/owocr"
+Issues = "https://github.com/AuroraWright/owocr/issues"
+Download = "https://github.com/AuroraWright/owocr/releases"
+Sponsor = "https://github.com/sponsors/AuroraWright"
 
 [project.scripts]
 owocr = "owocr.__main__:main"

@@ -1,0 +1,204 @@
+%YAML 1.1
+---
+
+name: "Build Mac binary"
+
+"on":
+  workflow_call:
+    inputs: &inputs_call
+      name:
+        description: |-
+          The name of the created artifact.
+        type: string
+        default: "binary-macos-arm64"
+      runner:
+        description: |-
+          The runner to use for the job.
+          Must run MacOS.
+        type: string
+        default: "macos-15"
+      python:
+        description: |-
+          The Python version to use for the job.
+        type: string
+        default: "3.13"
+      extras:
+        description: |-
+          The extras to include.
+          This is added as suffix to `pip install .`.
+          If specified, make sure to include square brackets.
+        type: string
+        default: "[faster-png,easyocr,rapidocr,meikiocr,lens,gvision,azure]"
+    
+    secrets:
+      apple-certificate-base64:
+        description: |-
+          Base64-encoded Apple Developer ID Application certificate to use for signing.
+          If empty, skips signing the binary.
+        required: false
+      apple-certificate-name:
+        description: |-
+          Full name of the Apple Developer ID Application certificate.
+          If empty, skips signing the binary.
+        required: false
+      apple-certificate-password:
+        description: |-
+          Apple Developer ID Application certificate encryption password.
+          If empty, skips signing the binary.
+        required: false
+      apple-notarization-username:
+        description: |-
+          Apple ID username to use to login for notarization.
+          If empty, skips notarizing the binary.
+        required: false
+      apple-notarization-password:
+        description: |-
+          Apple ID App-Specific Password to use for notarization.
+          If empty, skips notarizing the binary.
+        required: false
+      apple-notarization-team:
+        description: |-
+          Apple Team ID to use for notarization.
+          If empty, skips notarizing the binary.
+        required: false
+        
+    outputs:
+      artifact-name:
+        description: |-
+          The name of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-name }}"
+      artifact-id: 
+        description: |-
+          The GitHub ID of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-id }}"
+      artifact-url:
+        description: |-
+          The URL that can be used to download the artifact produced by the build.
+          Requires GitHub login and the artifact to not have expired.
+        value: "${{ jobs.build.outputs.artifact-url }}"
+      artifact-digest:
+        description: |-
+          SHA-256 digest of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-digest }}"
+
+jobs:
+  build:
+    name: "Build MacOS binary"
+    
+    runs-on: "${{ inputs.runner }}"
+
+    steps:
+      -
+        id: generate
+        name: "Generate secure keychain password"
+        run: |-
+          macos_keychain_password=$(openssl rand -hex 48)
+          echo "::add-mask::$macos_keychain_password"
+          echo "macos-keychain-password=$macos_keychain_password" >> "$GITHUB_OUTPUT"
+      -
+        name: "Setup system keychain"
+        env:
+          MACOS_KEYCHAIN_PASSWORD: "${{ steps.generate.outputs.keychain-password }}"
+        run: |-
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+      -
+        id: import-codesign
+        name: "Import codesigning certificate into keychain"
+        env:
+          MACOS_KEYCHAIN_PASSWORD: "${{ steps.generate.outputs.keychain-password }}"
+          APPLE_CERTIFICATE_BASE64: "${{ secrets.apple-certificate-base64 }}"
+          APPLE_CERTIFICATE_NAME: "${{ secrets.apple-certificate-name }}"  # Only used for if condition here
+          APPLE_CERTIFICATE_PASSWORD: "${{ secrets.apple-certificate-password }}"
+        if: ${{ env.APPLE_CERTIFICATE_BASE64 && env.APPLE_CERTIFICATE_NAME && env.APPLE_CERTIFICATE_PASSWORD }}
+        run: |-
+          echo $APPLE_CERTIFICATE_BASE64 | base64 --decode > certificate.p12
+          security import-certificate certificate.p12 -k build.keychain -P "$MACOS_KEYCHAIN_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+      -
+        id: import-notarization
+        name: "Import notarization credentials"
+        env:
+          APPLE_NOTARIZATION_USERNAME: ${{ secrets.apple-notarization-username }}
+          APPLE_NOTARIZATION_TEAM: ${{ secrets.apple-notarization-team }}
+          APPLE_NOTARIZATION_PASSWORD: ${{ secrets.apple-notarization-password }}
+        if: ${{ steps.import-codesign.outcome == 'success' && env.APPLE_NOTARIZATION_USERNAME && env.APPLE_NOTARIZATION_TEAM && env.APPLE_NOTARIZATION_PASSWORD }}
+        run: |-
+          xcrun notarytool store-credentials "notarytool-profile" --apple-id "$APPLE_NOTARIZATION_USERNAME" --team-id "$APPLE_NOTARIZATION_TEAM" --password "$APPLE_NOTARIZATION_PASSWORD"
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      - 
+        # Potential issue: 
+        # the actions/setup-python action also sets up pip dependency caching,
+        # while installing Python directly like this does not.
+        name: "Setup Python via Homebrew"
+        run: |-
+          brew install --overwrite python@${{ inputs.python }}
+          brew install --overwrite python-tk@${{ inputs.python }}
+      -
+        name: "Create venv"
+        run: |-
+          python${{ inputs.python }} -m venv .venv
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          .venv/bin/python -m pip install --group="binary" .${{ inputs.extras }}
+      -
+        name: "Pin specific Python dependencies for Intel Macs"
+        if: ${{ endsWith( inputs.runner, '-intel' ) }}
+        run: |-
+          .venv/bin/python -m pip install transformers==4.49 numpy==1.26.4 opencv-python-headless==4.10.0.84
+      -
+        name: "Build binary"
+        run: |-
+          .venv/bin/pyinstaller ./owocr_mac.spec
+      -
+        id: codesign-app
+        name: "Codesign app bundle"
+        env:
+          APPLE_CERTIFICATE_NAME: "${{ secrets.apple-certificate-name }}"
+        if: ${{ steps.import-codesign.outcome == 'success' }}
+        run: |-
+          /usr/bin/codesign --force --timestamp --deep --verbose --options runtime --entitlements entitlements.plist --sign "$APPLE_CERTIFICATE_NAME" dist/owocr.app
+      -
+        name: "Create disk image"
+        run: |-
+          mv dist dmg
+          ln -s /Applications dmg/Applications
+          mkdir dist
+          hdiutil create -volname "owocr" -srcfolder dmg -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+      -
+        id: codesign-dmg
+        name: "Codesign disk image"
+        env:
+          APPLE_CERTIFICATE_NAME: "${{ secrets.apple-certificate-name }}"
+        if: ${{ steps.import-codesign.outcome == 'success' && steps.codesign-app.outcome == 'success' }}
+        run: |-
+          /usr/bin/codesign --force --timestamp --verbose --sign "$APPLE_CERTIFICATE_NAME" dist/owocr.dmg
+      -
+        id: notarize-dmg
+        name: "Notarize disk image"
+        if: ${{ steps.import-notarization.outcome == 'success' && steps.codesign-dmg.outcome == 'success' }}
+        run: |-
+          xcrun notarytool submit dist/owocr.dmg --keychain-profile "notarytool-profile" --wait
+          xcrun stapler staple dist/owocr.dmg
+      - 
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        id: upload
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: &artifact_name "${{ inputs.name }}"
+          path: dist/
+    
+    outputs:
+      artifact-name: *artifact_name
+      artifact-id: "${{ steps.upload.outputs.artifact-id }}"
+      artifact-url: "${{ steps.upload.outputs.artifact-url }}"
+      artifact-digest: "${{ steps.upload.outputs.artifact-digest }}"
