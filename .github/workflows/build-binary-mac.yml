@@ -139,12 +139,12 @@ jobs:
         # while installing Python directly like this does not.
         name: "Setup Python via Homebrew"
         run: |-
-          brew install --overwrite python@$(cat .python-version)
-          brew install --overwrite python-tk@$(cat .python-version)
+          brew install --overwrite python@${{ inputs.python }}
+          brew install --overwrite python-tk@${{ inputs.python }}
       -
         name: "Create venv"
         run: |-
-          python$(cat .python-version) -m venv .venv
+          python${{ inputs.python }} -m venv .venv
       -
         name: "Setup Python dependencies"
         run: |-
