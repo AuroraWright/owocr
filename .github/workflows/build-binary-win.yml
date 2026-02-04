@@ -5,24 +5,7 @@ name: "Build Windows binary"
 
 "on":
   workflow_call:
-    inputs:
-      name:
-        type: string
-        required: true
-      runner:
-        type: string
-        required: true
-      python:
-        type: string
-        required: true
-        default: &default_python "3.13"
-      extras:
-        type: string
-        required: false
-        default: &default_extras "[faster-png,easyocr,rapidocr,meikiocr,winocr,oneocr,lens,gvision,azure]"
-  
-  workflow_dispatch:
-    inputs:
+    inputs: &inputs_call
       name:
         description: |-
           The name of the created artifact.
@@ -41,7 +24,7 @@ name: "Build Windows binary"
           The Python version to use for the job.
         type: string
         required: true
-        default: *default_python
+        default: "3.13"
       extras:
         description: |-
           The extras to include.
@@ -49,7 +32,29 @@ name: "Build Windows binary"
           If specified, make sure to include square brackets.
         type: string
         required: false
-        default: *default_extras
+        default: "[faster-png,easyocr,rapidocr,meikiocr,winocr,oneocr,lens,gvision,azure]"
+    outputs:
+      artifact-name:
+        description: |-
+          The name of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-name }}"
+      artifact-id: 
+        description: |-
+          The GitHub ID of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-id }}"
+      artifact-url:
+        description: |-
+          The URL that can be used to download the artifact produced by the build.
+          Requires GitHub login and the artifact to not have expired.
+        value: "${{ jobs.build.outputs.artifact-url }}"
+      artifact-digest:
+        description: |-
+          SHA-256 digest of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-digest }}"
+  
+  workflow_dispatch:
+    inputs:
+      <<: *inputs_call
 
 jobs:
   build:
@@ -91,8 +96,15 @@ jobs:
           Compress-Archive -Path zip/owocr -DestinationPath dist/owocr-${{ inputs.name }}.zip
       - 
         # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        id: upload
         name: "Upload build artifacts"
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: "${{ inputs.name }}"
+          name: &artifact_name "${{ inputs.name }}"
           path: dist/
+      
+    outputs:
+      artifact-name: *artifact_name
+      artifact-id: "${{ steps.upload.outputs.artifact-id }}"
+      artifact-url: "${{ steps.upload.outputs.artifact-url }}"
+      artifact-digest: "${{ steps.upload.outputs.artifact-digest }}"

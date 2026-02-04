@@ -67,7 +67,7 @@ jobs:
     if: ${{ inputs.build-sdist-wheel || github.event_name == 'push' }}
     uses: "./.github/workflows/build-sdist-wheel.yml"
     with:
-      name: &package-sdist-wheel "package-sdist-wheel"
+      name: "package-sdist-wheel"
   
   build-binary-win-x64:
     if: ${{ inputs.build-binary-win-x64 || github.event_name == 'push' }}
@@ -152,7 +152,7 @@ jobs:
         name: "Download build artifacts"
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: *package-sdist-wheel
+          name: "${{ needs.build-sdist-wheel.outputs.artifact-name }}"
           path: dist/
       -
         # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
@@ -186,7 +186,7 @@ jobs:
         name: "Download build artifacts"
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: "${{ inputs.artifact }}"
+          name: "${{ needs.build-sdist-wheel.outputs.artifact-name }}"
           path: dist/
       -
         # https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.13.0
