@@ -10,20 +10,20 @@ name: "Build Windows binary"
         description: |-
           The name of the created artifact.
         type: string
-        required: true
+        required: false
         default: "binary-windows-x64"
       runner:
         description: |-
           The runner to use for the job.
           Must run Windows.
         type: string
-        required: true
+        required: false
         default: "windows-2025"
       python:
         description: |-
           The Python version to use for the job.
         type: string
-        required: true
+        required: false
         default: "3.13"
       extras:
         description: |-
