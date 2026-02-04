@@ -12,6 +12,10 @@ name: "Build Windows binary"
       runner:
         type: string
         required: true
+      python:
+        type: string
+        required: true
+        default: &default_python "3.13"
       extras:
         type: string
         required: false
@@ -32,6 +36,12 @@ name: "Build Windows binary"
         type: string
         required: true
         default: "windows-2025"
+      python:
+        description: |-
+          The Python version to use for the job.
+        type: string
+        required: true
+        default: *default_python
       extras:
         description: |-
           The extras to include.

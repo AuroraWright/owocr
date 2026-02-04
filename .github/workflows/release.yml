@@ -81,6 +81,7 @@ jobs:
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
       name: "binary-mac-intel"
+      python: "3.12"
       runner: macos-15-intel
     secrets: inherit
   

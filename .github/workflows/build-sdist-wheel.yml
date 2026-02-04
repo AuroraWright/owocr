@@ -9,6 +9,10 @@ name: "Build Python source distribution and wheel"
       name:
         type: string
         required: true
+      python:
+        type: string
+        required: true
+        default: &default_python "3.13"
       extras:
         type: string
         required: false
@@ -22,6 +26,12 @@ name: "Build Python source distribution and wheel"
         type: string
         required: true
         default: "package-sdist-wheel"
+      python:
+        description: |-
+          The Python version to use for the job.
+        type: string
+        required: true
+        default: *default_python
       extras:
         description: |-
           The extras to include.
