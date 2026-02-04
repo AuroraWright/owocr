@@ -98,7 +98,7 @@ jobs:
         name: "Upload build artifacts"
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: &artifact_name "package"
+          name: &artifact_name "${{ inputs.name }}"
           path: dist/
       
     outputs:
