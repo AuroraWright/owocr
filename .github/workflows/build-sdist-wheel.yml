@@ -10,13 +10,11 @@ name: "Build Python source distribution and wheel"
         description: |-
           The name of the created artifact.
         type: string
-        required: true
         default: "package-sdist-wheel"
       python:
         description: |-
           The Python version to use for the job.
         type: string
-        required: true
         default: "3.13"
       extras:
         description: |-
@@ -24,7 +22,6 @@ name: "Build Python source distribution and wheel"
           This is added as suffix to `pip install .`.
           If specified, make sure to include square brackets.
         type: string
-        required: false
         default: "[faster-png,easyocr,rapidocr,meikiocr,winocr,oneocr,lens,gvision,azure]"
     outputs:
       artifact-name:
