@@ -83,7 +83,13 @@ jobs:
       name: "binary-mac-intel"
       python: "3.12"
       runner: macos-15-intel
-    secrets: inherit
+    secrets: &binary_mac_secrets
+      apple-certificate-base64: "${{ secrets.MACOS_CERTIFICATE }}"
+      apple-certificate-name: "${{ secrets.MACOS_CERTIFICATE_NAME }}"
+      apple-certificate-password: "${{ secrets.MACOS_CERTIFICATE_PWD }}"
+      apple-notarization-username: "${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}"
+      apple-notarization-password: "${{ secrets.MACOS_NOTARIZATION_PWD }}"
+      apple-notarization-team: "${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}"
   
   build-binary-mac-arm64:
     if: ${{ inputs.build-binary-mac-arm64 || github.event_name == 'push' }}
@@ -91,7 +97,7 @@ jobs:
     with:
       name: "binary-mac-arm64"
       runner: macos-15
-    secrets: inherit
+    secrets: *binary_mac_secrets
   
   publish-github:
     name: "Draft GitHub release"
