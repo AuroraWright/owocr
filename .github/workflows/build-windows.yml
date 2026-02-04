@@ -40,11 +40,11 @@ jobs:
 
       - name: Build zip
         run: |
-          powershell -Command "Compress-Archive -Path dist/owocr -DestinationPath dist/owocr.windows.zip"
+          powershell -Command "Compress-Archive -Path dist/owocr -DestinationPath dist/owocr.zip"
 
-      - name: upload windows artifact
+      - name: Upload Windows artifact
         id: upload
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/owocr.windows.zip
+          path: dist/owocr.zip
