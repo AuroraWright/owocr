@@ -19,73 +19,74 @@ from PIL import Image
 from loguru import logger
 import curl_cffi
 
-try:
-    from manga_ocr import MangaOcr as MOCR
-    from comic_text_detector.inference import TextDetector
-    from scipy.signal.windows import gaussian
-    import torch
-    import cv2
-except ImportError:
-    pass
-
 if sys.platform == 'darwin':
     import Vision
     import objc
     from AppKit import NSData, NSImage, NSBundle
     from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode, CFRunLoopStop, CFRunLoopGetCurrent
 
-try:
-    from google.cloud import vision
-    from google.oauth2 import service_account
-    from google.api_core.exceptions import ServiceUnavailable
-except ImportError:
-    pass
+def test():
+    try:
+        from manga_ocr import MangaOcr as MOCR
+        from comic_text_detector.inference import TextDetector
+        from scipy.signal.windows import gaussian
+        import torch
+        import cv2
+    except ImportError:
+        pass
 
-try:
-    from azure.ai.vision.imageanalysis import ImageAnalysisClient
-    from azure.ai.vision.imageanalysis.models import VisualFeatures
-    from azure.core.credentials import AzureKeyCredential
-    from azure.core.exceptions import ServiceRequestError
-except ImportError:
-    pass
+    try:
+        from google.cloud import vision
+        from google.oauth2 import service_account
+        from google.api_core.exceptions import ServiceUnavailable
+    except ImportError:
+        pass
 
-try:
-    import easyocr
-except ImportError:
-    pass
+    try:
+        from azure.ai.vision.imageanalysis import ImageAnalysisClient
+        from azure.ai.vision.imageanalysis.models import VisualFeatures
+        from azure.core.credentials import AzureKeyCredential
+        from azure.core.exceptions import ServiceRequestError
+    except ImportError:
+        pass
 
-try:
-    from rapidocr import RapidOCR as ROCR
-    from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion
-except ImportError:
-    pass
+    try:
+        import easyocr
+    except ImportError:
+        pass
 
-try:
-    from meikiocr import MeikiOCR as MKOCR
-except ImportError:
-    pass
+    try:
+        from rapidocr import RapidOCR as ROCR
+        from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion
+    except ImportError:
+        pass
 
-try:
-    import winocrfix
-except ImportError:
-    pass
+    try:
+        from meikiocr import MeikiOCR as MKOCR
+    except ImportError:
+        pass
 
-try:
-    import oneocr
-    import subprocess
-    import shutil
-except ImportError:
-    pass
+    try:
+        import winocrfix
+    except ImportError:
+        pass
 
-try:
-    from google.protobuf.json_format import MessageToDict
-    from .lens_protos.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
-    from .lens_protos.lens_overlay_platform_pb2 import PLATFORM_WEB
-    from .lens_protos.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
-    from .lens_protos.lens_overlay_filters_pb2 import AUTO_FILTER
-    import random
-except ImportError:
-    pass
+    try:
+        import oneocr
+        import subprocess
+        import shutil
+    except ImportError:
+        pass
+
+    try:
+        from google.protobuf.json_format import MessageToDict
+        from .lens_protos.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
+        from .lens_protos.lens_overlay_platform_pb2 import PLATFORM_WEB
+        from .lens_protos.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
+        from .lens_protos.lens_overlay_filters_pb2 import AUTO_FILTER
+        import random
+    except ImportError:
+        pass
 
 try:
     import fpng_py_fix
