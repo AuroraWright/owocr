@@ -177,6 +177,7 @@ jobs:
     if: ${{ inputs.publish-pypi-prod || github.event_name == 'push' }}
     needs:
       - build-sdist-wheel
+      - publish-pypi-test
 
     permissions:
       id-token: write

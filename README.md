@@ -120,3 +120,4 @@ This uses code from/references these people/projects:
 - [ccylin2000_lipboard_monitor](https://github.com/vaimalaviya1233/ccylin2000_lipboard_monitor) for the Windows clipboard polling code
 - vicky for the demo videos in this readme!
 - nao for the awesome icon!
+- [Steffo](https://github.com/Steffo99) for all his help in automating packaging/distribution with Github Actions!

@@ -133,4 +133,5 @@ version = {attr = "owocr.__version__"}
 include = ["owocr*", "comic_text_detector*"]
 
 [tool.setuptools.package-data]
+owocr = ["data/*"]
 comic_text_detector = ["LICENSE"]
