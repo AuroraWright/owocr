@@ -73,14 +73,14 @@ jobs:
     if: ${{ inputs.build-binary-win-x64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-win.yml"
     with:
-      name: "binary-win-x64"
+      name: "windows"
       runner: windows-2025
   
   build-binary-mac-intel:
     if: ${{ inputs.build-binary-mac-intel || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
-      name: "binary-mac-intel"
+      name: "mac_intel"
       python: "3.12"
       runner: macos-15-intel
     secrets: &binary_mac_secrets
@@ -95,7 +95,7 @@ jobs:
     if: ${{ inputs.build-binary-mac-arm64 || github.event_name == 'push' }}
     uses: "./.github/workflows/build-binary-mac.yml"
     with:
-      name: "binary-mac-arm64"
+      name: "mac_applesilicon"
       runner: macos-15
     secrets: *binary_mac_secrets
   
