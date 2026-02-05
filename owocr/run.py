@@ -35,7 +35,7 @@ from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
 from .config_editor import main as config_editor_main
 from .log_viewer import main as log_viewer_main
-from .tray_icon import start_tray_process, terminate_tray_process_if_running
+from .tray_icon import start_minimal_tray, start_full_tray, terminate_tray_process_if_running, wait_for_tray_process
 
 if sys.platform == 'darwin':
     import termios
@@ -1631,7 +1631,7 @@ class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
-        self.coordinate_selector_combo_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
+        self.coordinate_selector_combo_enabled = is_bundled or config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.window_handle = None
@@ -2588,7 +2588,7 @@ class OutputResult:
 class StateHandlers:
     def __init__(self):
         self.engine_color = config.get_general('engine_color')
-        self.tray_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon')
+        self.tray_enabled = is_bundled or config.get_general('tray_icon')
 
     def pause_handler(self, notify=True, notify_tray=True):
         global paused
@@ -2638,9 +2638,8 @@ def get_notification_urgency():
 def exit_with_error(error):
     logger.error(error)
     state_handlers.terminate_handler()
-    if threading.current_thread() is threading.main_thread():
-        if log_viewer_process and log_viewer_process.is_alive():
-            log_viewer_process.join()
+    if is_bundled and threading.current_thread() is threading.main_thread():
+        wait_for_tray_process()
     sys.exit(1)
 
 
@@ -2698,7 +2697,7 @@ def tray_user_input_thread_run(log_buffer):
     global log_viewer_process
     global log_queue
     config_process = None
-    while not terminated.is_set():
+    while is_bundled or not terminated.is_set():
         try:
             action, data = tray_result_queue.get(timeout=0.2)
             if action == 'change_engine':
@@ -2724,6 +2723,7 @@ def tray_user_input_thread_run(log_buffer):
                 if log_viewer_process and log_viewer_process.is_alive():
                     log_viewer_process.terminate()
                 state_handlers.terminate_handler()
+                break
         except queue.Empty:
             pass
 
@@ -2754,27 +2754,39 @@ def ensure_macos_permissions():
 
 
 def run():
+    global is_bundled
     global terminated
     global state_handlers
     global log_viewer_process
     global log_queue
+    global tray_result_queue
+    global tray_command_queue
+    is_bundled = getattr(sys, 'frozen', False)
     terminated = threading.Event()
     state_handlers = StateHandlers()
     log_viewer_process = None
-    log_buffer = None
     log_queue = None
-    is_bundled = getattr(sys, 'frozen', False)
+    log_buffer = collections.deque(maxlen=500) if is_bundled else None
+    tray_enabled = is_bundled or config.get_general('tray_icon')
+
+    if tray_enabled:
+        tray_result_queue = multiprocessing.Queue()
+        tray_command_queue = multiprocessing.Queue()
+        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
 
     if is_bundled:
-        log_buffer = collections.deque(maxlen=500)
         log_queue = multiprocessing.Queue()
         started_event = multiprocessing.Event()
+        start_minimal_tray(tray_result_queue, tray_command_queue)
+        tray_user_input_thread.start()
 
         def gui_sink(msg):
             record = msg.record
             log_buffer.append(record)
             if log_viewer_process.is_alive():
                 log_queue.put(record)
+            if msg.record['level'].name == 'ERROR':
+                tray_command_queue.put(('error', None))
 
         sink = gui_sink
         log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
@@ -2868,7 +2880,6 @@ def run():
     read_from_readable = []
     write_to = config.get_general('write_to')
     paused = threading.Event()
-    tray_enabled = is_bundled or config.get_general('tray_icon')
     if config.get_general('pause_at_startup'):
         paused.set()
     auto_pause = config.get_general('auto_pause')
@@ -2975,14 +2986,11 @@ def run():
         write_to_readable = f'file {write_to}'
 
     if tray_enabled:
-        global tray_result_queue
-        global tray_command_queue
-        tray_result_queue = multiprocessing.Queue()
-        tray_command_queue = multiprocessing.Queue()
-        logger.info(f'Starting tray icon')
-        start_tray_process(engine_names, engine_index, paused.is_set(), screenshot_thread is not None, tray_result_queue, tray_command_queue)
-        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
-        tray_user_input_thread.start()
+        if not is_bundled:
+            logger.info('Starting tray icon')
+        start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), screenshot_thread is not None)
+        if not is_bundled:
+            tray_user_input_thread.start()
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
     if auto_pause != 0:
@@ -3078,14 +3086,15 @@ def run():
             time.sleep(0.1)
 
     terminate_selector_if_running()
-    if is_bundled:
-        if log_viewer_process.is_alive():
-            log_viewer_process.join()
-    else:
+    if not is_bundled:
         user_input_thread.join()
     if tray_enabled:
-        tray_user_input_thread.join()
-        terminate_tray_process_if_running(tray_command_queue)
+        if is_bundled:
+            wait_for_tray_process()
+            tray_user_input_thread.join()
+        else:
+            tray_user_input_thread.join()
+            terminate_tray_process_if_running(tray_command_queue)
     output_result.second_pass_thread.stop()
     if auto_pause_handler:
         auto_pause_handler.stop()

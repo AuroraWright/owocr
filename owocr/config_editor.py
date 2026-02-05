@@ -161,7 +161,7 @@ class ConfigGUI:
     def __init__(self, root):
         self.root = root
         self.config_path = Config.config_path
-        self.bundled = getattr(sys, 'frozen', False)
+        self.is_bundled = getattr(sys, 'frozen', False)
 
         self._setup_window()
         self._initialize_styles()
@@ -451,7 +451,7 @@ class ConfigGUI:
             option, opt_type, help_text = option_data
             dropdown_values = None
 
-        if option == 'tray_icon' and self.bundled:
+        if option == 'tray_icon' and self.is_bundled:
             return row
 
         if 'special_screen_capture' in opt_type:

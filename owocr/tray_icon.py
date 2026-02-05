@@ -11,13 +11,10 @@ import pystrayfix
 if sys.platform == 'darwin':
     from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 
-
 class TrayGUI:
-    def __init__(self, engine_names, selected_engine, paused, screen_capture_enabled, result_queue, command_queue):
-        self.engine_names = engine_names
-        self.paused = paused
-        self.current_engine_index = selected_engine
-        self.screen_capture_enabled = screen_capture_enabled
+    def __init__(self, result_queue, command_queue):
+        self.enabled = False
+        self.error = False
         self.command_queue = command_queue
         self.result_queue = result_queue
         self.terminated = False
@@ -25,7 +22,7 @@ class TrayGUI:
         self.comm_thread = None
         self.normal_icon = self.load_icon_image()
         self.paused_icon = self.create_paused_icon()
-        self.bundled = getattr(sys, 'frozen', False)
+        self.is_bundled = getattr(sys, 'frozen', False)
 
     def create_paused_icon(self):
         r, g, b, a = self.normal_icon.split()
@@ -48,38 +45,51 @@ class TrayGUI:
         return Image.open(icon_path)
 
     def setup_menu(self):
-        pause_item = pystrayfix.MenuItem(lambda item: 'Unpause' if self.paused else 'Pause', self.on_pause_clicked, default=pystrayfix.Icon.HAS_DEFAULT_ACTION)
-
-        def make_action_func(k):
-            def func(icon, item):
-                self.on_engine_clicked(k)
-            return func
-
-        def make_checked_func(k):
-            def func(item):
-                return self.current_engine_index == k
-            return func
-
-        engine_menu_items = []
-        for i, name in enumerate(self.engine_names):
-            engine_menu_items.append(pystrayfix.MenuItem(name, make_action_func(i), checked=make_checked_func(i)))
-
-        engine_menu = pystrayfix.Menu(*engine_menu_items)
-        capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=self.screen_capture_enabled)
-        capture_area_selection_item = pystrayfix.MenuItem('Select capture area', self.on_capture_area_selector_clicked, visible=self.screen_capture_enabled)
         launch_config_item = pystrayfix.MenuItem('Configure', self.on_config_launch_clicked)
-        launch_log_viewer_item = pystrayfix.MenuItem('View log', self.on_log_viewer_launch_clicked, visible=self.bundled)
+        launch_log_viewer_item = pystrayfix.MenuItem('View log', self.on_log_viewer_launch_clicked, visible=self.is_bundled)
+        quit_item = pystrayfix.MenuItem('Quit', self.on_quit_clicked)
 
-        menu = pystrayfix.Menu(
-            pause_item,
-            pystrayfix.MenuItem('Change engine', engine_menu),
-            capture_item,
-            capture_area_selection_item,
-            launch_config_item,
-            launch_log_viewer_item,
-            pystrayfix.Menu.SEPARATOR,
-            pystrayfix.MenuItem('Quit', self.on_quit_clicked)
-        )
+        if not self.enabled:     
+            status_item = pystrayfix.MenuItem(lambda item: 'Starting...' if not self.error else 'An error occurred!', self.on_log_viewer_launch_clicked)
+
+            menu = pystrayfix.Menu(
+                status_item,
+                launch_config_item,
+                launch_log_viewer_item,
+                pystrayfix.Menu.SEPARATOR,
+                quit_item
+            )
+        else:
+            pause_item = pystrayfix.MenuItem(lambda item: 'Unpause' if self.paused else 'Pause', self.on_pause_clicked, default=pystrayfix.Icon.HAS_DEFAULT_ACTION)
+
+            def make_action_func(k):
+                def func(icon, item):
+                    self.on_engine_clicked(k)
+                return func
+
+            def make_checked_func(k):
+                def func(item):
+                    return self.current_engine_index == k
+                return func
+
+            engine_menu_items = []
+            for i, name in enumerate(self.engine_names):
+                engine_menu_items.append(pystrayfix.MenuItem(name, make_action_func(i), checked=make_checked_func(i)))
+
+            engine_menu = pystrayfix.Menu(*engine_menu_items)
+            capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=self.screen_capture_enabled)
+            capture_area_selection_item = pystrayfix.MenuItem('Select capture area', self.on_capture_area_selector_clicked, visible=self.screen_capture_enabled)
+
+            menu = pystrayfix.Menu(
+                pause_item,
+                pystrayfix.MenuItem('Change engine', engine_menu),
+                capture_item,
+                capture_area_selection_item,
+                launch_config_item,
+                launch_log_viewer_item,
+                pystrayfix.Menu.SEPARATOR,
+                quit_item
+            )
 
         return menu
 
@@ -96,7 +106,19 @@ class TrayGUI:
 
     def handle_main_message(self, message):
         action, data = message
-        if action == 'update_pause':
+        if action == 'enable':
+            self.enabled = True
+            self.engine_names, self.current_engine_index, self.paused, self.screen_capture_enabled = data
+            self.icon.icon = self.paused_icon if self.paused else self.normal_icon
+            self.icon.menu = self.setup_menu()
+            self.icon.update_menu()
+        elif action == 'error':
+            self.error = True
+            self.enabled = False
+            self.icon.menu = self.setup_menu()
+            self.icon.icon = self.paused_icon
+            self.icon.update_menu()
+        elif action == 'update_pause':
             self.paused = data
             self.icon.icon = self.paused_icon if self.paused else self.normal_icon
             self.icon.update_menu()
@@ -145,22 +167,22 @@ class TrayGUI:
 
         self.comm_thread = threading.Thread(target=self.receive_from_main, daemon=True)
         self.comm_thread.start()
-        self.icon = pystrayfix.Icon('owocr', self.paused_icon if self.paused else self.normal_icon, 'owocr', self.setup_menu())
+        self.icon = pystrayfix.Icon('owocr', self.paused_icon, 'owocr', self.setup_menu())
         self.send_to_main('started')
         self.icon.run()
         self.comm_thread.join()
 
 
-def run_tray_gui(engine_names, selected_engine, paused, screen_capture_enabled, result_queue, command_queue):
-    tray = TrayGUI(engine_names, selected_engine, paused, screen_capture_enabled, result_queue, command_queue)
+def run_tray_gui(result_queue, command_queue):
+    tray = TrayGUI(result_queue, command_queue)
     tray.run()
 
 tray_process = None
 
-def start_tray_process(engine_names, selected_engine, paused, screen_capture_enabled, result_queue, command_queue):
+def start_minimal_tray(result_queue, command_queue):
     global tray_process
 
-    tray_process = multiprocessing.Process(target=run_tray_gui, args=(engine_names, selected_engine, paused, screen_capture_enabled, result_queue, command_queue), daemon=True)
+    tray_process = multiprocessing.Process(target=run_tray_gui, args=(result_queue, command_queue), daemon=True)
     tray_process.start()
 
     result = None
@@ -169,6 +191,15 @@ def start_tray_process(engine_names, selected_engine, paused, screen_capture_ena
             result = result_queue.get(timeout=0.1)
         except:
             continue
+
+def start_full_tray(result_queue, command_queue, engine_names, selected_engine, paused, screen_capture_enabled):
+    if not tray_process:
+        start_minimal_tray(result_queue, command_queue)
+    command_queue.put(('enable', (engine_names, selected_engine, paused, screen_capture_enabled)))
+
+def wait_for_tray_process():
+    if tray_process and tray_process.is_alive():
+        tray_process.join()
 
 def terminate_tray_process_if_running(command_queue):
     if tray_process and tray_process.is_alive():
