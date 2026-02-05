@@ -1,92 +1,23 @@
 import re
 import os
 import io
-from pathlib import Path
 import sys
 import platform
 import logging
-from math import sqrt, sin, cos, atan2
 import json
 import base64
 import urllib
+import inspect
+from pathlib import Path
+from math import sqrt, sin, cos, atan2
 from urllib.parse import urlparse, parse_qs
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
-import jaconv
 import numpy as np
 from PIL import Image
 from loguru import logger
 import curl_cffi
-
-if sys.platform == 'darwin':
-    import Vision
-    import objc
-    from AppKit import NSData, NSImage, NSBundle
-    from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode, CFRunLoopStop, CFRunLoopGetCurrent
-
-def test():
-    try:
-        from manga_ocr import MangaOcr as MOCR
-        from comic_text_detector.inference import TextDetector
-        from scipy.signal.windows import gaussian
-        import torch
-        import cv2
-    except ImportError:
-        pass
-
-    try:
-        from google.cloud import vision
-        from google.oauth2 import service_account
-        from google.api_core.exceptions import ServiceUnavailable
-    except ImportError:
-        pass
-
-    try:
-        from azure.ai.vision.imageanalysis import ImageAnalysisClient
-        from azure.ai.vision.imageanalysis.models import VisualFeatures
-        from azure.core.credentials import AzureKeyCredential
-        from azure.core.exceptions import ServiceRequestError
-    except ImportError:
-        pass
-
-    try:
-        import easyocr
-    except ImportError:
-        pass
-
-    try:
-        from rapidocr import RapidOCR as ROCR
-        from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion
-    except ImportError:
-        pass
-
-    try:
-        from meikiocr import MeikiOCR as MKOCR
-    except ImportError:
-        pass
-
-    try:
-        import winocrfix
-    except ImportError:
-        pass
-
-    try:
-        import oneocr
-        import subprocess
-        import shutil
-    except ImportError:
-        pass
-
-    try:
-        from google.protobuf.json_format import MessageToDict
-        from .lens_protos.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
-        from .lens_protos.lens_overlay_platform_pb2 import PLATFORM_WEB
-        from .lens_protos.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
-        from .lens_protos.lens_overlay_filters_pb2 import AUTO_FILTER
-        import random
-    except ImportError:
-        pass
 
 try:
     import fpng_py_fix
@@ -95,9 +26,6 @@ except:
     optimized_png_encode = False
 
 manga_ocr_model = None
-
-logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
-logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
 
 
 @dataclass
@@ -443,6 +371,19 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
     )
 
 
+class GlobalImport:
+    def _silence_warnings(self):
+        logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
+        logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)
+        self._silence_warnings()
+
 class MangaOcrSegmented:
     name = 'mangaocrs'
     readable_name = 'Manga OCR (segmented)'
@@ -462,11 +403,29 @@ class MangaOcrSegmented:
         paragraph_bounding_boxes=True
     )
 
+    def _import_dependencies(self):
+        if not manga_ocr_model:
+            with GlobalImport():
+                try:
+                    from manga_ocr import MangaOcr as MOCR
+                except ImportError:
+                    return False
+
+        with GlobalImport():
+            try:
+                from comic_text_detector.inference import TextDetector
+                from scipy.signal.windows import gaussian
+                import torch
+                import cv2
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}):
-        if 'manga_ocr' not in sys.modules:
-            logger.warning('manga-ocr not available, Manga OCR (segmented) will not work!')
-        elif 'scipy' not in sys.modules:
-            logger.warning('scipy not available, Manga OCR (segmented) will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Manga OCR (segmented) will not work!')
         else:
             comic_text_detector_path = Path.home() / ".cache" / "manga-ocr"
             comic_text_detector_file = comic_text_detector_path / "comictextdetector.pt"
@@ -630,9 +589,20 @@ class MangaOcr:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        if not manga_ocr_model:
+            with GlobalImport():
+                try:
+                    from manga_ocr import MangaOcr as MOCR
+                except ImportError:
+                    return False
+        return True
+
     def __init__(self, config={}):
-        if 'manga_ocr' not in sys.modules:
-            logger.warning('manga-ocr not available, Manga OCR will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Manga OCR will not work!')
         else:
             pretrained_model_name_or_path = config.get('pretrained_model_name_or_path', 'kha-white/manga-ocr-base')
             force_cpu = config.get('force_cpu', False)
@@ -670,9 +640,21 @@ class GoogleVision:
         paragraph_bounding_boxes=True
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                from google.cloud import vision
+                from google.oauth2 import service_account
+                from google.api_core.exceptions import ServiceUnavailable
+            except ImportError:
+                return False
+        return True
+
     def __init__(self):
-        if 'google.cloud' not in sys.modules:
-            logger.warning('google-cloud-vision not available, Google Vision will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Google Vision will not work!')
         else:
             logger.info(f'Parsing Google credentials')
             google_credentials_file = os.path.join(os.path.expanduser('~'),'.config','google_vision.json')
@@ -817,9 +799,24 @@ class GoogleLens:
         paragraph_bounding_boxes=True
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                from google.protobuf.json_format import MessageToDict
+                from .lens_protos.lens_overlay_server_pb2 import LensOverlayServerRequest, LensOverlayServerResponse
+                from .lens_protos.lens_overlay_platform_pb2 import PLATFORM_WEB
+                from .lens_protos.lens_overlay_surface_pb2 import SURFACE_CHROMIUM
+                from .lens_protos.lens_overlay_filters_pb2 import AUTO_FILTER
+                import random
+            except ImportError:
+                return False
+            return True
+
     def __init__(self):
-        if 'google.protobuf' not in sys.modules:
-            logger.warning('protobuf not available, Google Lens will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Google Lens will not work!')
         else:
             self.available = True
             logger.info('Google Lens ready')
@@ -1155,12 +1152,17 @@ class AppleVision:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            import Vision
+
     def __init__(self, language='ja', config={}):
         if sys.platform != 'darwin':
             return
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Vision is not supported on macOS older than Ventura/13.0!')
         else:
+            self._import_dependencies()
             self.recognition_level = Vision.VNRequestTextRecognitionLevelFast if config.get('fast_mode', False) else Vision.VNRequestTextRecognitionLevelAccurate
             self.language_correction = config.get('language_correction', True)
             self.available = True
@@ -1256,12 +1258,19 @@ class AppleLiveText:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            import objc
+            from AppKit import NSData, NSImage, NSBundle
+            from CoreFoundation import CFRunLoopRunInMode, kCFRunLoopDefaultMode, CFRunLoopStop, CFRunLoopGetCurrent
+
     def __init__(self, language='ja'):
         if sys.platform != 'darwin':
             return
         elif int(platform.mac_ver()[0].split('.')[0]) < 13:
             logger.warning('Apple Live Text is not supported on macOS older than Ventura/13.0!')
         else:
+            self._import_dependencies()
             app_info = NSBundle.mainBundle().infoDictionary()
             app_info['LSBackgroundOnly'] = '1'
             self.VKCImageAnalyzer = objc.lookUpClass('VKCImageAnalyzer')
@@ -1393,12 +1402,22 @@ class WinRTOCR:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                import winocrfix
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}, language='ja'):
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('WinRT OCR is not supported on Windows older than 10!')
-            elif 'winocrfix' not in sys.modules:
-                logger.warning('winocrfix not available, WinRT OCR will not work!')
+                return
+            dependencies_available = self._import_dependencies()
+            if not dependencies_available:
+                logger.warning('Dependencies not available, WinRT OCR will not work!')
             else:
                 self.language = language
                 self.available = True
@@ -1511,12 +1530,25 @@ class OneOCR:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                import oneocr
+                import subprocess
+                import shutil
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}):
         if sys.platform == 'win32':
             if int(platform.release()) < 10:
                 logger.warning('OneOCR is not supported on Windows older than 10!')
-            elif 'oneocr' not in sys.modules:
-                logger.warning('oneocr not available, OneOCR will not work!')
+                return
+
+            dependencies_available = self._import_dependencies()
+            if not dependencies_available:
+                logger.warning('Dependencies not available, OneOCR will not work!')
             else:
                 if self._copy_files_if_needed():
                     try:
@@ -1703,9 +1735,22 @@ class AzureImageAnalysis:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                from azure.ai.vision.imageanalysis import ImageAnalysisClient
+                from azure.ai.vision.imageanalysis.models import VisualFeatures
+                from azure.core.credentials import AzureKeyCredential
+                from azure.core.exceptions import ServiceRequestError
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}):
-        if 'azure.ai.vision.imageanalysis' not in sys.modules:
-            logger.warning('azure-ai-vision-imageanalysis not available, Azure Image Analysis will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Azure Image Analysis will not work!')
         else:
             logger.info(f'Parsing Azure credentials')
             try:
@@ -1814,9 +1859,19 @@ class EasyOCR:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                import easyocr
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}, language='ja'):
-        if 'easyocr' not in sys.modules:
-            logger.warning('easyocr not available, EasyOCR will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, EasyOCR will not work!')
         else:
             logger.info('Loading EasyOCR model')
             gpu = config.get('gpu', True)
@@ -1889,9 +1944,20 @@ class RapidOCR:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                from rapidocr import RapidOCR as ROCR
+                from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion
+            except ImportError:
+                return False
+        return True
+
     def __init__(self, config={}, language='ja'):
-        if 'rapidocr' not in sys.modules:
-            logger.warning('rapidocr not available, RapidOCR will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, RapidOCR will not work!')
         else:
             logger.info('Loading RapidOCR model')
             high_accuracy_detection = config.get('high_accuracy_detection', False)
@@ -1990,9 +2056,19 @@ class MeikiOCR:
         paragraph_bounding_boxes=False
     )
 
+    def _import_dependencies(self):
+        with GlobalImport():
+            try:
+                from meikiocr import MeikiOCR as MKOCR
+            except ImportError:
+                return False
+        return True
+
     def __init__(self):
-        if 'meikiocr' not in sys.modules:
-            logger.warning('meikiocr not available, meikiocr will not work!')
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, meikiocr will not work!')
         else:
             logger.info('Loading meikiocr model')
             self.model = MKOCR()

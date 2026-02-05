@@ -2,17 +2,23 @@ import sys
 import multiprocessing
 import queue
 import threading
-import ctypes
+import inspect
 import importlib.resources
 
-from PIL import Image
-import pystrayfix
 
-if sys.platform == 'darwin':
-    from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+class GlobalImport:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)    
 
 class TrayGUI:
     def __init__(self, result_queue, command_queue):
+        with GlobalImport():
+            import pystrayfix
+            from PIL import Image
         self.enabled = False
         self.error = False
         self.command_queue = command_queue
@@ -160,8 +166,10 @@ class TrayGUI:
 
     def run(self):
         if sys.platform == 'win32':
+            import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
         elif sys.platform == 'darwin':
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 

@@ -1,21 +1,36 @@
-import tkinter as tk
-from tkinter import PhotoImage, ttk, messagebox, filedialog
 import configparser
 import os
 import inspect
 import sys
-import ctypes
 import time
 import importlib.resources
-
-from pynputfix import keyboard
 
 from .ocr import *
 from .config import Config
 
+if sys.platform == 'win32':
+    import ctypes
+
+try:
+    import tkinter as tk
+    from tkinter import PhotoImage, ttk, messagebox, filedialog
+    editor_available = True
+except:
+    editor_available = False
+
+
+class GlobalImport:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)
 
 class HotkeyRecorder:
     def __init__(self):
+        with GlobalImport():
+            from pynputfix import keyboard
         self.listener = None
         self.recording = False
         self.current_keys = set()
@@ -1143,6 +1158,10 @@ class ConfigGUI:
 
 
 def main():
+    if not editor_available:
+        print('tkinter is not installed, unable to open editor')
+        sys.exit(1)
+
     global hotkey_recorder
     hotkey_recorder = HotkeyRecorder()
     hotkey_recorder.start_listener()

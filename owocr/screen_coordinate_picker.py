@@ -1,15 +1,11 @@
 import multiprocessing
 import queue
-import ctypes
-import mss
-from loguru import logger
-from PIL import Image
-from pynputfix import keyboard
+import inspect
 import sys
 import os
 
-if sys.platform == 'darwin':
-    from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+from loguru import logger
+from PIL import Image
 
 try:
     from PIL import ImageTk
@@ -19,8 +15,19 @@ except:
     selector_available = False
 
 
+class GlobalImport:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)
+
+
 class ScreenSelector:
     def __init__(self, result_queue, command_queue):
+        with GlobalImport():
+            from pynputfix import keyboard
         self.root = None
         self.result_queue = result_queue
         self.command_queue = command_queue
@@ -423,14 +430,17 @@ class ScreenSelector:
         self.start_key_listener()
 
         if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+            import mss
             self.real_monitors = mss.mss().monitors[1:]
         elif sys.platform == 'win32':
+            import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
         self.root = tk.Tk()
         self.root.withdraw()
 
         if sys.platform == 'darwin':
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 

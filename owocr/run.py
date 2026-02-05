@@ -1,34 +1,21 @@
 import sys
-import signal
-import atexit
 import time
 import threading
 import multiprocessing
-from pathlib import Path
 import queue
 import io
 import re
-import logging
 import inspect
 import os
 import json
 import collections
-import select
-from dataclasses import asdict
-import importlib
+import socketserver
 import urllib.request
+from pathlib import Path
 
 import numpy as np
-import psutil
-import asyncio
-import websockets
-import socket
-import socketserver
-
-from PIL import Image, ImageDraw, ImageFile
+from PIL import Image
 from loguru import logger
-from pynputfix import keyboard
-from desktop_notifier import DesktopNotifierSync, Urgency
 
 from .ocr import *
 from .config import config
@@ -37,50 +24,77 @@ from .config_editor import main as config_editor_main
 from .log_viewer import main as log_viewer_main
 from .tray_icon import start_minimal_tray, start_full_tray, terminate_tray_process_if_running, wait_for_tray_process
 
-if sys.platform == 'darwin':
-    import termios
-    import fcntl
-    import errno
-    import objc
-    import platform
-    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
-                       NSPasteboardTypeTIFF
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
-                       CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
-                       kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
-                       kCGWindowImageNominalResolution, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
-    from HIServices import AXIsProcessTrustedWithOptions
-    from ApplicationServices import kAXTrustedCheckOptionPrompt
-    from Foundation import NSString
-    from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
-elif sys.platform == 'win32':
-    import msvcrt
-    import win32gui
-    import win32ui
-    import win32api
-    import win32con
-    import win32process
-    import win32clipboard
-    import pywintypes
-    import ctypes
-elif sys.platform == 'linux':
-    import termios
-    import fcntl
-    import errno
-    from PIL import ImageGrab
-    import pyperclip
-
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
-if is_wayland:
-    from . import wayland_mss_shim
-    mss = wayland_mss_shim.MSSModuleShim()
-    from pywayland.client import Display
-    from pywayland.protocol.wayland import WlSeat
-    from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
-else:
-    import mss
+def load_not_essential_libraries():
+    class GlobalImport:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+            globals().update(self.collector)
+
+    with GlobalImport():
+        import signal
+        import atexit
+        import asyncio
+        import socket
+        from dataclasses import asdict
+
+        from PIL import ImageDraw, ImageFile
+        import jaconv
+        import psutil
+        import websockets
+        from pynputfix import keyboard
+        from desktop_notifier import DesktopNotifierSync, Urgency
+
+        if sys.platform == 'darwin':
+            import select
+            import termios
+            import fcntl
+            import errno
+            import platform
+            import objc
+            from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
+                               NSPasteboardTypeTIFF
+            from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
+                               CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
+                               kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
+                               kCGWindowImageNominalResolution, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
+            from HIServices import AXIsProcessTrustedWithOptions
+            from ApplicationServices import kAXTrustedCheckOptionPrompt
+            from Foundation import NSString
+            from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
+        elif sys.platform == 'win32':
+            import ctypes
+            import msvcrt
+            import win32gui
+            import win32ui
+            import win32api
+            import win32con
+            import win32process
+            import win32clipboard
+            import pywintypes
+            import ctypes
+        elif sys.platform == 'linux':
+            import select
+            import termios
+            import fcntl
+            import errno
+            from PIL import ImageGrab
+            import pyperclip
+
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+        if is_wayland:
+            from . import wayland_mss_shim
+            mss = wayland_mss_shim.MSSModuleShim()
+            from pywayland.client import Display
+            from pywayland.protocol.wayland import WlSeat
+            from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
+        else:
+            import mss
 
 
 class ClipboardThread(threading.Thread):
@@ -2729,11 +2743,8 @@ def tray_user_input_thread_run(log_buffer):
 
 
 def get_current_version():
-    try:
-        return importlib.metadata.version(__package__)
-    except:
-        from . import __version_string__
-        return __version_string__
+    from . import __version_string__
+    return __version_string__
 
 
 def get_latest_version():
@@ -2799,6 +2810,7 @@ def run():
     logger.configure(handlers=[{'sink': sink, 'format': config.get_general('logger_format'), 'level': logger_level}])
 
     logger.info(f'Starting owocr version {get_current_version()}')
+    load_not_essential_libraries()
     logger.info(f'Latest available version: {get_latest_version()}')
     if config.has_config:
         logger.info('Parsed config file')

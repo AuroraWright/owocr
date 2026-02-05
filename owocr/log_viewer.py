@@ -2,9 +2,10 @@ import tkinter as tk
 from tkinter import PhotoImage, ttk
 import queue
 import sys
-import ctypes
 import importlib.resources
 
+if sys.platform == 'win32':
+    import ctypes
 
 class LogViewer:
     def __init__(self, root, log_queue):
