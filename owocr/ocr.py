@@ -404,13 +404,13 @@ class MangaOcrSegmented:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Manga OCR (segmented)')
         if not manga_ocr_model:
             with GlobalImport():
                 try:
                     from manga_ocr import MangaOcr as MOCR
                 except ImportError:
                     return False
-
         with GlobalImport():
             try:
                 from comic_text_detector.inference import TextDetector
@@ -590,6 +590,7 @@ class MangaOcr:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Manga OCR')
         if not manga_ocr_model:
             with GlobalImport():
                 try:
@@ -641,6 +642,7 @@ class GoogleVision:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Google Vision')
         with GlobalImport():
             try:
                 from google.cloud import vision
@@ -800,6 +802,7 @@ class GoogleLens:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Google Lens')
         with GlobalImport():
             try:
                 from google.protobuf.json_format import MessageToDict
@@ -1153,6 +1156,7 @@ class AppleVision:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Apple Vision')
         with GlobalImport():
             import Vision
 
@@ -1259,6 +1263,7 @@ class AppleLiveText:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Apple Live Text')
         with GlobalImport():
             import objc
             from AppKit import NSData, NSImage, NSBundle
@@ -1403,6 +1408,7 @@ class WinRTOCR:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for WinRT OCR')
         with GlobalImport():
             try:
                 import winocrfix
@@ -1531,6 +1537,7 @@ class OneOCR:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for OneOCR')
         with GlobalImport():
             try:
                 import oneocr
@@ -1736,6 +1743,7 @@ class AzureImageAnalysis:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for Azure Image Analysis')
         with GlobalImport():
             try:
                 from azure.ai.vision.imageanalysis import ImageAnalysisClient
@@ -1860,6 +1868,7 @@ class EasyOCR:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for EasyOCR')
         with GlobalImport():
             try:
                 import easyocr
@@ -1945,6 +1954,7 @@ class RapidOCR:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for RapidOCR')
         with GlobalImport():
             try:
                 from rapidocr import RapidOCR as ROCR
@@ -2057,6 +2067,7 @@ class MeikiOCR:
     )
 
     def _import_dependencies(self):
+        logger.info('Loading dependencies for meikiocr')
         with GlobalImport():
             try:
                 from meikiocr import MeikiOCR as MKOCR
