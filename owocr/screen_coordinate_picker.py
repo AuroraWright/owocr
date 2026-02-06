@@ -79,6 +79,15 @@ class ScreenSelector:
     def process_events(self):
         if self.windows:
             try:
+                command = self.command_queue.get_nowait()
+                image, coordinates, is_window = command
+                if image == False:
+                    self.return_empty()
+                    self.root.destroy()
+                    return
+            except queue.Empty:
+                pass
+            try:
                 while True:
                     event_type = self.keyboard_event_queue.get_nowait()
                     if event_type == 'return_selections':

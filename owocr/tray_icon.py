@@ -162,6 +162,7 @@ class TrayGUI:
     def on_quit_clicked(self, icon, item):
         self.send_to_main('terminate')
         self.terminated = True
+        icon.update_menu = lambda: None
         icon.stop()
 
     def run(self):

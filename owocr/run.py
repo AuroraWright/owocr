@@ -2177,6 +2177,8 @@ class ScreenshotThread(threading.Thread):
             periodic_screenshot_queue.put((result, screen_capture_properties))
 
     def launch_coordinate_picker(self, init, must_return):
+        if terminated.is_set():
+            return
         if init:
             logger.info('Preloading coordinate picker')
             get_screen_selection(True, None, None, True)
@@ -2641,6 +2643,7 @@ class StateHandlers:
         if not terminated.is_set():
             logger.info('Terminated!')
             terminated.set()
+            terminate_selector_if_running()
 
 
 def get_notification_urgency():
@@ -2841,7 +2844,7 @@ def run():
             config_engines.append(config_engine.strip().lower())
 
     for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
-        if len(config_engines) == 0 or engine_class.name in config_engines:
+        if not terminated.is_set() and (len(config_engines) == 0 or engine_class.name in config_engines):
             if output_format == 'json' and not engine_class.coordinate_support:
                 logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
                 continue
@@ -3097,7 +3100,6 @@ def run():
         if not img and not skip_waiting:
             time.sleep(0.1)
 
-    terminate_selector_if_running()
     if not is_bundled:
         user_input_thread.join()
     if tray_enabled:
