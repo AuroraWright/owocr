@@ -276,8 +276,8 @@ class ConfigGUI:
                 ('furigana_filter', 'bool', 'Filter out furigana lines for Japanese if reorder_text is enabled'),
             ],
             'Advanced': [
-                ('screen_capture_old_macos_api', 'bool', 'Use old macOS screen capture API'),
-                ('wayland_use_wlclipboard', 'bool', 'Use wl-clipboard on Linux/Wayland'),
+                ('screen_capture_old_macos_api', 'bool', 'Use old macOS window screen capture API (faster, recommended for now)'),
+                ('wayland_use_wlclipboard', 'bool', 'Use wl-clipboard on Wayland instead of the built-in clipboard code.\nUses more resources and steals focus. Only needed on e.g. GNOME'),
             ]
         }
         self.engine_config_options = {

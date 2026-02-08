@@ -2402,7 +2402,6 @@ class OutputResult:
     def __init__(self):
         self.screen_capture_periodic = config.get_general('screen_capture_delay_seconds') != -1
         self.json_output = config.get_general('output_format') == 'json'
-        self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
         self.reorder_text = config.get_general('reorder_text')
@@ -2505,13 +2504,13 @@ class OutputResult:
                 end_time = time.monotonic()
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {{}}', result_data_2)
+                    logger.opt(colors=True).warning(f'<cyan>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {{}}', result_data_2)
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
-                            logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</>")
+                            logger.opt(colors=True).info(f"<cyan>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <cyan>{engine_instance.readable_name}</>")
 
                         if changed_regions_image:
                             img_or_path = changed_regions_image
@@ -2541,7 +2540,7 @@ class OutputResult:
         if not res:
             if auto_pause_handler and auto_pause:
                 auto_pause_handler.stop_timer()
-            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data)
+            logger.opt(colors=True).warning(f'<cyan>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data)
             return
 
         if isinstance(result_data, OcrResult):
@@ -2587,7 +2586,7 @@ class OutputResult:
             else:
                 log_message = ': ' + (output_text if len(output_text) <= self.verbosity else output_text[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</>{{}}', log_message)
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <cyan>{engine_name}</>{{}}', log_message)
 
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
@@ -2603,7 +2602,6 @@ class OutputResult:
 
 class StateHandlers:
     def __init__(self):
-        self.engine_color = config.get_general('engine_color')
         self.tray_enabled = is_bundled or config.get_general('tray_icon')
 
     def pause_handler(self, notify=True, notify_tray=True):
@@ -2636,7 +2634,7 @@ class StateHandlers:
                 notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
             if notify_tray and self.tray_enabled:
                 tray_command_queue.put(('update_engine', engine_index))
-            logger.opt(colors=True).info(f'Switched to <{self.engine_color}>{new_engine_name}</>!')
+            logger.opt(colors=True).info(f'Switched to <cyan>{new_engine_name}</>!')
 
     def terminate_handler(self, sig=None, frame=None):
         global terminated
@@ -2812,7 +2810,7 @@ def run():
         sink = sys.stderr
 
     logger_level = 'DEBUG' if config.get_general('uwu') else 'INFO'
-    logger.configure(handlers=[{'sink': sink, 'format': config.get_general('logger_format'), 'level': logger_level}])
+    logger.configure(handlers=[{'sink': sink, 'format': '<green>{time:HH:mm:ss}</green> | <level>{message}</level>', 'level': logger_level}])
 
     logger.info(f'Starting owocr version {get_current_version()}')
     load_not_essential_libraries()
@@ -2852,7 +2850,6 @@ def run():
     unix_socket_server = None
     key_combo_listener = None
     auto_pause_handler = None
-    engine_color = config.get_general('engine_color')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
     wayland_use_wlclipboard = config.get_general('wayland_use_wlclipboard')
@@ -3063,7 +3060,7 @@ def run():
     atexit.register(event_lock_cleanup)
 
     if not terminated.is_set():
-        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
+        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <cyan>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
 
     while not terminated.is_set():
         img = None
