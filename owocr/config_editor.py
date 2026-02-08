@@ -243,6 +243,7 @@ class ConfigGUI:
                 ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, take a screenshot\nand launch this configuration'),
                 ('show_log_at_startup', 'bool', 'Show the log viewer window when owocr starts'),
                 ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
+                ('language', 'dropdown', 'Language code, used for some engines and to cleanup screen capture text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
                 ('output_format', 'dropdown', 'Output format', ['text', 'json']),
                 ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
             ],
@@ -259,7 +260,6 @@ class ConfigGUI:
                 ('screen_capture_frame_stabilization', 'float', 'Wait X seconds until text is stable:\n-1: wait for two frames\n0: disable (faster, only works when text is shown all at once)'),
                 ('screen_capture_line_recovery', 'bool', 'Try to recover lines missed by frame stabilization (can increase glitches)'),
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
-                ('language', 'dropdown', 'Language code, used to cleanup text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
             ],
             'Hotkeys': [
                 ('combo_pause', 'str', 'Pause/resume hotkey'),
