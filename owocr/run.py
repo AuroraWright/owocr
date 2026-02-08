@@ -2730,7 +2730,7 @@ def tray_user_input_thread_run(log_buffer):
                     config_process = multiprocessing.Process(target=config_editor_main, daemon=True)
                     config_process.start()
             elif action == 'launch_log_viewer':
-                if not log_viewer_process.is_alive():
+                if not log_viewer_process or not log_viewer_process.is_alive():
                     log_queue = multiprocessing.Queue()
                     for record in log_buffer:
                         log_queue.put(record)
@@ -2789,23 +2789,25 @@ def run():
         tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
 
     if is_bundled:
-        log_queue = multiprocessing.Queue()
-        started_event = multiprocessing.Event()
         start_minimal_tray(tray_result_queue, tray_command_queue)
         tray_user_input_thread.start()
+
+        if config.get_general('show_log_at_startup'):
+            log_queue = multiprocessing.Queue()
+            started_event = multiprocessing.Event()
+            log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
+            log_viewer_process.start()
+            started_event.wait()
 
         def gui_sink(msg):
             record = msg.record
             log_buffer.append(record)
-            if log_viewer_process.is_alive():
+            if log_viewer_process and log_viewer_process.is_alive():
                 log_queue.put(record)
             if msg.record['level'].name == 'ERROR':
                 tray_command_queue.put(('error', None))
 
         sink = gui_sink
-        log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
-        log_viewer_process.start()
-        started_event.wait()
     else:
         sink = sys.stderr
 
@@ -2943,6 +2945,10 @@ def run():
             exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
 
+    process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
+    if auto_pause != 0:
+        auto_pause_handler = AutopauseTimer()
+
     global engine_instances
     global engine_keys
     global engine_index
@@ -3007,10 +3013,6 @@ def run():
         start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), screenshot_thread is not None)
         if not is_bundled:
             tray_user_input_thread.start()
-
-    process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
-    if auto_pause != 0:
-        auto_pause_handler = AutopauseTimer()
 
     if not is_bundled:
         signal.signal(signal.SIGINT, state_handlers.terminate_handler)

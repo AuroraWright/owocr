@@ -106,6 +106,7 @@ class Config:
         'websocket_port': 7331,
         'notifications': False,
         'tray_icon': True,
+        'show_log_at_startup': True,
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',

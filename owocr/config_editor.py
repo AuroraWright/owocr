@@ -241,6 +241,7 @@ class ConfigGUI:
                 ('pause_at_startup', 'bool', 'Pause when owocr starts'),
                 ('notifications', 'bool', 'Show OS notifications with the detected text'),
                 ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, take a screenshot\nand launch this configuration'),
+                ('show_log_at_startup', 'bool', 'Show the log viewer window when owocr starts'),
                 ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
                 ('output_format', 'dropdown', 'Output format', ['text', 'json']),
                 ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
@@ -467,6 +468,8 @@ class ConfigGUI:
             dropdown_values = None
 
         if option == 'tray_icon' and self.is_bundled:
+            return row
+        if option == 'show_log_at_startup' and not self.is_bundled:
             return row
 
         if 'special_screen_capture' in opt_type:
