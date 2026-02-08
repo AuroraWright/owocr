@@ -2825,61 +2825,6 @@ def run():
     if sys.platform == 'darwin':
         ensure_macos_permissions()
 
-    global engine_instances
-    global engine_keys
-    output_format = config.get_general('output_format')
-    engines_setting = config.get_general('engines')
-    default_engine_setting = config.get_general('engine')
-    secondary_engine_setting = config.get_general('engine_secondary')
-    language = config.get_general('language')
-    engine_instances = []
-    config_engines = []
-    engine_keys = []
-    engine_names = []
-    default_engine = ''
-    engine_secondary = ''
-
-    if len(engines_setting) > 0:
-        for config_engine in engines_setting.split(','):
-            config_engines.append(config_engine.strip().lower())
-
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
-        if not terminated.is_set() and (len(config_engines) == 0 or engine_class.name in config_engines):
-            if output_format == 'json' and not engine_class.coordinate_support:
-                logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
-                continue
-
-            if not engine_class.config_entry:
-                if engine_class.manual_language:
-                    engine_instance = engine_class(language=language)
-                else:
-                    engine_instance = engine_class()
-            else:
-                if engine_class.manual_language:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry), language=language)
-                else:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry))
-
-            if engine_instance.available:
-                engine_instances.append(engine_instance)
-                engine_keys.append(engine_class.key)
-                engine_names.append(engine_class.readable_name)
-                if default_engine_setting == engine_class.name:
-                    default_engine = engine_class.key
-                if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
-                    engine_secondary = engine_class.key
-
-    if len(engine_keys) == 0:
-        exit_with_error('No engines available!')
-
-    if default_engine_setting and not default_engine:
-        logger.warning("Couldn't find selected engine, using the first one in the list")
-
-    if secondary_engine_setting and not engine_secondary:
-        logger.warning("Couldn't find selected secondary engine, make sure it's enabled, local and has JSON format support. Disabling two pass processing")
-
-    global engine_index
-    global engine_index_2
     global paused
     global notifier
     global auto_pause_handler
@@ -2905,8 +2850,6 @@ def run():
     unix_socket_server = None
     key_combo_listener = None
     auto_pause_handler = None
-    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
-    engine_index_2 = engine_keys.index(engine_secondary) if engine_secondary != '' else -1
     engine_color = config.get_general('engine_color')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
@@ -2999,6 +2942,64 @@ def run():
         if Path(write_to).suffix.lower() != '.txt':
             exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
+
+    global engine_instances
+    global engine_keys
+    global engine_index
+    global engine_index_2
+    output_format = config.get_general('output_format')
+    engines_setting = config.get_general('engines')
+    default_engine_setting = config.get_general('engine')
+    secondary_engine_setting = config.get_general('engine_secondary')
+    language = config.get_general('language')
+    engine_instances = []
+    config_engines = []
+    engine_keys = []
+    engine_names = []
+    default_engine = ''
+    engine_secondary = ''
+
+    if len(engines_setting) > 0:
+        for config_engine in engines_setting.split(','):
+            config_engines.append(config_engine.strip().lower())
+
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
+        if not terminated.is_set() and (len(config_engines) == 0 or engine_class.name in config_engines):
+            if output_format == 'json' and not engine_class.coordinate_support:
+                logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
+                continue
+
+            if not engine_class.config_entry:
+                if engine_class.manual_language:
+                    engine_instance = engine_class(language=language)
+                else:
+                    engine_instance = engine_class()
+            else:
+                if engine_class.manual_language:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry), language=language)
+                else:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry))
+
+            if engine_instance.available:
+                engine_instances.append(engine_instance)
+                engine_keys.append(engine_class.key)
+                engine_names.append(engine_class.readable_name)
+                if default_engine_setting == engine_class.name:
+                    default_engine = engine_class.key
+                if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
+                    engine_secondary = engine_class.key
+
+    if len(engine_keys) == 0:
+        exit_with_error('No engines available!')
+
+    if default_engine_setting and not default_engine:
+        logger.warning("Couldn't find selected engine, using the first one in the list")
+
+    if secondary_engine_setting and not engine_secondary:
+        logger.warning("Couldn't find selected secondary engine, make sure it's enabled, local and has JSON format support. Disabling two pass processing")
+
+    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
+    engine_index_2 = engine_keys.index(engine_secondary) if engine_secondary != '' else -1
 
     if tray_enabled:
         if not is_bundled:
