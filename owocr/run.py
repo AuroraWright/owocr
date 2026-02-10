@@ -2293,9 +2293,7 @@ class ScreenshotThread(threading.Thread):
             self.write_result(img, is_combo, screen_capture_properties)
 
             if img == False:
-                logger.info('The window was closed or an error occurred')
-                state_handlers.terminate_handler()
-                break
+                exit_with_error('The window was closed or an error occurred')
 
         if self.screencapture_mode == 2:
             self.cleanup_window_screen_capture()
