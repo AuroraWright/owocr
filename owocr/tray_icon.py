@@ -18,7 +18,7 @@ class TrayGUI:
     def __init__(self, result_queue, command_queue):
         with GlobalImport():
             import pystrayfix
-            from PIL import Image
+            from PIL import Image, ImageDraw
         self.enabled = False
         self.error = False
         self.command_queue = command_queue
@@ -28,6 +28,7 @@ class TrayGUI:
         self.comm_thread = None
         self.normal_icon = self.load_icon_image()
         self.paused_icon = self.create_paused_icon()
+        self.stopped_icon = self.create_stopped_icon()
         self.is_bundled = getattr(sys, 'frozen', False)
 
     def create_paused_icon(self):
@@ -41,6 +42,21 @@ class TrayGUI:
         a_processed = a.point(process_alpha)
         result = Image.merge('RGBA', (r, g, b, a_processed))
         return result
+
+    def create_stopped_icon(self):
+        r, g, b, a = self.paused_icon.split()
+        width, height = self.paused_icon.size
+
+        alpha_draw = ImageDraw.Draw(a)
+        line_width = width // 12
+
+        # Top-left to bottom-right line
+        alpha_draw.line([(0, 0), (width, height)], fill=0, width=line_width)
+
+        # Top-right to bottom-left line
+        alpha_draw.line([(width, 0), (0, height)], fill=0, width=line_width)
+
+        return Image.merge('RGBA', (r, g, b, a))
 
     def load_icon_image(self):
         if sys.platform == 'darwin':
@@ -122,7 +138,7 @@ class TrayGUI:
             self.error = True
             self.enabled = False
             self.icon.menu = self.setup_menu()
-            self.icon.icon = self.paused_icon
+            self.icon.icon = self.stopped_icon
             self.icon.update_menu()
         elif action == 'update_pause':
             self.paused = data
@@ -176,7 +192,7 @@ class TrayGUI:
 
         self.comm_thread = threading.Thread(target=self.receive_from_main, daemon=True)
         self.comm_thread.start()
-        self.icon = pystrayfix.Icon('owocr', self.paused_icon, 'owocr', self.setup_menu())
+        self.icon = pystrayfix.Icon('owocr', self.stopped_icon, 'owocr', self.setup_menu())
         self.send_to_main('started')
         self.icon.run()
         self.comm_thread.join()
