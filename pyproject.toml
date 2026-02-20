@@ -44,7 +44,7 @@ dependencies = [
     "pynputfix",
     "websockets>=14.0",
     "desktop-notifier>=6.1.0",
-    "pystrayfix>=0.19.7",
+    "pystrayfix>=0.19.8",
     "mss>=10.1.0",
     "psutil",
     "curl_cffi",
