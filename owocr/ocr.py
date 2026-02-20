@@ -815,7 +815,7 @@ class ChromeScreenAI:
         word_bounding_boxes=True,
         lines=True,
         line_bounding_boxes=True,
-        paragraphs=False,
+        paragraphs=True,
         paragraph_bounding_boxes=False
     )
 
@@ -901,8 +901,10 @@ class ChromeScreenAI:
         )
 
     def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
-        paragraphs = []
+        lines_by_block = {}
+        directions_by_block = {}
         for l in response.get('lines', []):
+            block_id = l.get('block_id', 0)
             words = []
             for w in l.get('words', []):
                 w_bbox = w.get('bounding_box', {})
@@ -928,12 +930,44 @@ class ChromeScreenAI:
 
             line = Line(
                 bounding_box=l_bbox_normalized,
-                words=words
+                words=words,
+                text=l.get('utf8_string', ''),
             )
+            if block_id not in lines_by_block:
+                lines_by_block[block_id] = []
+            if block_id not in directions_by_block:
+                directions_by_block[block_id] = l.get('direction', '')
+            lines_by_block[block_id].append(line)
+
+        paragraphs = []
+        for block_id in sorted(lines_by_block.keys()):
+            lines = lines_by_block[block_id]
+            min_left = min(line.bounding_box.left for line in lines)
+            max_right = max(line.bounding_box.right for line in lines)
+            min_top = min(line.bounding_box.top for line in lines)
+            max_bottom = max(line.bounding_box.bottom for line in lines)
+
+            rotation = lines[0].bounding_box.rotation_z
+            width = max_right - min_left
+            height = max_bottom - min_top
+            center_x = min_left + width / 2
+            center_y = min_top + height / 2
+
+            paragraph_bbox = BoundingBox(
+                center_x=center_x,
+                center_y=center_y,
+                width=width,
+                height=height,
+                rotation_z=rotation
+            )
+
+            raw_direction = directions_by_block[block_id]
+            writing_direction = raw_direction.replace('DIRECTION_', '') if raw_direction else None
+
             paragraph = Paragraph(
-                bounding_box=l_bbox_normalized,
-                lines=[line],
-                writing_direction=l.get('direction').replace('DIRECTION_', '')
+                bounding_box=paragraph_bbox,
+                lines=lines,
+                writing_direction=writing_direction
             )
             paragraphs.append(paragraph)
 
