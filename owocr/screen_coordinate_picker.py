@@ -1,15 +1,11 @@
 import multiprocessing
 import queue
-import ctypes
-import mss
-from loguru import logger
-from PIL import Image
-from pynputfix import keyboard
+import inspect
 import sys
 import os
 
-if sys.platform == 'darwin':
-    from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+from loguru import logger
+from PIL import Image
 
 try:
     from PIL import ImageTk
@@ -19,8 +15,19 @@ except:
     selector_available = False
 
 
+class GlobalImport:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)
+
+
 class ScreenSelector:
     def __init__(self, result_queue, command_queue):
+        with GlobalImport():
+            from pynputfix import keyboard
         self.root = None
         self.result_queue = result_queue
         self.command_queue = command_queue
@@ -72,6 +79,15 @@ class ScreenSelector:
     def process_events(self):
         if self.windows:
             try:
+                command = self.command_queue.get_nowait()
+                image, coordinates, is_window = command
+                if image == False:
+                    self.return_empty()
+                    self.root.destroy()
+                    return
+            except queue.Empty:
+                pass
+            try:
                 while True:
                     event_type = self.keyboard_event_queue.get_nowait()
                     if event_type == 'return_selections':
@@ -86,26 +102,30 @@ class ScreenSelector:
             except queue.Empty:
                 pass
         else:
-            command = self.command_queue.get()
-            image, coordinates, is_window = command
+            try:
+                command = self.command_queue.get()
+                image, coordinates, is_window = command
 
-            if image == False:
+                if image == False:
+                    self.root.destroy()
+                    return
+                elif image == True:
+                    self.result_queue.put(False)
+                else:
+                    self.previous_coordinates = coordinates if coordinates else []
+
+                    monitors, window_scale, images = image
+                    if is_window:
+                        self.find_monitor_and_create_window(monitors, window_scale, images, None)
+                    else:
+                        for i, monitor in enumerate(monitors):
+                            if self.real_monitors:
+                                self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
+                            else:
+                                self.create_window(monitor, images[i])
+            except KeyboardInterrupt:
                 self.root.destroy()
                 return
-            elif image == True:
-                self.result_queue.put(False)
-            else:
-                self.previous_coordinates = coordinates if coordinates else []
-
-                monitors, window_scale, images = image
-                if is_window:
-                    self.find_monitor_and_create_window(monitors, window_scale, images, None)
-                else:
-                    for i, monitor in enumerate(monitors):
-                        if self.real_monitors:
-                            self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
-                        else:
-                            self.create_window(monitor, images[i])
 
         self.root.after(50, self.process_events)
 
@@ -423,14 +443,17 @@ class ScreenSelector:
         self.start_key_listener()
 
         if sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland':
+            import mss
             self.real_monitors = mss.mss().monitors[1:]
         elif sys.platform == 'win32':
+            import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
         self.root = tk.Tk()
         self.root.withdraw()
 
         if sys.platform == 'darwin':
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
             app = NSApplication.sharedApplication()
             app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 

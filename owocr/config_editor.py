@@ -1,21 +1,36 @@
-import tkinter as tk
-from tkinter import PhotoImage, ttk, messagebox, filedialog
 import configparser
 import os
 import inspect
 import sys
-import ctypes
 import time
 import importlib.resources
-
-from pynputfix import keyboard
 
 from .ocr import *
 from .config import Config
 
+if sys.platform == 'win32':
+    import ctypes
+
+try:
+    import tkinter as tk
+    from tkinter import PhotoImage, ttk, messagebox, filedialog
+    editor_available = True
+except:
+    editor_available = False
+
+
+class GlobalImport:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+        globals().update(self.collector)
 
 class HotkeyRecorder:
     def __init__(self):
+        with GlobalImport():
+            from pynputfix import keyboard
         self.listener = None
         self.recording = False
         self.current_keys = set()
@@ -161,7 +176,7 @@ class ConfigGUI:
     def __init__(self, root):
         self.root = root
         self.config_path = Config.config_path
-        self.bundled = getattr(sys, 'frozen', False)
+        self.is_bundled = getattr(sys, 'frozen', False)
 
         self._setup_window()
         self._initialize_styles()
@@ -226,7 +241,9 @@ class ConfigGUI:
                 ('pause_at_startup', 'bool', 'Pause when owocr starts'),
                 ('notifications', 'bool', 'Show OS notifications with the detected text'),
                 ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, take a screenshot\nand launch this configuration'),
+                ('show_log_at_startup', 'bool', 'Show the log viewer window when owocr starts'),
                 ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
+                ('language', 'dropdown', 'Language code, used for some engines and to cleanup screen capture text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
                 ('output_format', 'dropdown', 'Output format', ['text', 'json']),
                 ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
             ],
@@ -243,7 +260,6 @@ class ConfigGUI:
                 ('screen_capture_frame_stabilization', 'float', 'Wait X seconds until text is stable:\n-1: wait for two frames\n0: disable (faster, only works when text is shown all at once)'),
                 ('screen_capture_line_recovery', 'bool', 'Try to recover lines missed by frame stabilization (can increase glitches)'),
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
-                ('language', 'dropdown', 'Language code, used to cleanup text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
             ],
             'Hotkeys': [
                 ('combo_pause', 'str', 'Pause/resume hotkey'),
@@ -260,8 +276,8 @@ class ConfigGUI:
                 ('furigana_filter', 'bool', 'Filter out furigana lines for Japanese if reorder_text is enabled'),
             ],
             'Advanced': [
-                ('screen_capture_old_macos_api', 'bool', 'Use old macOS screen capture API'),
-                ('wayland_use_wlclipboard', 'bool', 'Use wl-clipboard on Linux/Wayland'),
+                ('screen_capture_old_macos_api', 'bool', 'Use old macOS window screen capture API (faster, recommended for now)'),
+                ('wayland_use_wlclipboard', 'bool', 'Use wl-clipboard on Wayland instead of the built-in clipboard code.\nUses more resources and steals focus. Only needed on e.g. GNOME'),
             ]
         }
         self.engine_config_options = {
@@ -451,7 +467,9 @@ class ConfigGUI:
             option, opt_type, help_text = option_data
             dropdown_values = None
 
-        if option == 'tray_icon' and self.bundled:
+        if option == 'tray_icon' and self.is_bundled:
+            return row
+        if option == 'show_log_at_startup' and not self.is_bundled:
             return row
 
         if 'special_screen_capture' in opt_type:
@@ -1143,6 +1161,10 @@ class ConfigGUI:
 
 
 def main():
+    if not editor_available:
+        print('tkinter is not installed, unable to open editor')
+        sys.exit(1)
+
     global hotkey_recorder
     hotkey_recorder = HotkeyRecorder()
     hotkey_recorder.start_listener()

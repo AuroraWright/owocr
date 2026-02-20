@@ -25,7 +25,7 @@ parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.S
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
-                    help='OCR engine to use. Available: "mangaocr", "mangaocrs", glens", "bing", "gvision", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
+                    help='OCR engine to use. Available: "mangaocr", "mangaocrs", "glens", "bing", "gvision", "screenai", "avision", "alivetext", "azure", "winrtocr", "oneocr", "easyocr", "rapidocr", "ocrspace".')
 parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
                     help='Local OCR engine to use for two-pass screen capture processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -110,8 +110,6 @@ class Config:
         'auto_pause' : 0,
         'delete_images': False,
         'engines': [],
-        'logger_format': '<green>{time:HH:mm:ss}</green> | <level>{message}</level>',
-        'engine_color': 'cyan',
         'delay_seconds': 0.5,
         'websocket_port': 7331,
         'obs_host': 'localhost',
@@ -121,6 +119,7 @@ class Config:
         'obs_source_override': '',
         'notifications': False,
         'tray_icon': True,
+        'show_log_at_startup': True,
         'combo_pause': '',
         'combo_engine_switch': '',
         'screen_capture_area': '',

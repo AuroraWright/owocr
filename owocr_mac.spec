@@ -69,7 +69,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='owocr.app',
-    icon='owocr.icns',
+    icon='owocr/data/icon.png',
     bundle_identifier='com.aury.owocr',
     info_plist=info_plist,
 )

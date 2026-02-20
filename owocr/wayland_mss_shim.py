@@ -87,9 +87,11 @@ class ScreenCastManager:
     def _on_new_sample(self, appsink):
         try:
             sample = appsink.emit('pull-sample')
-            assert sample is not None
+            if sample is None:
+                raise ValueError
             frame_data = self._process_sample(sample)
-            assert frame_data[0] is not None
+            if frame_data[0] is None:
+                raise ValueError
             with self.frame_lock:
                 self.last_frame = frame_data
             self.ready_event.set()

@@ -1,0 +1,100 @@
+%YAML 1.1
+---
+
+name: "Build Python source distribution and wheel"
+
+"on":
+  workflow_call:
+    inputs: &inputs_call
+      name:
+        description: |-
+          The name of the created artifact.
+        type: string
+        default: "package-sdist-wheel"
+      python:
+        description: |-
+          The Python version to use for the job.
+        type: string
+        default: "3.13"
+      extras:
+        description: |-
+          The extras to include.
+          This is added as suffix to `pip install .`.
+          If specified, make sure to include square brackets.
+        type: string
+        default: "[faster-png,easyocr,rapidocr,meikiocr,winocr,oneocr,lens,screenai,gvision,azure]"
+    outputs:
+      artifact-name:
+        description: |-
+          The name of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-name }}"
+      artifact-id: 
+        description: |-
+          The GitHub ID of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-id }}"
+      artifact-url:
+        description: |-
+          The URL that can be used to download the artifact produced by the build.
+          Requires GitHub login and the artifact to not have expired.
+        value: "${{ jobs.build.outputs.artifact-url }}"
+      artifact-digest:
+        description: |-
+          SHA-256 digest of the artifact produced by the build.
+        value: "${{ jobs.build.outputs.artifact-digest }}"
+
+jobs:
+  build:
+    name: "Build Python source distribution and wheel"
+    runs-on: ubuntu-slim
+
+    steps:
+      - 
+        # https://github.com/actions/checkout/releases/tag/v6.0.1
+        name: "Checkout repository"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          submodules: recursive
+      -
+        # https://github.com/actions/setup-python/releases/tag/v6.2.0
+        name: "Setup Python"
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ inputs.python }}
+          # Make caching explicit
+          cache: pip
+      -
+        name: "Update Ubuntu package indexes"
+        run: |-
+          sudo apt-get update
+      -
+        name: "Install Linux dependencies"
+        run: |-
+          sudo apt-get install --yes libwayland-dev wayland-protocols libcairo2-dev libdbus-1-dev libgirepository-2.0-dev
+      -
+        name: "Setup Python dependencies"
+        run: |-
+          pip install .${{ inputs.extras }}
+      -
+        # There's some dependency that's overriding the "build" module.
+        # This restores its functionality.
+        name: "Fix build module"
+        run: |-
+          pip install build
+      -
+        name: "Build package"
+        run: |-
+          python -m build
+      -
+        # https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+        id: upload
+        name: "Upload build artifacts"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: &artifact_name "${{ inputs.name }}"
+          path: dist/
+      
+    outputs:
+      artifact-name: *artifact_name
+      artifact-id: "${{ steps.upload.outputs.artifact-id }}"
+      artifact-url: "${{ steps.upload.outputs.artifact-url }}"
+      artifact-digest: "${{ steps.upload.outputs.artifact-digest }}"

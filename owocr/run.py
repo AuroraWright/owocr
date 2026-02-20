@@ -1,88 +1,102 @@
 import sys
-import signal
-import atexit
 import time
 import threading
 import multiprocessing
-from pathlib import Path
 import queue
 import io
 import re
-import logging
 import inspect
 import os
 import json
 import collections
-import select
-from dataclasses import asdict
-import importlib
-import urllib.request
-import base64
-
-import numpy as np
-import psutil
-import asyncio
-import websockets
-import socket
 import socketserver
+import urllib.request
+from pathlib import Path
+import base64
 import obsws_python as obs
 
-from PIL import Image, ImageDraw, ImageFile
+import numpy as np
+from PIL import Image
 from loguru import logger
-from pynputfix import keyboard
-from desktop_notifier import DesktopNotifierSync, Urgency
 
 from .ocr import *
 from .config import config
 from .screen_coordinate_picker import get_screen_selection, terminate_selector_if_running
 from .config_editor import main as config_editor_main
 from .log_viewer import main as log_viewer_main
-from .tray_icon import start_tray_process, terminate_tray_process_if_running
+from .tray_icon import start_minimal_tray, start_full_tray, terminate_tray_process_if_running, wait_for_tray_process
 
-if sys.platform == 'darwin':
-    import termios
-    import fcntl
-    import errno
-    import objc
-    import platform
-    from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
-                       NSPasteboardTypeTIFF
-    from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
-                       CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
-                       kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
-                       kCGWindowImageNominalResolution, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
-    from HIServices import AXIsProcessTrustedWithOptions
-    from ApplicationServices import kAXTrustedCheckOptionPrompt
-    from Foundation import NSString
-    from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
-elif sys.platform == 'win32':
-    import msvcrt
-    import win32gui
-    import win32ui
-    import win32api
-    import win32con
-    import win32process
-    import win32clipboard
-    import pywintypes
-    import ctypes
-elif sys.platform == 'linux':
-    import termios
-    import fcntl
-    import errno
-    from PIL import ImageGrab
-    import pyperclip
-
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 is_wayland = sys.platform == 'linux' and os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 
-if is_wayland:
-    from . import wayland_mss_shim
-    mss = wayland_mss_shim.MSSModuleShim()
-    from pywayland.client import Display
-    from pywayland.protocol.wayland import WlSeat
-    from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
-else:
-    import mss
+def load_not_essential_libraries():
+    class GlobalImport:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
+            globals().update(self.collector)
+
+    with GlobalImport():
+        import signal
+        import atexit
+        import asyncio
+        import socket
+        from dataclasses import asdict
+
+        from PIL import ImageDraw, ImageFile
+        import jaconv
+        import psutil
+        import websockets
+        from pynputfix import keyboard
+        from desktop_notifier import DesktopNotifierSync, Urgency
+
+        if sys.platform == 'darwin':
+            import select
+            import termios
+            import fcntl
+            import errno
+            import platform
+            import objc
+            from AppKit import NSData, NSImage, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSZeroPoint, NSZeroRect, NSCompositingOperationCopy, NSPasteboard, \
+                               NSPasteboardTypeTIFF
+            from Quartz import CGWindowListCreateImageFromArray, kCGWindowImageBoundsIgnoreFraming, CGRectMake, CGRectNull, CGMainDisplayID, CGWindowListCopyWindowInfo, \
+                               CGWindowListCreateDescriptionFromArray, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements, kCGWindowListOptionIncludingWindow, \
+                               kCGWindowName, kCGNullWindowID, CGImageGetWidth, CGImageGetHeight, CGDataProviderCopyData, CGImageGetDataProvider, CGImageGetBytesPerRow, \
+                               kCGWindowImageNominalResolution, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess
+            from HIServices import AXIsProcessTrustedWithOptions
+            from ApplicationServices import kAXTrustedCheckOptionPrompt
+            from Foundation import NSString
+            from ScreenCaptureKit import SCContentFilter, SCScreenshotManager, SCShareableContent, SCStreamConfiguration, SCCaptureResolutionNominal
+        elif sys.platform == 'win32':
+            import ctypes
+            import msvcrt
+            import win32gui
+            import win32ui
+            import win32api
+            import win32con
+            import win32process
+            import win32clipboard
+            import pywintypes
+            import ctypes
+        elif sys.platform == 'linux':
+            import select
+            import termios
+            import fcntl
+            import errno
+            from PIL import ImageGrab
+            import pyperclip
+
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+        if is_wayland:
+            from . import wayland_mss_shim
+            mss = wayland_mss_shim.MSSModuleShim()
+            from pywayland.client import Display
+            from pywayland.protocol.wayland import WlSeat
+            from .pywayland_ext_data_control_v1 import ExtDataControlManagerV1
+        else:
+            import mss
 
 
 class ClipboardThread(threading.Thread):
@@ -1729,18 +1743,16 @@ class OBSScreenshotThread(threading.Thread):
 
             img = self.take_screenshot()
             self.write_result(img, is_combo)
-
-            if not img:
-                logger.info("OBS screenshot failed, terminating")
-                state_handlers.terminate_handler()
-                break
+            
+            if img == False:
+                exit_with_error('The window was closed or an error occurred')
 
 
 class ScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         screen_capture_area = config.get_general('screen_capture_area')
-        self.coordinate_selector_combo_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
+        self.coordinate_selector_combo_enabled = is_bundled or config.get_general('tray_icon') or config.get_general('coordinate_selector_combo') != ''
         self.macos_window_tracker_instance = None
         self.windows_window_tracker_instance = None
         self.window_handle = None
@@ -2027,7 +2039,8 @@ class ScreenshotThread(threading.Thread):
                     width = CGImageGetWidth(image)
                     height = CGImageGetHeight(image)
                     raw_data = CGDataProviderCopyData(CGImageGetDataProvider(image))
-                    assert raw_data is not None
+                    if raw_data is None:
+                        raise ValueError
                     bpr = CGImageGetBytesPerRow(image)
                     img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
                     self.screencapturekit_queue.put(img)
@@ -2131,7 +2144,8 @@ class ScreenshotThread(threading.Thread):
                             width = CGImageGetWidth(cg_image)
                             height = CGImageGetHeight(cg_image)
                             raw_data = CGDataProviderCopyData(CGImageGetDataProvider(cg_image))
-                            assert raw_data is not None
+                            if raw_data is None:
+                                raise ValueError
                             bpr = CGImageGetBytesPerRow(cg_image)
                             img = Image.frombuffer('RGBA', (width, height), raw_data, 'raw', 'BGRA', bpr, 1)
                             window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionIncludingWindow, self.window_handle)
@@ -2270,6 +2284,8 @@ class ScreenshotThread(threading.Thread):
             periodic_screenshot_queue.put((result, screen_capture_properties))
 
     def launch_coordinate_picker(self, init, must_return):
+        if terminated.is_set():
+            return
         if init:
             logger.info('Preloading coordinate picker')
             get_screen_selection(True, None, None, True)
@@ -2380,13 +2396,11 @@ class ScreenshotThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            img, screen_capture_properties = self.take_screenshot(False)
+            img, screen_capture_properties = self.take_screenshot(is_combo)
             self.write_result(img, is_combo, screen_capture_properties)
 
-            if not img:
-                logger.info('The window was closed or an error occurred')
-                state_handlers.terminate_handler()
-                break
+            if img == False:
+                exit_with_error('The window was closed or an error occurred')
 
         if self.screencapture_mode == 2:
             self.cleanup_window_screen_capture()
@@ -2493,7 +2507,6 @@ class OutputResult:
     def __init__(self):
         self.screen_capture_periodic = config.get_general('screen_capture_delay_seconds') != -1
         self.json_output = config.get_general('output_format') == 'json'
-        self.engine_color = config.get_general('engine_color')
         self.verbosity = config.get_general('verbosity')
         self.notifications = config.get_general('notifications')
         self.reorder_text = config.get_general('reorder_text')
@@ -2596,13 +2609,13 @@ class OutputResult:
                 end_time = time.monotonic()
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {{}}', result_data_2)
+                    logger.opt(colors=True).warning(f'<cyan>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {{}}', result_data_2)
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
-                            logger.opt(colors=True).info(f"<{self.engine_color}>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <{self.engine_color}>{engine_instance.readable_name}</>")
+                            logger.opt(colors=True).info(f"<cyan>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <cyan>{engine_instance.readable_name}</>")
 
                         if changed_regions_image:
                             img_or_path = changed_regions_image
@@ -2632,7 +2645,7 @@ class OutputResult:
         if not res:
             if auto_pause_handler and auto_pause:
                 auto_pause_handler.stop_timer()
-            logger.opt(colors=True).warning(f'<{self.engine_color}>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data)
+            logger.opt(colors=True).warning(f'<cyan>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data)
             return
 
         if isinstance(result_data, OcrResult):
@@ -2678,7 +2691,7 @@ class OutputResult:
             else:
                 log_message = ': ' + (output_text if len(output_text) <= self.verbosity else output_text[:self.verbosity] + '[...]')
 
-            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <{self.engine_color}>{engine_name}</>{{}}', log_message)
+            logger.opt(colors=True).info(f'Text recognized in {processing_time:0.03f}s using <cyan>{engine_name}</>{{}}', log_message)
 
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
@@ -2694,8 +2707,7 @@ class OutputResult:
 
 class StateHandlers:
     def __init__(self):
-        self.engine_color = config.get_general('engine_color')
-        self.tray_enabled = getattr(sys, 'frozen', False) or config.get_general('tray_icon')
+        self.tray_enabled = is_bundled or config.get_general('tray_icon')
 
     def pause_handler(self, notify=True, notify_tray=True):
         global paused
@@ -2727,13 +2739,14 @@ class StateHandlers:
                 notifier.send(title='owocr', message=f'Switched to {new_engine_name}', urgency=get_notification_urgency())
             if notify_tray and self.tray_enabled:
                 tray_command_queue.put(('update_engine', engine_index))
-            logger.opt(colors=True).info(f'Switched to <{self.engine_color}>{new_engine_name}</>!')
+            logger.opt(colors=True).info(f'Switched to <cyan>{new_engine_name}</>!')
 
     def terminate_handler(self, sig=None, frame=None):
         global terminated
         if not terminated.is_set():
             logger.info('Terminated!')
             terminated.set()
+            terminate_selector_if_running()
 
 
 def get_notification_urgency():
@@ -2745,9 +2758,8 @@ def get_notification_urgency():
 def exit_with_error(error):
     logger.error(error)
     state_handlers.terminate_handler()
-    if threading.current_thread() is threading.main_thread():
-        if log_viewer_process and log_viewer_process.is_alive():
-            log_viewer_process.join()
+    if is_bundled and threading.current_thread() is threading.main_thread():
+        wait_for_tray_process()
     sys.exit(1)
 
 
@@ -2805,7 +2817,7 @@ def tray_user_input_thread_run(log_buffer):
     global log_viewer_process
     global log_queue
     config_process = None
-    while not terminated.is_set():
+    while is_bundled or not terminated.is_set():
         try:
             action, data = tray_result_queue.get(timeout=0.2)
             if action == 'change_engine':
@@ -2821,7 +2833,7 @@ def tray_user_input_thread_run(log_buffer):
                     config_process = multiprocessing.Process(target=config_editor_main, daemon=True)
                     config_process.start()
             elif action == 'launch_log_viewer':
-                if not log_viewer_process.is_alive():
+                if not log_viewer_process or not log_viewer_process.is_alive():
                     log_queue = multiprocessing.Queue()
                     for record in log_buffer:
                         log_queue.put(record)
@@ -2831,16 +2843,14 @@ def tray_user_input_thread_run(log_buffer):
                 if log_viewer_process and log_viewer_process.is_alive():
                     log_viewer_process.terminate()
                 state_handlers.terminate_handler()
+                break
         except queue.Empty:
             pass
 
 
 def get_current_version():
-    try:
-        return importlib.metadata.version(__package__)
-    except:
-        from . import __version_string__
-        return __version_string__
+    from . import __version_string__
+    return __version_string__
 
 
 def get_latest_version():
@@ -2861,39 +2871,54 @@ def ensure_macos_permissions():
 
 
 def run():
+    global is_bundled
     global terminated
     global state_handlers
     global log_viewer_process
     global log_queue
+    global tray_result_queue
+    global tray_command_queue
+    is_bundled = getattr(sys, 'frozen', False)
     terminated = threading.Event()
     state_handlers = StateHandlers()
     log_viewer_process = None
-    log_buffer = None
     log_queue = None
-    is_bundled = getattr(sys, 'frozen', False)
+    log_buffer = collections.deque(maxlen=500) if is_bundled else None
+    tray_enabled = is_bundled or config.get_general('tray_icon')
+
+    if tray_enabled:
+        tray_result_queue = multiprocessing.Queue()
+        tray_command_queue = multiprocessing.Queue()
+        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
 
     if is_bundled:
-        log_buffer = collections.deque(maxlen=500)
-        log_queue = multiprocessing.Queue()
-        started_event = multiprocessing.Event()
+        start_minimal_tray(tray_result_queue, tray_command_queue)
+        tray_user_input_thread.start()
+
+        if config.get_general('show_log_at_startup'):
+            log_queue = multiprocessing.Queue()
+            started_event = multiprocessing.Event()
+            log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
+            log_viewer_process.start()
+            started_event.wait()
 
         def gui_sink(msg):
             record = msg.record
             log_buffer.append(record)
-            if log_viewer_process.is_alive():
+            if log_viewer_process and log_viewer_process.is_alive():
                 log_queue.put(record)
+            if msg.record['level'].name == 'ERROR':
+                tray_command_queue.put(('error', None))
 
         sink = gui_sink
-        log_viewer_process = multiprocessing.Process(target=log_viewer_main, args=(log_queue, started_event), daemon=True)
-        log_viewer_process.start()
-        started_event.wait()
     else:
         sink = sys.stderr
 
     logger_level = 'DEBUG' if config.get_general('uwu') else 'INFO'
-    logger.configure(handlers=[{'sink': sink, 'format': config.get_general('logger_format'), 'level': logger_level}])
+    logger.configure(handlers=[{'sink': sink, 'format': '<green>{time:HH:mm:ss}</green> | <level>{message}</level>', 'level': logger_level}])
 
     logger.info(f'Starting owocr version {get_current_version()}')
+    load_not_essential_libraries()
     logger.info(f'Latest available version: {get_latest_version()}')
     if config.has_config:
         logger.info('Parsed config file')
@@ -2905,61 +2930,6 @@ def run():
     if sys.platform == 'darwin':
         ensure_macos_permissions()
 
-    global engine_instances
-    global engine_keys
-    output_format = config.get_general('output_format')
-    engines_setting = config.get_general('engines')
-    default_engine_setting = config.get_general('engine')
-    secondary_engine_setting = config.get_general('engine_secondary')
-    language = config.get_general('language')
-    engine_instances = []
-    config_engines = []
-    engine_keys = []
-    engine_names = []
-    default_engine = ''
-    engine_secondary = ''
-
-    if len(engines_setting) > 0:
-        for config_engine in engines_setting.split(','):
-            config_engines.append(config_engine.strip().lower())
-
-    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
-        if len(config_engines) == 0 or engine_class.name in config_engines:
-            if output_format == 'json' and not engine_class.coordinate_support:
-                logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
-                continue
-
-            if not engine_class.config_entry:
-                if engine_class.manual_language:
-                    engine_instance = engine_class(language=language)
-                else:
-                    engine_instance = engine_class()
-            else:
-                if engine_class.manual_language:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry), language=language)
-                else:
-                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry))
-
-            if engine_instance.available:
-                engine_instances.append(engine_instance)
-                engine_keys.append(engine_class.key)
-                engine_names.append(engine_class.readable_name)
-                if default_engine_setting == engine_class.name:
-                    default_engine = engine_class.key
-                if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
-                    engine_secondary = engine_class.key
-
-    if len(engine_keys) == 0:
-        exit_with_error('No engines available!')
-
-    if default_engine_setting and not default_engine:
-        logger.warning("Couldn't find selected engine, using the first one in the list")
-
-    if secondary_engine_setting and not engine_secondary:
-        logger.warning("Couldn't find selected secondary engine, make sure it's enabled, local and has JSON format support. Disabling two pass processing")
-
-    global engine_index
-    global engine_index_2
     global paused
     global notifier
     global auto_pause_handler
@@ -2975,7 +2945,6 @@ def run():
     read_from_readable = []
     write_to = config.get_general('write_to')
     paused = threading.Event()
-    tray_enabled = is_bundled or config.get_general('tray_icon')
     if config.get_general('pause_at_startup'):
         paused.set()
     auto_pause = config.get_general('auto_pause')
@@ -2986,9 +2955,6 @@ def run():
     unix_socket_server = None
     key_combo_listener = None
     auto_pause_handler = None
-    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
-    engine_index_2 = engine_keys.index(engine_secondary) if engine_secondary != '' else -1
-    engine_color = config.get_general('engine_color')
     combo_pause = config.get_general('combo_pause')
     combo_engine_switch = config.get_general('combo_engine_switch')
     wayland_use_wlclipboard = config.get_general('wayland_use_wlclipboard')
@@ -3089,19 +3055,74 @@ def run():
             exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
         write_to_readable = f'file {write_to}'
 
-    if tray_enabled:
-        global tray_result_queue
-        global tray_command_queue
-        tray_result_queue = multiprocessing.Queue()
-        tray_command_queue = multiprocessing.Queue()
-        logger.info(f'Starting tray icon')
-        start_tray_process(engine_names, engine_index, paused.is_set(), screenshot_thread is not None, tray_result_queue, tray_command_queue)
-        tray_user_input_thread = threading.Thread(target=tray_user_input_thread_run, args=(log_buffer,), daemon=True)
-        tray_user_input_thread.start()
-
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
     if auto_pause != 0:
         auto_pause_handler = AutopauseTimer()
+
+    global engine_instances
+    global engine_keys
+    global engine_index
+    global engine_index_2
+    output_format = config.get_general('output_format')
+    engines_setting = config.get_general('engines')
+    default_engine_setting = config.get_general('engine')
+    secondary_engine_setting = config.get_general('engine_secondary')
+    language = config.get_general('language')
+    engine_instances = []
+    config_engines = []
+    engine_keys = []
+    engine_names = []
+    default_engine = ''
+    engine_secondary = ''
+
+    if len(engines_setting) > 0:
+        for config_engine in engines_setting.split(','):
+            config_engines.append(config_engine.strip().lower())
+
+    for _,engine_class in sorted(inspect.getmembers(sys.modules[__name__], lambda x: hasattr(x, '__module__') and x.__module__ and __package__ + '.ocr' in x.__module__ and inspect.isclass(x) and hasattr(x, 'name'))):
+        if not terminated.is_set() and (len(config_engines) == 0 or engine_class.name in config_engines):
+            if output_format == 'json' and not engine_class.coordinate_support:
+                logger.warning(f'Skipping {engine_class.readable_name} as it does not support JSON output')
+                continue
+
+            if not engine_class.config_entry:
+                if engine_class.manual_language:
+                    engine_instance = engine_class(language=language)
+                else:
+                    engine_instance = engine_class()
+            else:
+                if engine_class.manual_language:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry), language=language)
+                else:
+                    engine_instance = engine_class(config=config.get_engine(engine_class.config_entry))
+
+            if engine_instance.available:
+                engine_instances.append(engine_instance)
+                engine_keys.append(engine_class.key)
+                engine_names.append(engine_class.readable_name)
+                if default_engine_setting == engine_class.name:
+                    default_engine = engine_class.key
+                if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
+                    engine_secondary = engine_class.key
+
+    if len(engine_keys) == 0:
+        exit_with_error('No engines available!')
+
+    if default_engine_setting and not default_engine:
+        logger.warning("Couldn't find selected engine, using the first one in the list")
+
+    if secondary_engine_setting and not engine_secondary:
+        logger.warning("Couldn't find selected secondary engine, make sure it's enabled, local and has JSON format support. Disabling two pass processing")
+
+    engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
+    engine_index_2 = engine_keys.index(engine_secondary) if engine_secondary != '' else -1
+
+    if tray_enabled:
+        if not is_bundled:
+            logger.info('Starting tray icon')
+        start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), screenshot_thread is not None)
+        if not is_bundled:
+            tray_user_input_thread.start()
 
     if not is_bundled:
         signal.signal(signal.SIGINT, state_handlers.terminate_handler)
@@ -3152,7 +3173,7 @@ def run():
     atexit.register(event_lock_cleanup)
 
     if not terminated.is_set():
-        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <{engine_color}>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
+        logger.opt(colors=True).info(f"Reading from {' and '.join(read_from_readable)}, writing to {write_to_readable} using <cyan>{engine_instances[engine_index].readable_name}</>{' (paused)' if paused.is_set() else ''}")
 
     while not terminated.is_set():
         img = None
@@ -3192,15 +3213,15 @@ def run():
         if not img and not skip_waiting:
             time.sleep(0.1)
 
-    terminate_selector_if_running()
-    if is_bundled:
-        if log_viewer_process.is_alive():
-            log_viewer_process.join()
-    else:
+    if not is_bundled:
         user_input_thread.join()
     if tray_enabled:
-        tray_user_input_thread.join()
-        terminate_tray_process_if_running(tray_command_queue)
+        if is_bundled:
+            wait_for_tray_process()
+            tray_user_input_thread.join()
+        else:
+            tray_user_input_thread.join()
+            terminate_tray_process_if_running(tray_command_queue)
     output_result.second_pass_thread.stop()
     if auto_pause_handler:
         auto_pause_handler.stop()
