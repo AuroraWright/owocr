@@ -317,7 +317,7 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
     if m == 1:
         return BoundingBox(
             center_x=hull[0, 0],
-            center_y=hull[0, 1], 
+            center_y=hull[0, 1],
             width=0.0,
             height=0.0,
             rotation_z=0.0
@@ -329,7 +329,7 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
         center = hull.mean(axis=0)
         return BoundingBox(
             center_x=center[0],
-            center_y=center[1], 
+            center_y=center[1],
             width=length,
             height=0.0,
             rotation_z=np.arctan2(diff[1], diff[0])
@@ -875,7 +875,7 @@ class ChromeScreenAI:
             self.screen_ai.InitOCRUsingCallback.restype = ctypes.c_bool
             self.screen_ai.SetOCRLightMode.argtypes = [ctypes.c_bool]
             self.screen_ai.PerformOCR.argtypes = [ctypes.POINTER(self.SkBitmap), ctypes.POINTER(ctypes.c_uint32)]
-            self.screen_ai.PerformOCR.restype = ctypes.c_void_p 
+            self.screen_ai.PerformOCR.restype = ctypes.c_void_p
             self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
             self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
             self.screen_ai.InitOCRUsingCallback()
@@ -985,7 +985,7 @@ class ChromeScreenAI:
         bitmap = self.SkBitmap()
         bitmap.fPixmap.fPixels = ctypes.cast(ctypes.c_char_p(img_bytes), ctypes.c_void_p)
         bitmap.fPixmap.fRowBytes = img_width * 4
-        bitmap.fPixmap.fInfo.fColorInfo.fColorType = 4 
+        bitmap.fPixmap.fInfo.fColorInfo.fColorType = 4
         bitmap.fPixmap.fInfo.fColorInfo.fAlphaType = 1
         bitmap.fPixmap.fInfo.fDimensions.fWidth = img_width
         bitmap.fPixmap.fInfo.fDimensions.fHeight = img_height
