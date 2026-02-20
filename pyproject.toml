@@ -103,6 +103,10 @@ gvision = [
     "google-cloud-vision"
 ]
 
+screenai = [
+    "protobuf>=6.33.2"
+]
+
 azure = [
     "azure-ai-vision-imageanalysis"
 ]

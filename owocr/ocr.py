@@ -8,8 +8,10 @@ import json
 import base64
 import urllib
 import inspect
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from math import sqrt, sin, cos, atan2
+from math import sqrt, sin, cos, atan2, radians
 from urllib.parse import urlparse, parse_qs
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
@@ -104,6 +106,22 @@ class OcrResult:
     image_properties: ImageProperties
     engine_capabilities: EngineCapabilities
     paragraphs: List[Paragraph] = field(default_factory=list)
+
+@contextmanager
+def suppress_output():
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    original_stdout = os.dup(1)
+    original_stderr = os.dup(2)
+    os.dup2(devnull, 1)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(original_stdout, 1)
+        os.dup2(original_stderr, 2)
+        os.close(original_stdout)
+        os.close(original_stderr)
+        os.close(devnull)
 
 
 def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
@@ -781,6 +799,193 @@ class GoogleVision:
 
     def _preprocess(self, img):
         return pil_image_to_bytes(img)
+
+class ChromeScreenAI:
+    name = 'screenai'
+    readable_name = 'Chrome Screen AI'
+    key = 'j'
+    config_entry = None
+    available = False
+    local = True
+    manual_language = False
+    coordinate_support = True
+    threading_support = True
+    capabilities = EngineCapabilities(
+        words=True,
+        word_bounding_boxes=True,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
+
+    def _import_dependencies(self):
+        logger.info('Loading dependencies for Chrome Screen AI')
+        with GlobalImport():
+            try:
+                import ctypes
+                from google.protobuf.json_format import MessageToDict
+                from .screenai_protos.chrome_screen_ai_pb2 import VisualAnnotation
+            except ImportError:
+                return False
+            return True
+
+    def __init__(self):
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, Chrome Screen AI will not work!')
+            return
+
+        self.model_dir = os.path.join(os.path.expanduser('~'), '.config', 'screen_ai', 'resources')
+        if not os.path.exists(self.model_dir):
+            logger.warning(f'Unable to find screen AI files in {self.model_dir}, Chrome Screen AI will not work!')
+            return
+
+        @ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_char_p)
+        def get_file_content_size(p):
+            path = os.path.join(self.model_dir, p.decode('utf-8'))
+            return os.path.getsize(path) if os.path.exists(path) else 0
+
+        @ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_void_p)
+        def get_file_content(p, s, ptr):
+            path = os.path.join(self.model_dir, p.decode('utf-8'))
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    ctypes.memmove(ptr, f.read(s), s)
+
+        class SkColorInfo(ctypes.Structure):
+            _fields_ = [('fColorSpace', ctypes.c_void_p), ('fColorType', ctypes.c_int32), ('fAlphaType', ctypes.c_int32)]
+        class SkISize(ctypes.Structure):
+            _fields_ = [('fWidth', ctypes.c_int32), ('fHeight', ctypes.c_int32)]
+        class SkImageInfo(ctypes.Structure):
+            _fields_ = [('fColorInfo', SkColorInfo), ('fDimensions', SkISize)]
+        class SkPixmap(ctypes.Structure):
+            _fields_ = [('fPixels', ctypes.c_void_p), ('fRowBytes', ctypes.c_size_t), ('fInfo', SkImageInfo)]
+        class SkBitmap(ctypes.Structure):
+            _fields_ = [('fPixelRef', ctypes.c_void_p), ('fPixmap', SkPixmap), ('fFlags', ctypes.c_uint32)]
+
+        self.get_file_content_size = get_file_content_size
+        self.get_file_content = get_file_content
+        self.SkBitmap = SkBitmap
+
+        with suppress_output():
+            self.screen_ai = ctypes.CDLL(os.path.join(self.model_dir, 'chrome_screen_ai.dll' if sys.platform == 'win32' else 'libchromescreenai.so'))
+            self.screen_ai.SetFileContentFunctions.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            self.screen_ai.InitOCRUsingCallback.restype = ctypes.c_bool
+            self.screen_ai.SetOCRLightMode.argtypes = [ctypes.c_bool]
+            self.screen_ai.PerformOCR.argtypes = [ctypes.POINTER(self.SkBitmap), ctypes.POINTER(ctypes.c_uint32)]
+            self.screen_ai.PerformOCR.restype = ctypes.c_void_p 
+            self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
+            self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
+            self.screen_ai.InitOCRUsingCallback()
+            self.screen_ai.SetOCRLightMode(False)
+            time.sleep(0.5)
+
+        self.available = True
+        logger.info('Chrome Screen AI ready')
+
+    def _rectangle_to_bounding_box(self, x1, y1, width, height, angle, img_width, img_height):
+        angle_rad = radians(angle)
+        cx_offset = (width / 2) * cos(angle_rad) - (height / 2) * sin(angle_rad)
+        cy_offset = (width / 2) * sin(angle_rad) + (height / 2) * cos(angle_rad)
+        center_x = x1 + cx_offset
+        center_y = y1 + cy_offset
+
+        return BoundingBox(
+            center_x=center_x / img_width,
+            center_y=center_y / img_height,
+            width=width / img_width,
+            height=height / img_height,
+            rotation_z=angle_rad
+        )
+
+    def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
+        paragraphs = []
+        for l in response.get('lines', []):
+            words = []
+            for w in l.get('words', []):
+                w_bbox = w.get('bounding_box', {})
+                x1 = w_bbox.get('x', 0)
+                y1 = w_bbox.get('y', 0)
+                width = w_bbox.get('width', 0)
+                height = w_bbox.get('height', 0)
+                angle = w_bbox.get('angle', 0)
+
+                word = Word(
+                    text=w.get('utf8_string', ''),
+                    bounding_box=self._rectangle_to_bounding_box(x1, y1, width, height, angle, img_width, img_height)
+                )
+                words.append(word)
+
+            l_bbox = l.get('bounding_box', {})
+            x1 = l_bbox.get('x', 0)
+            y1 = l_bbox.get('y', 0)
+            width = l_bbox.get('width', 0)
+            height = l_bbox.get('height', 0)
+            angle = l_bbox.get('angle', 0)
+            l_bbox_normalized = self._rectangle_to_bounding_box(x1, y1, width, height, angle, img_width, img_height)
+
+            line = Line(
+                bounding_box=l_bbox_normalized,
+                words=words
+            )
+            paragraph = Paragraph(
+                bounding_box=l_bbox_normalized,
+                lines=[line],
+                writing_direction=l.get('direction').replace('DIRECTION_', '')
+            )
+            paragraphs.append(paragraph)
+
+        return OcrResult(
+            image_properties=ImageProperties(width=og_img_width, height=og_img_height),
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
+        )
+
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        img_bytes, img_width, img_height = self._preprocess(img)
+
+        bitmap = self.SkBitmap()
+        bitmap.fPixmap.fPixels = ctypes.cast(ctypes.c_char_p(img_bytes), ctypes.c_void_p)
+        bitmap.fPixmap.fRowBytes = img_width * 4
+        bitmap.fPixmap.fInfo.fColorInfo.fColorType = 4 
+        bitmap.fPixmap.fInfo.fColorInfo.fAlphaType = 1
+        bitmap.fPixmap.fInfo.fDimensions.fWidth = img_width
+        bitmap.fPixmap.fInfo.fDimensions.fHeight = img_height
+
+        with suppress_output():
+            output_length = ctypes.c_uint32(0)
+            result_ptr = self.screen_ai.PerformOCR(ctypes.byref(bitmap), ctypes.byref(output_length))
+
+        if not result_ptr:
+            return (False, 'Unknown error!')
+
+        proto_bytes = ctypes.string_at(result_ptr, output_length.value)
+        self.screen_ai.FreeLibraryAllocatedCharArray(result_ptr)
+        response_proto = VisualAnnotation()
+        response_proto.ParseFromString(proto_bytes)
+        response_dict = MessageToDict(response_proto, preserving_proto_field_name=True)
+
+        ocr_result = self._to_generic_result(response_dict, img_width, img_height, img.width, img.height)
+        x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x
+
+    def _preprocess(self, img):
+        if img.width * img.height > 3000000:
+            aspect_ratio = img.width / img.height
+            new_w = int(sqrt(3000000 * aspect_ratio))
+            new_h = int(new_w / aspect_ratio)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        return img.tobytes(), img.width, img.height
 
 class GoogleLens:
     name = 'glens'
@@ -1587,7 +1792,7 @@ class OneOCR:
             return True
 
         if int(platform.release()) < 11:
-            logger.info(f'Unable to find OneOCR files in {target_path}, OneOCR will not work!')
+            logger.warning(f'Unable to find OneOCR files in {target_path}, OneOCR will not work!')
             return False
 
         logger.info(f'Copying OneOCR files to {target_path}')
@@ -1600,12 +1805,12 @@ class OneOCR:
             snipping_path = None
 
         if not snipping_path:
-            logger.info('Error getting Snipping Tool folder, OneOCR will not work!')
+            logger.warning('Error getting Snipping Tool folder, OneOCR will not work!')
             return False
 
         source_path = os.path.join(snipping_path, 'SnippingTool')
         if not os.path.exists(source_path):
-            logger.info('Error getting OneOCR SnippingTool folder, OneOCR will not work!')
+            logger.warning('Error getting OneOCR SnippingTool folder, OneOCR will not work!')
             return False
 
         os.makedirs(target_path, exist_ok=True)
@@ -1618,10 +1823,10 @@ class OneOCR:
                 try:
                     shutil.copy2(file_source_path, file_target_path)
                 except Exception as e:
-                    logger.info(f'Error copying {file_source_path}: {e}, OneOCR will not work!')
+                    logger.warning(f'Error copying {file_source_path}: {e}, OneOCR will not work!')
                     return False
             else:
-                logger.info(f'File not found {file_source_path}, OneOCR will not work!')
+                logger.warning(f'File not found {file_source_path}, OneOCR will not work!')
                 return False
         return True
 

@@ -84,14 +84,15 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 ## Supported engines
 
 ### Local
+- Chrome Screen AI - **Recommended** - Possibly the best local engine to date. You need to download the zip for your operating system from [this link](https://chrome-infra-packages.appspot.com/p/chromium/third_party/screen-ai) and extract it to the `C:/Users/yourusername/.config/screenai` folder (Windows) or the `~/.config/screenai` folder (macOS/Linux). → Terminal: install with `pip install "owocr[screenai]"`, key: `j`
+- OneOCR - **Windows 10/11 only - Recommended** - One of the best local engines to date. On Windows 10 you need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. → Terminal: install with `pip install "owocr[oneocr]"`, key: `z`
+- Apple Live Text (VisionKit framework) - **macOS only - Recommended** - One of the best local engines to date. It should be the same as Vision except that in Sonoma Apple added vertical text reading. → Terminal key: `d`
+- Apple Vision framework - **macOS only** - Older version of Live Text. → Terminal key: `a`
+- [meikiocr](https://github.com/rtr46/meikiocr) - **Recommended** - Comparable to OneOCR in accuracy and CPU latency, best local option for Linux users. Can't process vertical text and is limited to 64 text lines and 48 characters per line. → Terminal: install with `pip install "owocr[meikiocr]"`, if you have a Nvidia GPU you can do `pip uninstall onnxruntime && pip install onnxruntime-gpu` which makes it the fastest OCR available. Key: `k`
 - [Manga OCR](https://github.com/kha-white/manga-ocr) (with optional [comic-text-detector](https://github.com/dmMaze/comic-text-detector) as segmenter) → Terminal: install with `pip install "owocr[mangaocr]"`, keys: `m` (regular, ideal for small text areas), `n` (segmented, ideal for manga panels/larger images with multiple text areas)
+- WinRT OCR: **Windows 10/11 only** - It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. → Terminal: install with `pip install "owocr[winocr]"`, key: `w`
 - [EasyOCR](https://github.com/JaidedAI/EasyOCR) → Terminal: install with `pip install "owocr[easyocr]"`, key: `e`
 - [RapidOCR](https://github.com/RapidAI/RapidOCR) → Terminal: install with `pip install "owocr[rapidocr]"`, key: `r`
-- Apple Vision framework - **macOS only** - Older version of Live Text. → Terminal key: `a`
-- Apple Live Text (VisionKit framework) - **macOS only - Recommended** - Probably the best local engine to date. It should be the same as Vision except that in Sonoma Apple added vertical text reading. → Terminal key: `d`
-- WinRT OCR: **Windows 10/11 only** - It can also be used by installing winocr on a Windows virtual machine and running the server there (`winocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. → Terminal: install with `pip install "owocr[winocr]"`, key: `w`
-- OneOCR - **Windows 10/11 only - Recommended** - Close second local best to the Apple one. On Windows 10 you need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. → Terminal: install with `pip install "owocr[oneocr]"`, key: `z`
-- [meikiocr](https://github.com/rtr46/meikiocr) - **Recommended** - Comparable to OneOCR in accuracy and CPU latency, best local option for Linux users. Can't process vertical text and is limited to 64 text lines and 48 characters per line. → Terminal: install with `pip install "owocr[meikiocr]"`, if you have a Nvidia GPU you can do `pip uninstall onnxruntime && pip install onnxruntime-gpu` which makes it the fastest OCR available. Key: `k`
 
 ### Cloud
 - Google Lens - **Recommended** - Arguably the best OCR engine to date. → Terminal: install with `pip install "owocr[lens]"`, key: `l`
@@ -110,7 +111,7 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 
 This uses code from/references these people/projects:
 - Viola for working on the Google Lens implementation (twice!) and helping with the pyobjc VisionKit code!
-- @rtr46 for contributing a big overhaul allowing for coordinate support and JSON output
+- @rtr46 for contributing a big overhaul allowing for coordinate support and JSON output, and for the initial Chrome Screen AI implementation!
 - @bpwhelan for contributing code for other language support and for his ideas (like two pass processing) originally implemented in the Game Sentence Miner fork of owocr
 - @bropines for the Bing code ([Github issue](https://github.com/AuroraWright/owocr/issues/10))
 - @ronaldoussoren for helping with the pyobjc VisionKit code
