@@ -823,9 +823,9 @@ class ChromeScreenAI:
         logger.info('Loading dependencies for Chrome Screen AI')
         with GlobalImport():
             try:
-                import ctypes
                 from google.protobuf.json_format import MessageToDict
                 from .screenai_protos.chrome_screen_ai_pb2 import VisualAnnotation
+                import ctypes
             except ImportError:
                 return False
             return True
