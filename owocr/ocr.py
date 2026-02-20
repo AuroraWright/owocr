@@ -877,9 +877,11 @@ class ChromeScreenAI:
             self.screen_ai.PerformOCR.argtypes = [ctypes.POINTER(self.SkBitmap), ctypes.POINTER(ctypes.c_uint32)]
             self.screen_ai.PerformOCR.restype = ctypes.c_void_p
             self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
+            self.screen_ai.GetMaxImageDimension.restype = ctypes.c_uint32
             self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
             self.screen_ai.InitOCRUsingCallback()
             self.screen_ai.SetOCRLightMode(False)
+            self.max_pixel_size = self.screen_ai.GetMaxImageDimension()
             time.sleep(0.5)
 
         self.available = True
@@ -1011,10 +1013,10 @@ class ChromeScreenAI:
         return x
 
     def _preprocess(self, img):
-        if img.width * img.height > 3000000:
-            aspect_ratio = img.width / img.height
-            new_w = int(sqrt(3000000 * aspect_ratio))
-            new_h = int(new_w / aspect_ratio)
+        if any(x > self.max_pixel_size for x in img.size):
+            resize_factor = min(self.max_pixel_size / img.width, self.max_pixel_size / img.height)
+            new_w = int(img.width * resize_factor)
+            new_h = int(img.height * resize_factor)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         return img.convert('RGBA').tobytes(), img.width, img.height
