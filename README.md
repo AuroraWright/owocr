@@ -84,7 +84,7 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 ## Supported engines
 
 ### Local
-- Chrome Screen AI - **Recommended** - Possibly the best local engine to date. You need to download the zip for your operating system from [this link](https://chrome-infra-packages.appspot.com/p/chromium/third_party/screen-ai) and extract it to the `C:/Users/yourusername/.config/screenai` folder (Windows) or the `~/.config/screenai` folder (macOS/Linux). → Terminal: install with `pip install "owocr[screenai]"`, key: `j`
+- Chrome Screen AI - **Recommended** - Possibly the best local engine to date. You need to download the zip for your operating system from [this link](https://chrome-infra-packages.appspot.com/p/chromium/third_party/screen-ai) and extract it to the `C:/Users/yourusername/.config/screen_ai` folder (Windows) or the `~/.config/screen_ai` folder (macOS/Linux). → Terminal: install with `pip install "owocr[screenai]"`, key: `j`
 - OneOCR - **Windows 10/11 only - Recommended** - One of the best local engines to date. On Windows 10 you need to copy 3 system files from Windows 11 to use it, refer to the readme [here](https://github.com/AuroraWright/oneocr). It can also be used by installing oneocr on a Windows virtual machine and running the server there (`oneocr_serve`) and specifying the IP address of the Windows VM/machine in the config file. → Terminal: install with `pip install "owocr[oneocr]"`, key: `z`
 - Apple Live Text (VisionKit framework) - **macOS only - Recommended** - One of the best local engines to date. It should be the same as Vision except that in Sonoma Apple added vertical text reading. → Terminal key: `d`
 - Apple Vision framework - **macOS only** - Older version of Live Text. → Terminal key: `a`
