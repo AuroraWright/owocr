@@ -1017,7 +1017,7 @@ class ChromeScreenAI:
             new_h = int(new_w / aspect_ratio)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        return img.tobytes(), img.width, img.height
+        return img.convert('RGBA').tobytes(), img.width, img.height
 
 class GoogleLens:
     name = 'glens'

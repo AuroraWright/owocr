@@ -102,26 +102,30 @@ class ScreenSelector:
             except queue.Empty:
                 pass
         else:
-            command = self.command_queue.get()
-            image, coordinates, is_window = command
+            try:
+                command = self.command_queue.get()
+                image, coordinates, is_window = command
 
-            if image == False:
+                if image == False:
+                    self.root.destroy()
+                    return
+                elif image == True:
+                    self.result_queue.put(False)
+                else:
+                    self.previous_coordinates = coordinates if coordinates else []
+
+                    monitors, window_scale, images = image
+                    if is_window:
+                        self.find_monitor_and_create_window(monitors, window_scale, images, None)
+                    else:
+                        for i, monitor in enumerate(monitors):
+                            if self.real_monitors:
+                                self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
+                            else:
+                                self.create_window(monitor, images[i])
+            except KeyboardInterrupt:
                 self.root.destroy()
                 return
-            elif image == True:
-                self.result_queue.put(False)
-            else:
-                self.previous_coordinates = coordinates if coordinates else []
-
-                monitors, window_scale, images = image
-                if is_window:
-                    self.find_monitor_and_create_window(monitors, window_scale, images, None)
-                else:
-                    for i, monitor in enumerate(monitors):
-                        if self.real_monitors:
-                            self.find_monitor_and_create_window(self.real_monitors, 1, images[i], monitor)
-                        else:
-                            self.create_window(monitor, images[i])
 
         self.root.after(50, self.process_events)
 
