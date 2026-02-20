@@ -947,7 +947,6 @@ class ChromeScreenAI:
             min_top = min(line.bounding_box.top for line in lines)
             max_bottom = max(line.bounding_box.bottom for line in lines)
 
-            rotation = lines[0].bounding_box.rotation_z
             width = max_right - min_left
             height = max_bottom - min_top
             center_x = min_left + width / 2
@@ -957,8 +956,7 @@ class ChromeScreenAI:
                 center_x=center_x,
                 center_y=center_y,
                 width=width,
-                height=height,
-                rotation_z=rotation
+                height=height
             )
 
             raw_direction = directions_by_block[block_id]
