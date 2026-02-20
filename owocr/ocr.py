@@ -887,7 +887,7 @@ class ChromeScreenAI:
         self.available = True
         logger.info('Chrome Screen AI ready')
 
-    def _rectangle_to_bounding_box(self, x1, y1, width, height, angle, img_width, img_height):
+    def _normalize_bbox(self, x1, y1, width, height, angle, img_width, img_height):
         angle_rad = radians(angle)
         cx_offset = (width / 2) * cos(angle_rad) - (height / 2) * sin(angle_rad)
         cy_offset = (width / 2) * sin(angle_rad) + (height / 2) * cos(angle_rad)
@@ -918,7 +918,7 @@ class ChromeScreenAI:
 
                 word = Word(
                     text=w.get('utf8_string', ''),
-                    bounding_box=self._rectangle_to_bounding_box(x1, y1, width, height, angle, img_width, img_height)
+                    bounding_box=self._normalize_bbox(x1, y1, width, height, angle, img_width, img_height)
                 )
                 words.append(word)
 
@@ -928,44 +928,29 @@ class ChromeScreenAI:
             width = l_bbox.get('width', 0)
             height = l_bbox.get('height', 0)
             angle = l_bbox.get('angle', 0)
-            l_bbox_normalized = self._rectangle_to_bounding_box(x1, y1, width, height, angle, img_width, img_height)
 
             line = Line(
-                bounding_box=l_bbox_normalized,
-                words=words,
                 text=l.get('utf8_string', ''),
+                bounding_box=self._normalize_bbox(x1, y1, width, height, angle, img_width, img_height),
+                words=words,
             )
             if block_id not in lines_by_block:
                 lines_by_block[block_id] = []
             if block_id not in directions_by_block:
-                directions_by_block[block_id] = l.get('direction', '')
+                directions_by_block[block_id] = l.get('direction')
             lines_by_block[block_id].append(line)
 
         paragraphs = []
         for block_id in sorted(lines_by_block.keys()):
             lines = lines_by_block[block_id]
-            min_left = min(line.bounding_box.left for line in lines)
-            max_right = max(line.bounding_box.right for line in lines)
-            min_top = min(line.bounding_box.top for line in lines)
-            max_bottom = max(line.bounding_box.bottom for line in lines)
 
-            width = max_right - min_left
-            height = max_bottom - min_top
-            center_x = min_left + width / 2
-            center_y = min_top + height / 2
-
-            paragraph_bbox = BoundingBox(
-                center_x=center_x,
-                center_y=center_y,
-                width=width,
-                height=height
-            )
-
-            raw_direction = directions_by_block[block_id]
-            writing_direction = raw_direction.replace('DIRECTION_', '') if raw_direction else None
+            p_bbox = merge_bounding_boxes(lines)
+            writing_direction = directions_by_block[block_id]
+            if writing_direction:
+                writing_direction = writing_direction.replace('DIRECTION_', '')
 
             paragraph = Paragraph(
-                bounding_box=paragraph_bbox,
+                bounding_box=p_bbox,
                 lines=lines,
                 writing_direction=writing_direction
             )
