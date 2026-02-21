@@ -12,7 +12,6 @@ import collections
 import socketserver
 import urllib.request
 from pathlib import Path
-import base64
 import obsws_python as obs
 
 import numpy as np
@@ -42,6 +41,7 @@ def load_not_essential_libraries():
         import atexit
         import asyncio
         import socket
+        import base64
         from dataclasses import asdict
 
         from PIL import ImageDraw, ImageFile
