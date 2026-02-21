@@ -898,7 +898,8 @@ class ChromeScreenAI:
         self.SkBitmap = SkBitmap
 
         dll_name = 'chrome_screen_ai.dll' if sys.platform == 'win32' else 'libchromescreenai.so'
-        self.screen_ai = ctypes.CDLL(str(self.model_dir / dll_name))
+        dll_mode = os.RTLD_LAZY if hasattr(os, 'RTLD_LAZY') else ctypes.DEFAULT_MODE
+        self.screen_ai = ctypes.CDLL(str(self.model_dir / dll_name), mode=dll_mode)
         self.screen_ai.SetFileContentFunctions.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         self.screen_ai.InitOCRUsingCallback.restype = ctypes.c_bool
         self.screen_ai.SetOCRLightMode.argtypes = [ctypes.c_bool]
