@@ -12,7 +12,6 @@ import collections
 import socketserver
 import urllib.request
 from pathlib import Path
-import obsws_python as obs
 
 import numpy as np
 from PIL import Image
@@ -42,6 +41,7 @@ def load_not_essential_libraries():
         import asyncio
         import socket
         import base64
+        import obsws_python as obs
         from dataclasses import asdict
 
         from PIL import ImageDraw, ImageFile
@@ -1648,15 +1648,15 @@ class OBSScreenshotThread(threading.Thread):
 
         self.client = None
 
-        self.host = config.get_general("obs_host")
-        self.port = config.get_general("obs_port")
-        self.password = config.get_general("obs_password")
+        self.host = config.get_general('obs_host')
+        self.port = config.get_general('obs_port')
+        self.password = config.get_general('obs_password')
 
-        self.quality = config.get_general("obs_quality")
-        self.img_format = "png" if self.quality == -1 else "jpeg"
+        self.quality = config.get_general('obs_quality')
+        self.img_format = 'png' if self.quality == -1 else 'jpeg'
         self.quality = None if self.quality == -1 else self.quality
 
-        self.source_override = config.get_general("obs_source_override")
+        self.source_override = config.get_general('obs_source_override')
         if self.source_override == '':
             self.source_override = None
             self.is_current_preview_scene = False
@@ -1679,7 +1679,7 @@ class OBSScreenshotThread(threading.Thread):
         try:
             self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
             if not self._is_connected():
-                raise ConnectionError("Unable to connect to OBS WebSocket server.")
+                raise ConnectionError('Unable to connect to OBS WebSocket server.')
             logger.info(f"Connected to OBS at {self.host}:{self.port}")
         except Exception as e:
             logger.error(f"Failed to connect to OBS: {e}")
@@ -1712,10 +1712,10 @@ class OBSScreenshotThread(threading.Thread):
                 name=scene, img_format=self.img_format, width=None, height=None, quality=self.quality
             )
 
-            if response and hasattr(response, "image_data") and response.image_data:
-                image_data = response.image_data.split(",", 1)[-1]
+            if response and hasattr(response, 'image_data') and response.image_data:
+                image_data = response.image_data.split(',', 1)[-1]
                 image_data = base64.b64decode(image_data)
-                img = Image.open(io.BytesIO(image_data)).convert("RGBA")
+                img = Image.open(io.BytesIO(image_data)).convert('RGBA')
 
                 return img
 
@@ -1726,7 +1726,7 @@ class OBSScreenshotThread(threading.Thread):
 
     def run(self):
         if not self._connect_obs():
-            logger.error("OBSScreenshotThread: Failed to connect to OBS, exiting")
+            logger.error('OBSScreenshotThread: Failed to connect to OBS, exiting')
             state_handlers.terminate_handler()
             return
 
@@ -1737,7 +1737,7 @@ class OBSScreenshotThread(threading.Thread):
                 continue
 
             if not self._is_connected():
-                logger.error("OBSScreenshotThread: Lost connection to OBS, exiting")
+                logger.error('OBSScreenshotThread: Lost connection to OBS, exiting')
                 state_handlers.terminate_handler()
                 break
 
