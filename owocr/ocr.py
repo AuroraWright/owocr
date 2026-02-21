@@ -117,22 +117,6 @@ class OcrResult:
     engine_capabilities: EngineCapabilities
     paragraphs: List[Paragraph] = field(default_factory=list)
 
-@contextmanager
-def suppress_output():
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    original_stdout = os.dup(1)
-    original_stderr = os.dup(2)
-    os.dup2(devnull, 1)
-    os.dup2(devnull, 2)
-    try:
-        yield
-    finally:
-        os.dup2(original_stdout, 1)
-        os.dup2(original_stderr, 2)
-        os.close(original_stdout)
-        os.close(original_stderr)
-        os.close(devnull)
-
 
 def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
     def empty_post_process(text):
@@ -908,12 +892,10 @@ class ChromeScreenAI:
         self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
         self.screen_ai.GetMaxImageDimension.restype = ctypes.c_uint32
 
-        with suppress_output():
-            self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
-            self.screen_ai.InitOCRUsingCallback()
-            self.screen_ai.SetOCRLightMode(False)
-            self.max_pixel_size = self.screen_ai.GetMaxImageDimension()
-            time.sleep(0.5)
+        self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
+        self.screen_ai.InitOCRUsingCallback()
+        self.screen_ai.SetOCRLightMode(False)
+        self.max_pixel_size = self.screen_ai.GetMaxImageDimension()
 
         self.available = True
         logger.info('Chrome Screen AI ready')
@@ -1014,8 +996,7 @@ class ChromeScreenAI:
 
         output_length = ctypes.c_uint32(0)
 
-        with suppress_output():
-            result_ptr = self.screen_ai.PerformOCR(ctypes.byref(bitmap), ctypes.byref(output_length))
+        result_ptr = self.screen_ai.PerformOCR(ctypes.byref(bitmap), ctypes.byref(output_length))
 
         if not result_ptr:
             return (False, 'Unknown error!')
