@@ -1743,9 +1743,6 @@ class OBSScreenshotThread(threading.Thread):
 
             img = self.take_screenshot()
             self.write_result(img, is_combo)
-            
-            if img == False:
-                exit_with_error('The window was closed or an error occurred')
 
 
 class ScreenshotThread(threading.Thread):
