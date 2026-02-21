@@ -59,11 +59,19 @@ class BoundingBox:
         return self.center_y + self.height / 2
 
 @dataclass
+class Symbol:
+    """Represents a single recognized symbol and its properties."""
+    text: str
+    bounding_box: BoundingBox
+    separator: Optional[str] = None  # The character(s) that follow the symbol, e.g., a space
+
+@dataclass
 class Word:
     """Represents a single recognized word and its properties."""
     text: str
     bounding_box: BoundingBox
     separator: Optional[str] = None  # The character(s) that follow the word, e.g., a space
+    symbols: Optional[List[Symbol]] = None # Optional: if the engine supports symbol-level recognition, list of detected symbols
 
 @dataclass
 class Line:
@@ -93,6 +101,8 @@ class ImageProperties:
 @dataclass
 class EngineCapabilities:
     """Represents the features natively supported by the OCR engine."""
+    symbols: bool
+    symbol_bounding_boxes: bool
     words: bool
     word_bounding_boxes: bool
     lines: bool
@@ -304,10 +314,10 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
         center = (min_pt + max_pt) / 2
         size = max_pt - min_pt
         return BoundingBox(
-            center_x=center[0],
-            center_y=center[1],
-            width=size[0],
-            height=size[1]
+            center_x=float(center[0]),
+            center_y=float(center[1]),
+            width=float(size[0]),
+            height=float(size[1])
         )
 
     hull = _convex_hull(all_corners)
@@ -316,8 +326,8 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
     # Trivial cases
     if m == 1:
         return BoundingBox(
-            center_x=hull[0, 0],
-            center_y=hull[0, 1],
+            center_x=float(hull[0, 0]),
+            center_y=float(hull[0, 1]),
             width=0.0,
             height=0.0,
             rotation_z=0.0
@@ -328,11 +338,11 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
         length = np.linalg.norm(diff)
         center = hull.mean(axis=0)
         return BoundingBox(
-            center_x=center[0],
-            center_y=center[1],
-            width=length,
+            center_x=float(center[0]),
+            center_y=float(center[1]),
+            width=float(length),
             height=0.0,
-            rotation_z=np.arctan2(diff[1], diff[0])
+            rotation_z=float(np.arctan2(diff[1], diff[0]))
         )
 
     # Test each edge orientation
@@ -346,10 +356,10 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
         center = (min_pt + max_pt) / 2
         size = max_pt - min_pt
         return BoundingBox(
-            center_x=center[0],
-            center_y=center[1],
-            width=size[0],
-            height=size[1]
+            center_x=float(center[0]),
+            center_y=float(center[1]),
+            width=float(size[0]),
+            height=float(size[1])
         )
 
     angles = np.arctan2(edges[valid, 1], edges[valid, 0])
@@ -381,11 +391,11 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
     angle = np.mod(angle + np.pi, 2 * np.pi) - np.pi
 
     return BoundingBox(
-        center_x=center[0],
-        center_y=center[1],
-        width=width,
-        height=height,
-        rotation_z=angle
+        center_x=float(center[0]),
+        center_y=float(center[1]),
+        width=float(width),
+        height=float(height),
+        rotation_z=float(angle)
     )
 
 
@@ -413,6 +423,8 @@ class MangaOcrSegmented:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=False,
         word_bounding_boxes=False,
         lines=True,
@@ -445,8 +457,8 @@ class MangaOcrSegmented:
         if not dependencies_available:
             logger.warning('Dependencies not available, Manga OCR (segmented) will not work!')
         else:
-            comic_text_detector_path = Path.home() / ".cache" / "manga-ocr"
-            comic_text_detector_file = comic_text_detector_path / "comictextdetector.pt"
+            comic_text_detector_path = Path.home() / '.cache' / 'manga-ocr'
+            comic_text_detector_file = comic_text_detector_path / 'comictextdetector.pt'
 
             if not comic_text_detector_file.exists():
                 comic_text_detector_path.mkdir(parents=True, exist_ok=True)
@@ -561,7 +573,7 @@ class MangaOcrSegmented:
                 lines.append(line)
 
             p_bbox = self._convert_box_bbox(list(blk.xyxy), img_width, img_height)
-            writing_direction = 'TOP_TO_BOTTOM' if blk.vertical else "LEFT_TO_RIGHT"
+            writing_direction = 'TOP_TO_BOTTOM' if blk.vertical else 'LEFT_TO_RIGHT'
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines, writing_direction=writing_direction)
 
             paragraphs.append(paragraph)
@@ -599,6 +611,8 @@ class MangaOcr:
     coordinate_support = False
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=False,
         word_bounding_boxes=False,
         lines=True,
@@ -651,6 +665,8 @@ class GoogleVision:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=True,
+        symbol_bounding_boxes=True,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -677,7 +693,7 @@ class GoogleVision:
             logger.warning('Dependencies not available, Google Vision will not work!')
         else:
             logger.info(f'Parsing Google credentials')
-            google_credentials_file = os.path.join(os.path.expanduser('~'),'.config','google_vision.json')
+            google_credentials_file = Path.home() / '.config' / 'google_vision.json'
             try:
                 google_credentials = service_account.Credentials.from_service_account_file(google_credentials_file)
                 self.client = vision.ImageAnnotatorClient(credentials=google_credentials)
@@ -715,17 +731,26 @@ class GoogleVision:
 
         w_separator = ''
         w_text_parts = []
+        symbols = []
         for i, symbol in enumerate(google_word.symbols):
+            s_separator = ''
             separator = None
             if hasattr(symbol, 'property') and hasattr(symbol.property, 'detected_break'):
                 detected_break = symbol.property.detected_break
-                detected_separator = self._break_type_to_char(detected_break.type_)
+                s_separator = self._break_type_to_char(detected_break.type_)
                 if i == len(google_word.symbols) - 1:
-                    w_separator = detected_separator
+                    w_separator = s_separator
                 else:
-                    separator = detected_separator
-            symbol_text = symbol.text
-            w_text_parts.append(symbol_text)
+                    separator = s_separator
+            s_text = symbol.text
+            s_bbox = self._convert_bbox(symbol.bounding_box, img_width, img_height)
+            symbol = Symbol(
+                text=s_text,
+                bounding_box=s_bbox,
+                separator=s_separator
+            )
+            symbols.append(symbol)
+            w_text_parts.append(s_text)
             if separator:
                 w_text_parts.append(separator)
         word_text = ''.join(w_text_parts)
@@ -733,7 +758,8 @@ class GoogleVision:
         return Word(
             text=word_text,
             bounding_box=w_bbox,
-            separator=w_separator
+            separator=w_separator,
+            symbols=symbols
         )
 
     def _create_lines_from_google_paragraph(self, google_paragraph, p_bbox, img_width, img_height):
@@ -811,6 +837,8 @@ class ChromeScreenAI:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=True,
+        symbol_bounding_boxes=True,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -837,20 +865,20 @@ class ChromeScreenAI:
             logger.warning('Dependencies not available, Chrome Screen AI will not work!')
             return
 
-        self.model_dir = os.path.join(os.path.expanduser('~'), '.config', 'screen_ai', 'resources')
-        if not os.path.exists(self.model_dir):
+        self.model_dir = Path.home() / '.config' / 'screen_ai' / 'resources'
+        if not self.model_dir.exists():
             logger.warning(f'Unable to find screen AI files in {self.model_dir}, Chrome Screen AI will not work!')
             return
 
         @ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_char_p)
         def get_file_content_size(p):
-            path = os.path.join(self.model_dir, p.decode('utf-8'))
-            return os.path.getsize(path) if os.path.exists(path) else 0
+            path = self.model_dir / p.decode('utf-8')
+            return os.path.getsize(path) if path.exists() else 0
 
         @ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_uint32, ctypes.c_void_p)
         def get_file_content(p, s, ptr):
-            path = os.path.join(self.model_dir, p.decode('utf-8'))
-            if os.path.exists(path):
+            path = self.model_dir / p.decode('utf-8')
+            if path.exists():
                 with open(path, 'rb') as f:
                     ctypes.memmove(ptr, f.read(s), s)
 
@@ -869,15 +897,17 @@ class ChromeScreenAI:
         self.get_file_content = get_file_content
         self.SkBitmap = SkBitmap
 
+        dll_name = 'chrome_screen_ai.dll' if sys.platform == 'win32' else 'libchromescreenai.so'
+        self.screen_ai = ctypes.CDLL(str(self.model_dir / dll_name))
+        self.screen_ai.SetFileContentFunctions.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        self.screen_ai.InitOCRUsingCallback.restype = ctypes.c_bool
+        self.screen_ai.SetOCRLightMode.argtypes = [ctypes.c_bool]
+        self.screen_ai.PerformOCR.argtypes = [ctypes.POINTER(self.SkBitmap), ctypes.POINTER(ctypes.c_uint32)]
+        self.screen_ai.PerformOCR.restype = ctypes.c_void_p
+        self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
+        self.screen_ai.GetMaxImageDimension.restype = ctypes.c_uint32
+
         with suppress_output():
-            self.screen_ai = ctypes.CDLL(os.path.join(self.model_dir, 'chrome_screen_ai.dll' if sys.platform == 'win32' else 'libchromescreenai.so'))
-            self.screen_ai.SetFileContentFunctions.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-            self.screen_ai.InitOCRUsingCallback.restype = ctypes.c_bool
-            self.screen_ai.SetOCRLightMode.argtypes = [ctypes.c_bool]
-            self.screen_ai.PerformOCR.argtypes = [ctypes.POINTER(self.SkBitmap), ctypes.POINTER(ctypes.c_uint32)]
-            self.screen_ai.PerformOCR.restype = ctypes.c_void_p
-            self.screen_ai.FreeLibraryAllocatedCharArray.argtypes = [ctypes.c_void_p]
-            self.screen_ai.GetMaxImageDimension.restype = ctypes.c_uint32
             self.screen_ai.SetFileContentFunctions(self.get_file_content_size, self.get_file_content)
             self.screen_ai.InitOCRUsingCallback()
             self.screen_ai.SetOCRLightMode(False)
@@ -887,7 +917,13 @@ class ChromeScreenAI:
         self.available = True
         logger.info('Chrome Screen AI ready')
 
-    def _normalize_bbox(self, x1, y1, width, height, angle, img_width, img_height):
+    def _normalize_bbox(self, bbox, img_width, img_height):
+        x1 = bbox.get('x', 0)
+        y1 = bbox.get('y', 0)
+        width = bbox.get('width', 0)
+        height = bbox.get('height', 0)
+        angle = bbox.get('angle', 0)
+
         angle_rad = radians(angle)
         cx_offset = (width / 2) * cos(angle_rad) - (height / 2) * sin(angle_rad)
         cy_offset = (width / 2) * sin(angle_rad) + (height / 2) * cos(angle_rad)
@@ -909,29 +945,27 @@ class ChromeScreenAI:
             block_id = l.get('block_id', 0)
             words = []
             for w in l.get('words', []):
-                w_bbox = w.get('bounding_box', {})
-                x1 = w_bbox.get('x', 0)
-                y1 = w_bbox.get('y', 0)
-                width = w_bbox.get('width', 0)
-                height = w_bbox.get('height', 0)
-                angle = w_bbox.get('angle', 0)
+                symbols = []
+                for s in w.get('symbols', []):
+                    s_bbox = s.get('bounding_box', {})
+                    symbol = Symbol(
+                        text=s.get('utf8_string', ''),
+                        bounding_box=self._normalize_bbox(s_bbox, img_width, img_height)
+                    )
+                    symbols.append(symbol)
 
+                w_bbox = w.get('bounding_box', {})
                 word = Word(
                     text=w.get('utf8_string', ''),
-                    bounding_box=self._normalize_bbox(x1, y1, width, height, angle, img_width, img_height)
+                    bounding_box=self._normalize_bbox(w_bbox, img_width, img_height),
+                    symbols=symbols
                 )
                 words.append(word)
 
             l_bbox = l.get('bounding_box', {})
-            x1 = l_bbox.get('x', 0)
-            y1 = l_bbox.get('y', 0)
-            width = l_bbox.get('width', 0)
-            height = l_bbox.get('height', 0)
-            angle = l_bbox.get('angle', 0)
-
             line = Line(
                 text=l.get('utf8_string', ''),
-                bounding_box=self._normalize_bbox(x1, y1, width, height, angle, img_width, img_height),
+                bounding_box=self._normalize_bbox(l_bbox, img_width, img_height),
                 words=words,
             )
             if block_id not in lines_by_block:
@@ -977,8 +1011,9 @@ class ChromeScreenAI:
         bitmap.fPixmap.fInfo.fDimensions.fWidth = img_width
         bitmap.fPixmap.fInfo.fDimensions.fHeight = img_height
 
+        output_length = ctypes.c_uint32(0)
+
         with suppress_output():
-            output_length = ctypes.c_uint32(0)
             result_ptr = self.screen_ai.PerformOCR(ctypes.byref(bitmap), ctypes.byref(output_length))
 
         if not result_ptr:
@@ -1017,6 +1052,8 @@ class GoogleLens:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -1191,6 +1228,8 @@ class Bing:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -1371,6 +1410,8 @@ class AppleVision:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=False,
         word_bounding_boxes=False,
         lines=True,
@@ -1478,6 +1519,8 @@ class AppleLiveText:
     coordinate_support = True
     threading_support = False
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -1623,6 +1666,8 @@ class WinRTOCR:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -1752,6 +1797,8 @@ class OneOCR:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -1798,13 +1845,13 @@ class OneOCR:
                 logger.warning('Error reading URL from config, OneOCR will not work!')
 
     def _copy_files_if_needed(self):
-        target_path = os.path.join(os.path.expanduser('~'), '.config', 'oneocr')
+        target_path = Path.home() / '.config' / 'oneocr'
         files_to_copy = ['oneocr.dll', 'oneocr.onemodel', 'onnxruntime.dll']
         copy_needed = False
 
         for filename in files_to_copy:
-            file_target_path = os.path.join(target_path, filename)
-            if not os.path.exists(file_target_path):
+            file_target_path = target_path / filename
+            if not file_target_path.exists():
                 copy_needed = True
 
         if not copy_needed:
@@ -1827,18 +1874,18 @@ class OneOCR:
             logger.warning('Error getting Snipping Tool folder, OneOCR will not work!')
             return False
 
-        source_path = os.path.join(snipping_path, 'SnippingTool')
-        if not os.path.exists(source_path):
+        source_path = Path(snipping_path) / 'SnippingTool'
+        if not source_path.exists():
             logger.warning('Error getting OneOCR SnippingTool folder, OneOCR will not work!')
             return False
 
-        os.makedirs(target_path, exist_ok=True)
+        target_path.mkdir(parents=True, exist_ok=True)
 
         for filename in files_to_copy:
-            file_source_path = os.path.join(source_path, filename)
-            file_target_path = os.path.join(target_path, filename)
+            file_source_path = source_path / filename
+            file_target_path = target_path / filename
 
-            if os.path.exists(file_source_path):
+            if file_source_path.exists():
                 try:
                     shutil.copy2(file_source_path, file_target_path)
                 except Exception as e:
@@ -1958,6 +2005,8 @@ class AzureImageAnalysis:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -2083,6 +2132,8 @@ class EasyOCR:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=False,
         word_bounding_boxes=False,
         lines=True,
@@ -2169,6 +2220,8 @@ class RapidOCR:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=False,
         word_bounding_boxes=False,
         lines=True,
@@ -2234,13 +2287,14 @@ class RapidOCR:
     def _to_generic_result(self, response, img_width, img_height):
         lines = []
 
-        for i in range(len(response.boxes)):
-            box = response.boxes[i]
-            text = response.txts[i]
-            bbox = self._convert_bbox(box, img_width, img_height)
-            word = Word(text=text, bounding_box=bbox)
-            line = Line(bounding_box=bbox, words=[word], text=text)
-            lines.append(line)
+        if response.boxes:
+            for i in range(len(response.boxes)):
+                box = response.boxes[i]
+                text = response.txts[i]
+                bbox = self._convert_bbox(box, img_width, img_height)
+                word = Word(text=text, bounding_box=bbox)
+                line = Line(bounding_box=bbox, words=[word], text=text)
+                lines.append(line)
 
         if lines:
             p_bbox = merge_bounding_boxes(lines)
@@ -2282,6 +2336,8 @@ class MeikiOCR:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
@@ -2351,7 +2407,7 @@ class MeikiOCR:
             paragraph = Paragraph(
                 bounding_box=line_bbox,
                 lines=[line],
-                writing_direction="LEFT_TO_RIGHT" # meikiocr only supports horizontal text
+                writing_direction='LEFT_TO_RIGHT' # meikiocr only supports horizontal text
             )
             paragraphs.append(paragraph)
 
@@ -2388,6 +2444,8 @@ class OCRSpace:
     coordinate_support = True
     threading_support = True
     capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
         words=True,
         word_bounding_boxes=True,
         lines=True,
