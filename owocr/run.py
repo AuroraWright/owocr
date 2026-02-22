@@ -76,7 +76,6 @@ def load_not_essential_libraries():
             import win32process
             import win32clipboard
             import pywintypes
-            import ctypes
         elif sys.platform == 'linux':
             import select
             import termios
