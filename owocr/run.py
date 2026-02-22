@@ -2853,7 +2853,6 @@ def run():
     screen_capture_periodic = False
     screen_capture_on_combo = False
     coordinate_selector_event = threading.Event()
-    notifier = DesktopNotifierSync()
     image_queue = queue.Queue()
     key_combos = {}
 
@@ -2928,10 +2927,6 @@ def run():
 
     output_result = OutputResult()
 
-    if len(key_combos) > 0:
-        key_combo_listener = keyboard.GlobalHotKeys(key_combos)
-        key_combo_listener.start()
-
     if write_to in ('clipboard', 'websocket'):
         write_to_readable = write_to
     else:
@@ -3001,6 +2996,8 @@ def run():
     engine_index = engine_keys.index(default_engine) if default_engine != '' else 0
     engine_index_2 = engine_keys.index(engine_secondary) if engine_secondary != '' else -1
 
+    notifier = DesktopNotifierSync()
+
     if tray_enabled:
         if not is_bundled:
             logger.info('Starting tray icon')
@@ -3012,6 +3009,10 @@ def run():
         signal.signal(signal.SIGINT, state_handlers.terminate_handler)
         user_input_thread = threading.Thread(target=user_input_thread_run, daemon=True)
         user_input_thread.start()
+
+    if len(key_combos) > 0:
+        key_combo_listener = keyboard.GlobalHotKeys(key_combos)
+        key_combo_listener.start()
 
     if sys.platform == 'win32':
         event_name = 'owocr_running'
