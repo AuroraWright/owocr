@@ -1678,7 +1678,9 @@ class OBSScreenshotThread(threading.Thread):
 
     def _connect_obs(self):
         first_loop = True
-        while not self._is_connected() and not terminated.is_set():
+        while not self._is_connected():
+            if terminated.is_set():
+                return
             try:
                 self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
             except Exception as e:
