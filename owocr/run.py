@@ -1687,6 +1687,7 @@ class OBSScreenshotThread(threading.Thread):
                         logger.error("Please ensure OBS is running and obs websocket server is enabled and configured correctly.")
                     else:
                         logger.error('OBSScreenshotThread: Lost connection to OBS')
+                    first_loop = False
         logger.info(f"Connected to OBS at {self.host}:{self.port}")
     
     def _get_source(self):
