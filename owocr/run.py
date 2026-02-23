@@ -3117,7 +3117,10 @@ def run():
     if tray_enabled:
         if not is_bundled:
             logger.info('Starting tray icon')
-        start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), screenshot_thread is not None)
+        screenshot_thread_enabled = screenshot_thread is not None
+        is_screenshot_thread = isinstance(screenshot_thread, ScreenshotThread) if screenshot_thread_enabled else False
+        is_obs_screenshot_thread = isinstance(screenshot_thread, OBSScreenshotThread) if screenshot_thread_enabled else False
+        start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), is_screenshot_thread, is_obs_screenshot_thread)
         if not is_bundled:
             tray_user_input_thread.start()
 
