@@ -52,6 +52,8 @@ def load_not_essential_libraries():
         import obsws_python as obs
         import logging
 
+        logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
+
         if sys.platform == 'darwin':
             import select
             import termios
@@ -1675,7 +1677,6 @@ class OBSScreenshotThread(threading.Thread):
             return False
 
     def _connect_obs(self):
-        logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
         first_loop = True
         while not self._is_connected() and not terminated.is_set():
             try:
