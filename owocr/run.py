@@ -1674,17 +1674,17 @@ class OBSScreenshotThread(threading.Thread):
         except Exception:
             return False
 
-    def _connect_obs(self, firstRun=False):
+    def _connect_obs(self, first_run=False):
         logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
-        firstLoop = True
+        first_loop = True
         while not self._is_connected():
             try:
                 self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
             except Exception as e:
-                if firstLoop:
-                    if firstRun:
+                if first_loop:
+                    if first_run:
                         logger.error(f"Failed to connect to OBS at {self.host}:{self.port}")
-                        logger.error("Please ensure OBS is running and obs-websocket plugin is installed and configured correctly.")
+                        logger.error("Please ensure OBS is running and obs websocket server is enabled and configured correctly.")
                     else:
                         logger.error('OBSScreenshotThread: Lost connection to OBS')
         logger.info(f"Connected to OBS at {self.host}:{self.port}")
@@ -1728,7 +1728,7 @@ class OBSScreenshotThread(threading.Thread):
             return None
 
     def run(self):
-        self._connect_obs(firstRun=True)
+        self._connect_obs(first_run=True)
 
         while not terminated.is_set():
             try:
