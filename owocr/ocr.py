@@ -849,8 +849,8 @@ class ChromeScreenAI:
             return
 
         self.model_dir = Path.home() / '.config' / 'screen_ai' / 'resources'
-        if not self.model_dir.exists():
-            logger.warning(f'Unable to find screen AI files in {self.model_dir}, Chrome Screen AI will not work!')
+
+        if not self._download_files_if_needed():
             return
 
         @ctypes.CFUNCTYPE(ctypes.c_uint32, ctypes.c_char_p)
@@ -898,6 +898,53 @@ class ChromeScreenAI:
 
         self.available = True
         logger.info('Chrome Screen AI ready')
+
+    def _download_files_if_needed(self):
+        if self.model_dir.exists():
+            return True
+
+        import subprocess
+        import tempfile
+
+        target_path = self.model_dir.parent
+        logger.info(f'Downloading screen AI files to {target_path}')
+
+        os_name = platform.system().lower()
+        arch = platform.machine().lower()
+        if os_name == 'darwin':
+            os_name = 'mac'
+        if arch in ('x86_64', 'amd64'):
+            arch = 'amd64'
+        elif arch in ('aarch64', 'arm64'):
+            arch = 'arm64'
+        elif arch in ('x86', 'i386', 'i686'):
+            arch = '386'
+
+        cipd_platform = f'{os_name}-{arch}'
+        package_name = f'chromium/third_party/screen-ai/{cipd_platform}'
+        ensure_content = f'{package_name} latest\n'
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cipd_bin = 'cipd.exe' if sys.platform == 'win32' else 'cipd'
+            cipd_path = os.path.join(temp_dir, cipd_bin)
+            cipd_url = f'https://chrome-infra-packages.appspot.com/client?platform={cipd_platform}&version=latest'
+
+            try:
+                urllib.request.urlretrieve(cipd_url, cipd_path)
+                if sys.platform != 'win32':
+                    os.chmod(cipd_path, 0o755)
+            except:
+                logger.warning('Unable to download temporary CIPD client, Chrome Screen AI will not work!')
+                return False
+
+            cmd = [cipd_path, 'export', '-root', str(target_path), '-ensure-file', '-']
+            try:
+                subprocess.run(cmd, input=ensure_content, text=True, check=True)
+            except:
+                logger.warning('Unable to download screen AI files, Chrome Screen AI will not work!')
+                return False
+
+        return True
 
     def _normalize_bbox(self, bbox, img_width, img_height):
         x1 = bbox.get('x', 0)
@@ -1793,8 +1840,6 @@ class OneOCR:
         with GlobalImport():
             try:
                 import oneocr
-                import subprocess
-                import shutil
             except ImportError:
                 return False
         return True
@@ -1842,11 +1887,14 @@ class OneOCR:
             logger.warning(f'Unable to find OneOCR files in {target_path}, OneOCR will not work!')
             return False
 
+        import subprocess
+        import shutil
+
         logger.info(f'Copying OneOCR files to {target_path}')
 
         cmd = ['powershell', '-Command', 'Get-AppxPackage Microsoft.ScreenSketch | Select-Object -ExpandProperty InstallLocation']
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             snipping_path = result.stdout.strip()
         except:
             snipping_path = None
