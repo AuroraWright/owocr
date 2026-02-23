@@ -41,7 +41,6 @@ def load_not_essential_libraries():
         import asyncio
         import socket
         import base64
-        import obsws_python as obs
         from dataclasses import asdict
 
         from PIL import ImageDraw, ImageFile
@@ -50,6 +49,8 @@ def load_not_essential_libraries():
         import websockets
         from pynputfix import keyboard
         from desktop_notifier import DesktopNotifierSync, Urgency
+        import obsws_python as obs
+        import logging
 
         if sys.platform == 'darwin':
             import select
@@ -1673,18 +1674,20 @@ class OBSScreenshotThread(threading.Thread):
         except Exception:
             return False
 
-    def _connect_obs(self):
-        if self._is_connected():
-            return True
-        try:
-            self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
-            if not self._is_connected():
-                raise ConnectionError('Unable to connect to OBS WebSocket server.')
-            logger.info(f"Connected to OBS at {self.host}:{self.port}")
-        except Exception as e:
-            logger.error(f"Failed to connect to OBS: {e}")
-            return False
-        return True
+    def _connect_obs(self, firstRun=False):
+        logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
+        firstLoop = True
+        while not self._is_connected():
+            try:
+                self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
+            except Exception as e:
+                if firstLoop:
+                    if firstRun:
+                        logger.error(f"Failed to connect to OBS at {self.host}:{self.port}")
+                        logger.error("Please ensure OBS is running and obs-websocket plugin is installed and configured correctly.")
+                    else:
+                        logger.error('OBSScreenshotThread: Lost connection to OBS')
+        logger.info(f"Connected to OBS at {self.host}:{self.port}")
     
     def _get_source(self):
         if self.source_override:
@@ -1725,10 +1728,7 @@ class OBSScreenshotThread(threading.Thread):
             return None
 
     def run(self):
-        if not self._connect_obs():
-            logger.error('OBSScreenshotThread: Failed to connect to OBS, exiting')
-            state_handlers.terminate_handler()
-            return
+        self._connect_obs(firstRun=True)
 
         while not terminated.is_set():
             try:
@@ -1737,9 +1737,7 @@ class OBSScreenshotThread(threading.Thread):
                 continue
 
             if not self._is_connected():
-                logger.error('OBSScreenshotThread: Lost connection to OBS, exiting')
-                state_handlers.terminate_handler()
-                break
+                self._connect_obs()
 
             img = self.take_screenshot()
             self.write_result(img, is_combo)
