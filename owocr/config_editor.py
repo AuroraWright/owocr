@@ -245,7 +245,7 @@ class ConfigGUI:
                 ('auto_pause', 'float', 'Automatically pause after X seconds of inactivity (0 to disable)'),
                 ('language', 'dropdown', 'Language code, used for some engines and to cleanup screen capture text', ['ja', 'en', 'zh', 'ko', 'ar', 'ru', 'el', 'he', 'th']),
                 ('output_format', 'dropdown', 'Output format', ['text', 'json']),
-                ('verbosity', 'int', 'Terminal verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
+                ('verbosity', 'int', 'Terminal/log window verbosity level:\n-2: show everything\n-1: only timestamps\n0: only errors\nGreater than 0: maximum amount of characters'),
             ],
             'Engines': [
                 ('engines', 'multicheckbox', 'List of enabled OCR engines'),

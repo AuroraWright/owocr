@@ -18,9 +18,9 @@ https://github.com/user-attachments/assets/f061854d-d20f-43e8-8c96-af5a0ea26f43
 ## Installation/basic usage (easy Windows/macOS packages)
 
 Easy to install Windows and macOS packages can be downloaded [here](https://github.com/AuroraWright/owocr/releases).
-- On Windows, just extract the zip anywhere and double click on "owocr". It might take a while to start up the first time.
+- On Windows, just extract the zip anywhere and double click on "owocr".
 - On macOS, just double click on the dmg and drag the owocr app to the Application folder, like most macOS apps. You will be asked to grant two permissions to owocr the first time it starts (Accessibility and Screen Capture), just follow the prompts to do so.
-- A "Log Viewer" window will shop up, showing information messages. After loading finishes, a tray icon in the macOS menu bar/Windows task bar will show up. You can close the log viewer if you want.
+- A "Log Viewer" window will shop up, showing information messages. A tray icon in the macOS menu bar/Windows task bar will show up. You can close the log viewer if you want.
 - By default owocr monitors the clipboard for images and outputs recognized text back to the clipboard. You can change this from the configuration, accessible from the tray icon.
 - With a left click on the tray icon you can pause/unpause on Windows, from the right click menu (left click on macOS) you can change the engine, pause/unpause, change the screen capture area selection, take a screenshot of the selected screen/window, launch the configuration, and reopen the log viewer if you closed it. The icon will be dimmed to show when owocr is paused.
 - In these versions all the OCR engines and features are already available, you don't need to install anything else. The tray icon is always enabled and can't be turned off.
