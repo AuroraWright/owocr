@@ -26,6 +26,7 @@ try:
 except:
     optimized_png_encode = False
 
+silenced_modules = []
 manga_ocr_model = None
 
 
@@ -125,8 +126,6 @@ def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
     global manga_ocr_model
     if not manga_ocr_model:
         logger.disable('manga_ocr')
-        from transformers import logging
-        logging.disable_progress_bar()
         from manga_ocr import ocr
         ocr.post_process = empty_post_process
         logger.info(f'Loading Manga OCR model')
@@ -385,9 +384,15 @@ def merge_bounding_boxes(ocr_element_list, rotated=False):
 
 
 class GlobalImport:
-    def _silence_warnings(self):
-        logging.getLogger('transformers').setLevel(logging.ERROR) # silence transformers >=4.46 warnings
-        logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
+    def _silence_modules(self):
+        if 'huggingface_hub' in sys.modules and 'huggingface_hub' not in silenced_modules:
+            logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
+            silenced_modules.append('huggingface_hub')
+        if 'transformers' in sys.modules and 'transformers' not in silenced_modules:
+            logging.getLogger('transformers').setLevel(logging.ERROR)
+            from transformers import logging as tf_logging
+            tf_logging.disable_progress_bar()
+            silenced_modules.append('transformers')
 
     def __enter__(self):
         return self
@@ -396,7 +401,7 @@ class GlobalImport:
         caller_frame = inspect.getouterframes(inspect.currentframe())[1].frame
         collector = inspect.getargvalues(caller_frame).locals
         caller_frame.f_globals.update(collector)
-        self._silence_warnings()
+        self._silence_modules()
 
 class MangaOcrSegmented:
     name = 'mangaocrs'
