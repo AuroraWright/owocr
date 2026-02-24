@@ -1664,7 +1664,7 @@ class OBSScreenshotThread(threading.Thread):
             self.source_override = None
             self.is_current_preview_scene = True
 
-    def connect_obs(self, must_connect, connect_immediately):
+    def connect_obs(self, init, connect_immediately):
         if self.client:
             try:
                 self.client.get_version()
@@ -1683,12 +1683,11 @@ class OBSScreenshotThread(threading.Thread):
 
         try:
             self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
-        except:
-            message = f'Failed to connect to OBS at {self.host}:{self.port}'
-            if must_connect:
-                exit_with_error(message)
-            if self.client:
-                logger.warning(message)
+        except Exception as e:
+            if str(e).startswith('failed to identify client'):
+                exit_with_error(f'Failed to authenticate to OBS at {self.host}:{self.port}')
+            elif init or self.client:
+                logger.warning(f'Failed to connect to OBS at {self.host}:{self.port}')
             self.client = None
             return False
         logger.info(f'Connected to OBS at {self.host}:{self.port}')
@@ -1735,10 +1734,12 @@ class OBSScreenshotThread(threading.Thread):
                 img = Image.open(io.BytesIO(image_data)).convert('RGBA')
                 return img
 
-            raise ValueError('Unable to parse image')
+            raise ValueError('Failed to parse image')
         except Exception as e:
             message = f'OBS screenshot error: {e}'
-            if warn:
+            if hasattr(e, 'code') and e.code == 600:
+                exit_with_error(message)
+            elif warn:
                 logger.warning(message)
             else:
                 logger.debug(message)
