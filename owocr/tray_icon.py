@@ -99,7 +99,7 @@ class TrayGUI:
                 engine_menu_items.append(pystrayfix.MenuItem(name, make_action_func(i), checked=make_checked_func(i)))
 
             engine_menu = pystrayfix.Menu(*engine_menu_items)
-            capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=(self.screen_capture_enabled or self.obs_enabled))
+            capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=self.screen_capture_enabled or self.obs_enabled)
             capture_area_selection_item = pystrayfix.MenuItem('Select capture area', self.on_capture_area_selector_clicked, visible=self.screen_capture_enabled)
 
             menu = pystrayfix.Menu(

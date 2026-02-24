@@ -46,6 +46,7 @@ dependencies = [
     "desktop-notifier>=6.1.0",
     "pystrayfix>=0.19.8",
     "mss>=10.1.0",
+    "obsws-python>=1.8.0",
     "psutil",
     "curl_cffi",
     "pywin32;platform_system=='Windows'",
@@ -54,7 +55,6 @@ dependencies = [
     "PyGObject;platform_system=='Linux'",
     "dbus-python;platform_system=='Linux'",
     "pywayland;platform_system=='Linux'",
-    "obsws-python>=1.8.0",
 ]
 
 # If adding a new extra, remember to add it to the GitHub Actions workflow too!

@@ -10,6 +10,8 @@ import os
 import json
 import collections
 import socketserver
+import logging
+import base64
 import urllib.request
 from pathlib import Path
 
@@ -40,7 +42,6 @@ def load_not_essential_libraries():
         import atexit
         import asyncio
         import socket
-        import base64
         from dataclasses import asdict
 
         from PIL import ImageDraw, ImageFile
@@ -50,9 +51,6 @@ def load_not_essential_libraries():
         from pynputfix import keyboard
         from desktop_notifier import DesktopNotifierSync, Urgency
         import obsws_python as obs
-        import logging
-
-        logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
 
         if sys.platform == 'darwin':
             import select
@@ -90,6 +88,7 @@ def load_not_essential_libraries():
             import pyperclip
 
         ImageFile.LOAD_TRUNCATED_IMAGES = True
+        logging.getLogger('obsws_python').setLevel(logging.CRITICAL)
 
         if is_wayland:
             from . import wayland_mss_shim
@@ -1644,16 +1643,15 @@ class TextFiltering:
         else:
             return None
 
+
 class OBSScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
-
         self.client = None
-
+        self.connected = False
         self.host = config.get_general('obs_host')
         self.port = config.get_general('obs_port')
         self.password = config.get_general('obs_password')
-
         self.quality = config.get_general('obs_quality')
         self.img_format = 'png' if self.quality == -1 else 'jpeg'
         self.quality = None if self.quality == -1 else self.quality
@@ -1665,30 +1663,29 @@ class OBSScreenshotThread(threading.Thread):
         elif self.source_override == 'preview':
             self.source_override = None
             self.is_current_preview_scene = True
-        
-    def _is_connected(self):
-        if not self.client:
-            return False
-        try:
-            self.client.get_version()
-            return True
-        except Exception:
-            return False
 
-    def _connect_obs(self):
-        first_loop = True
-        while not self._is_connected():
-            if terminated.is_set():
-                return
+    def connect_obs(self, must_connect):
+        if self.client:
             try:
-                self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
-            except Exception as e:
-                if first_loop:
-                    logger.error(f"Failed to connect to OBS at {self.host}:{self.port}")
-                    first_loop = False
-        logger.info(f"Connected to OBS at {self.host}:{self.port}")
-    
-    def _get_source(self):
+                self.client.get_version()
+                return False
+            except:
+                pass
+        try:
+            self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
+        except:
+            message = f'Failed to connect to OBS at {self.host}:{self.port}'
+            if must_connect:
+                exit_with_error(message)
+            if self.connected:
+                logger.warning(message)
+                self.connected = False
+            return False
+        logger.info(f'Connected to OBS at {self.host}:{self.port}')
+        self.connected = True
+        return True
+
+    def get_source(self, warn):
         if self.source_override:
             return self.source_override
         try:
@@ -1697,47 +1694,66 @@ class OBSScreenshotThread(threading.Thread):
             else:
                 return self.client.get_current_preview_scene().scene_name
         except Exception as e:
-            logger.debug(f"OBS get source error: {e}")
+            message = f'OBS get source error: {e}'
+            if warn:
+                logger.warning(message)
+            else:
+                logger.debug(message)
             return None
 
-    def write_result(self, result, is_combo, screen_capture_properties=None):
+    def write_result(self, result, is_combo):
         if is_combo:
-            image_queue.put((result, True, screen_capture_properties))
+            image_queue.put((result, True, None))
         else:
-            periodic_screenshot_queue.put((result, screen_capture_properties))
+            periodic_screenshot_queue.put((result, None))
 
-    def take_screenshot(self):
+    def take_screenshot(self, warn):
+        scene = self.get_source(warn)
+        if not scene:
+            return None
+
         try:
-            scene = self._get_source()
-
             response = self.client.get_source_screenshot(
-                name=scene, img_format=self.img_format, width=None, height=None, quality=self.quality
+                name=scene, width=None, height=None, img_format=self.img_format, quality=self.quality
             )
 
             if response and hasattr(response, 'image_data') and response.image_data:
                 image_data = response.image_data.split(',', 1)[-1]
                 image_data = base64.b64decode(image_data)
                 img = Image.open(io.BytesIO(image_data)).convert('RGBA')
-
                 return img
 
-            return None
+            raise ValueError('Unable to parse image')
         except Exception as e:
-            logger.debug(f"OBS screenshot error: {e}")
+            message = f'OBS screenshot error: {e}'
+            if warn:
+                logger.warning(message)
+            else:
+                logger.debug(message)
             return None
 
     def run(self):
+        self.connect_obs(True)
         while not terminated.is_set():
             try:
                 is_combo = screenshot_request_queue.get(timeout=0.5)
             except queue.Empty:
                 continue
 
-            if not self._is_connected():
-                self._connect_obs()
-
-            img = self.take_screenshot()
-            self.write_result(img, is_combo)
+            retry = False
+            reconnected = False
+            while True:
+                img = self.take_screenshot(is_combo and ((not retry) or reconnected) and self.connected)
+                if img:
+                    self.write_result(img, is_combo)
+                    break
+                else:
+                    if retry:
+                        break
+                    reconnected = self.connect_obs(False)
+                    if not self.connected:
+                        break
+                    retry = True
 
 
 class ScreenshotThread(threading.Thread):
@@ -2748,7 +2764,8 @@ def get_notification_urgency():
 
 
 def exit_with_error(error):
-    logger.error(error)
+    if error:
+        logger.error(error)
     state_handlers.terminate_handler()
     if is_bundled and threading.current_thread() is threading.main_thread():
         wait_for_tray_process()
@@ -2986,16 +3003,15 @@ def run():
             screen_capture_periodic = True
         if not (screen_capture_on_combo or screen_capture_periodic):
             exit_with_error('tray_enabled, screen_capture_delay_seconds or screen_capture_combo need to be valid values')
+        screenshot_request_queue = queue.Queue()
     if 'screencapture' in (read_from, read_from_secondary): 
         coordinate_selector_combo = config.get_general('coordinate_selector_combo')
         if coordinate_selector_combo != '':
             key_combos[coordinate_selector_combo] = lambda: coordinate_selector_event.set()
-        screenshot_request_queue = queue.Queue()
         screenshot_thread = ScreenshotThread()
         screenshot_thread.start()
         read_from_readable.append('screen capture')
     if 'obs' in (read_from, read_from_secondary):
-        screenshot_request_queue = queue.Queue()
         screenshot_thread = OBSScreenshotThread()
         screenshot_thread.start()
         read_from_readable.append('OBS screen capture')
@@ -3092,6 +3108,9 @@ def run():
                 if secondary_engine_setting == engine_class.name and engine_class.local and engine_class.coordinate_support:
                     engine_secondary = engine_class.key
 
+    if terminated.is_set():
+        exit_with_error(None)
+
     if len(engine_keys) == 0:
         exit_with_error('No engines available!')
 
@@ -3109,9 +3128,8 @@ def run():
     if tray_enabled:
         if not is_bundled:
             logger.info('Starting tray icon')
-        screenshot_thread_enabled = screenshot_thread is not None
-        is_screenshot_thread = isinstance(screenshot_thread, ScreenshotThread) if screenshot_thread_enabled else False
-        is_obs_screenshot_thread = isinstance(screenshot_thread, OBSScreenshotThread) if screenshot_thread_enabled else False
+        is_screenshot_thread = isinstance(screenshot_thread, ScreenshotThread) if screenshot_thread else False
+        is_obs_screenshot_thread = isinstance(screenshot_thread, OBSScreenshotThread) if screenshot_thread else False
         start_full_tray(tray_result_queue, tray_command_queue, engine_names, engine_index, paused.is_set(), is_screenshot_thread, is_obs_screenshot_thread)
         if not is_bundled:
             tray_user_input_thread.start()

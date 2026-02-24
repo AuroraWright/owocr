@@ -232,8 +232,8 @@ class ConfigGUI:
         self.default_values = Config.default_config
         self.general_config_options = {
             'General': [
-                ('read_from', 'dropdown', 'Input source', ['clipboard', 'websocket', 'unixsocket', 'screencapture']),
-                ('read_from_secondary', 'dropdown', 'Optional secondary input source', ['', 'clipboard', 'websocket', 'unixsocket', 'screencapture']),
+                ('read_from', 'dropdown', 'Input source', ['clipboard', 'websocket', 'unixsocket', 'screencapture', 'obs']),
+                ('read_from_secondary', 'dropdown', 'Optional secondary input source', ['', 'clipboard', 'websocket', 'unixsocket', 'screencapture', 'obs']),
                 ('write_to', 'dropdown', 'Output destination', ['clipboard', 'websocket']),
                 ('websocket_port', 'int', 'Websocket port'),
                 ('delay_seconds', 'float', 'Check the clipboard/directory every X seconds (ignored on Windows/Wayland)'),
@@ -759,7 +759,7 @@ class ConfigGUI:
         self._update_engine_state()
 
     def _is_folder_file_selected(self, option):
-        directory_inputs = ['clipboard', 'websocket', 'unixsocket', 'screencapture']
+        directory_inputs = ['clipboard', 'websocket', 'unixsocket', 'screencapture', 'obs']
 
         option_val = self._get_widget_value(option)
         if option_val and option_val not in directory_inputs:
@@ -865,7 +865,7 @@ class ConfigGUI:
         return False
 
     def _should_show_delay_seconds(self):
-        non_delay_options = ['websocket', 'unixsocket', 'screencapture']
+        non_delay_options = ['websocket', 'unixsocket', 'screencapture', 'obs']
         read_from_val = self._get_widget_value('read_from')
         if read_from_val not in non_delay_options:
             return True

@@ -49,7 +49,7 @@ All command-line options and their descriptions can be viewed with: `owocr -h`.
 
 ## Main features
 
-- Multiple input sources: clipboard, folders, websockets, unix domain socket, and screen capture
+- Multiple input sources: clipboard, folders, websockets, unix domain socket, screen capture, OBS
 - Multiple output destinations: clipboard, text files, and websockets
 - Integrates well with Windows, macOS and Linux, supporting operating system features like notifications and a tray icon
 - Capture from specific screen areas, windows, of areas within windows (window capture is only supported on Windows/macOS/Wayland). This also tries to capture entire sentences and filter all repetitions. If you use an online engine like Lens I recommend setting a secondary local engine (OneOCR on Windows, Apple Live Text on macOS and meikiocr on Linux). With this "two pass" system only the changed areas are sent to the online service, allowing for both speed and accuracy
@@ -122,3 +122,4 @@ This uses code from/references these people/projects:
 - vicky for the demo videos in this readme!
 - nao for the awesome icon!
 - [Steffo](https://github.com/Steffo99) for all his help in automating packaging/distribution with Github Actions!
+- [kamperemu](https://github.com/kamperemu) for the OBS source implementation!
