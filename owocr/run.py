@@ -1708,6 +1708,9 @@ class OBSScreenshotThread(threading.Thread):
             periodic_screenshot_queue.put((result, None))
 
     def take_screenshot(self, warn):
+        if not self.connected:
+            return None
+
         scene = self.get_source(warn)
         if not scene:
             return None
