@@ -1670,7 +1670,7 @@ class OBSScreenshotThread(threading.Thread):
                 self.client.get_version()
                 return False
             except obs.error.OBSSDKError as e:
-                if e.code == 207: # OBS still loading
+                if hasattr(e, 'code') and e.code == 207: # OBS still loading
                     return False
                 pass
             except:
@@ -1683,10 +1683,11 @@ class OBSScreenshotThread(threading.Thread):
 
         try:
             self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
-        except Exception as e:
+        except obs.error.OBSSDKError as e:
             if str(e).startswith('failed to identify client'):
                 exit_with_error(f'Failed to authenticate to OBS at {self.host}:{self.port}')
-            elif init or self.client:
+        except:
+            if init or self.client:
                 logger.warning(f'Failed to connect to OBS at {self.host}:{self.port}')
             self.client = None
             return False
@@ -1735,7 +1736,7 @@ class OBSScreenshotThread(threading.Thread):
                 return img
 
             raise ValueError('Failed to parse image')
-        except Exception as e:
+        except obs.error.OBSSDKError as e:
             message = f'OBS screenshot error: {e}'
             if hasattr(e, 'code') and e.code == 600:
                 exit_with_error(message)
@@ -1743,7 +1744,13 @@ class OBSScreenshotThread(threading.Thread):
                 logger.warning(message)
             else:
                 logger.debug(message)
-            return None
+        except Exception as e:
+            message = f'OBS screenshot error: {e}'
+            if warn:
+                logger.warning(message)
+            else:
+                logger.debug(message)
+        return None
 
     def run(self):
         self.connect_obs(True, True)
