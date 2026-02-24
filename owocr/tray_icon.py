@@ -99,7 +99,7 @@ class TrayGUI:
                 engine_menu_items.append(pystrayfix.MenuItem(name, make_action_func(i), checked=make_checked_func(i)))
 
             engine_menu = pystrayfix.Menu(*engine_menu_items)
-            capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=self.screen_capture_enabled)
+            capture_item = pystrayfix.MenuItem('Take a screenshot', self.on_capture_clicked, visible=(self.screen_capture_enabled or self.obs_enabled))
             capture_area_selection_item = pystrayfix.MenuItem('Select capture area', self.on_capture_area_selector_clicked, visible=self.screen_capture_enabled)
 
             menu = pystrayfix.Menu(
@@ -130,7 +130,7 @@ class TrayGUI:
         action, data = message
         if action == 'enable':
             self.enabled = True
-            self.engine_names, self.current_engine_index, self.paused, self.screen_capture_enabled = data
+            self.engine_names, self.current_engine_index, self.paused, self.screen_capture_enabled, self.obs_enabled = data
             self.icon.icon = self.paused_icon if self.paused else self.normal_icon
             self.icon.menu = self.setup_menu()
             self.icon.update_menu()
@@ -217,10 +217,10 @@ def start_minimal_tray(result_queue, command_queue):
         except:
             continue
 
-def start_full_tray(result_queue, command_queue, engine_names, selected_engine, paused, screen_capture_enabled):
+def start_full_tray(result_queue, command_queue, engine_names, selected_engine, paused, screen_capture_enabled, obs_enabled):
     if not tray_process:
         start_minimal_tray(result_queue, command_queue)
-    command_queue.put(('enable', (engine_names, selected_engine, paused, screen_capture_enabled)))
+    command_queue.put(('enable', (engine_names, selected_engine, paused, screen_capture_enabled, obs_enabled)))
 
 def wait_for_tray_process():
     if tray_process and tray_process.is_alive():

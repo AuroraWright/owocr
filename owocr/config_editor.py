@@ -261,6 +261,13 @@ class ConfigGUI:
                 ('screen_capture_line_recovery', 'bool', 'Try to recover lines missed by frame stabilization (can increase glitches)'),
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
             ],
+            'OBS': [
+                ('obs_host', 'str', 'OBS WebSocket host'),
+                ('obs_port', 'int', 'OBS WebSocket port'),
+                ('obs_password', 'str', 'OBS password (leave blank if authentication is disabled)'),
+                ('obs_quality', 'int', 'JPEG quality for captured images (-1 for lossless PNG)'),
+                ('obs_source_override', 'str', 'Source name to capture from (leave blank for current scene, "preview" for preview scene)'),
+            ],
             'Hotkeys': [
                 ('combo_pause', 'str', 'Pause/resume hotkey'),
                 ('combo_engine_switch', 'str', 'OCR engine switch hotkey'),
