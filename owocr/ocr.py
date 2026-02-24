@@ -2194,7 +2194,7 @@ class EasyOCR:
             logger.info('Loading EasyOCR model')
             gpu = config.get('gpu', True)
             logging.getLogger('easyocr.easyocr').setLevel(logging.ERROR)
-            self.model = easyocr.Reader([language,'en'], gpu=gpu)
+            self.model = easyocr.Reader([language,'en'], gpu=gpu, verbose=False)
             self.available = True
             logger.info('EasyOCR ready')
 

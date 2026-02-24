@@ -7,7 +7,7 @@ def main():
         original_stderr_fd = os.dup(sys.stderr.fileno())
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stderr.fileno())
-        sys.stderr = os.fdopen(original_stderr_fd, 'w')
+        sys.stderr = os.fdopen(original_stderr_fd, 'w', encoding='utf-8')
         if sys.platform == 'win32':
             import ctypes
             kernel32 = ctypes.windll.kernel32
@@ -24,9 +24,9 @@ def main():
 if __name__ == '__main__':
     if getattr(sys, 'frozen', False):
         if sys.stdout is None:
-            sys.stdout = open(os.devnull, 'w')
+            sys.stdout = open(os.devnull, 'w', encoding='utf-8')
         if sys.stderr is None:
-            sys.stderr = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w', encoding='utf-8')
         import pip_system_certs.wrapt_requests
         multiprocessing.freeze_support()
         pip_system_certs.wrapt_requests.inject_truststore()
