@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = collect_data_files('rapidocr', include_py_files=False)
 datas += collect_data_files('unidic_lite', include_py_files=False)
-datas += collect_data_files('manga_ocr', include_py_files=False)
+datas += collect_data_files('manga_ocr', include_py_files=True)
 datas += [( 'owocr/data', 'owocr/data' )]
 hiddenimports = collect_submodules('pynputfix')
 hiddenimports += collect_submodules('pystrayfix')
