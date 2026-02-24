@@ -24,8 +24,9 @@ class GlobalImport:
         return self
 
     def __exit__(self, *args):
-        self.collector = inspect.getargvalues(inspect.getouterframes(inspect.currentframe())[1].frame).locals
-        globals().update(self.collector)
+        caller_frame = inspect.getouterframes(inspect.currentframe())[1].frame
+        collector = inspect.getargvalues(caller_frame).locals
+        caller_frame.f_globals.update(collector)
 
 class HotkeyRecorder:
     def __init__(self):

@@ -23,6 +23,10 @@ def main():
 
 if __name__ == '__main__':
     if getattr(sys, 'frozen', False):
+        if sys.stdout is None:
+            sys.stdout = open(os.devnull, 'w')
+        if sys.stderr is None:
+            sys.stderr = open(os.devnull, 'w')
         import pip_system_certs.wrapt_requests
         multiprocessing.freeze_support()
         pip_system_certs.wrapt_requests.inject_truststore()
