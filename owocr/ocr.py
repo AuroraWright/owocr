@@ -448,7 +448,7 @@ class MangaOcrSegmented:
 
             if not comic_text_detector_file.exists():
                 comic_text_detector_path.mkdir(parents=True, exist_ok=True)
-                logger.info('Downloading comic text detector model ' + str(comic_text_detector_file))
+                logger.info('Downloading comic text detector model to ' + str(comic_text_detector_file))
                 try:
                     urllib.request.urlretrieve('https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.3/comictextdetector.pt', str(comic_text_detector_file))
                 except:
@@ -941,9 +941,11 @@ class ChromeScreenAI:
                 return False
 
             cmd = [cipd_path, 'export', '-root', str(target_path), '-ensure-file', '-']
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             try:
-                subprocess.run(cmd, input=ensure_content, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(cmd, input=ensure_content, text=True, check=True, creationflags=creationflags)
             except:
+                raise
                 logger.warning('Unable to download screen AI files, Chrome Screen AI will not work!')
                 return False
 
