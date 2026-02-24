@@ -942,7 +942,7 @@ class ChromeScreenAI:
 
             cmd = [cipd_path, 'export', '-root', str(target_path), '-ensure-file', '-']
             try:
-                subprocess.run(cmd, input=ensure_content, text=True, check=True)
+                subprocess.run(cmd, input=ensure_content, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except:
                 logger.warning('Unable to download screen AI files, Chrome Screen AI will not work!')
                 return False
@@ -1897,7 +1897,7 @@ class OneOCR:
 
         cmd = ['powershell', '-Command', 'Get-AppxPackage Microsoft.ScreenSketch | Select-Object -ExpandProperty InstallLocation']
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             snipping_path = result.stdout.strip()
         except:
             snipping_path = None
