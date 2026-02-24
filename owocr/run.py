@@ -1669,6 +1669,10 @@ class OBSScreenshotThread(threading.Thread):
             try:
                 self.client.get_version()
                 return False
+            except obs.error.OBSSDKError as e:
+                if e.code == 207: # OBS still loading
+                    return False
+                pass
             except:
                 pass
 
