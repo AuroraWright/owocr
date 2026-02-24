@@ -1648,7 +1648,7 @@ class OBSScreenshotThread(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.client = None
-        self.connected = False
+        self.last_connection_timestamp = time.monotonic()
         self.host = config.get_general('obs_host')
         self.port = config.get_general('obs_port')
         self.password = config.get_general('obs_password')
@@ -1664,25 +1664,30 @@ class OBSScreenshotThread(threading.Thread):
             self.source_override = None
             self.is_current_preview_scene = True
 
-    def connect_obs(self, must_connect):
+    def connect_obs(self, must_connect, connect_immediately):
         if self.client:
             try:
                 self.client.get_version()
                 return False
             except:
                 pass
+
+        timestamp = time.monotonic()
+        if (not connect_immediately) and (timestamp - self.last_connection_timestamp <= 1):
+            return False
+        self.last_connection_timestamp = timestamp
+
         try:
             self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
         except:
             message = f'Failed to connect to OBS at {self.host}:{self.port}'
             if must_connect:
                 exit_with_error(message)
-            if self.connected:
+            if self.client:
                 logger.warning(message)
-                self.connected = False
+            self.client = None
             return False
         logger.info(f'Connected to OBS at {self.host}:{self.port}')
-        self.connected = True
         return True
 
     def get_source(self, warn):
@@ -1708,7 +1713,7 @@ class OBSScreenshotThread(threading.Thread):
             periodic_screenshot_queue.put((result, None))
 
     def take_screenshot(self, warn):
-        if not self.connected:
+        if not self.client:
             return None
 
         scene = self.get_source(warn)
@@ -1736,7 +1741,7 @@ class OBSScreenshotThread(threading.Thread):
             return None
 
     def run(self):
-        self.connect_obs(True)
+        self.connect_obs(True, True)
         while not terminated.is_set():
             try:
                 is_combo = screenshot_request_queue.get(timeout=0.5)
@@ -1746,15 +1751,15 @@ class OBSScreenshotThread(threading.Thread):
             retry = False
             reconnected = False
             while True:
-                img = self.take_screenshot(is_combo and ((not retry) or reconnected) and self.connected)
+                img = self.take_screenshot(is_combo and ((not retry) or reconnected))
                 if img:
                     self.write_result(img, is_combo)
                     break
                 else:
                     if retry:
                         break
-                    reconnected = self.connect_obs(False)
-                    if not self.connected:
+                    reconnected = self.connect_obs(False, is_combo)
+                    if not self.client:
                         break
                     retry = True
 
