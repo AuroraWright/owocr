@@ -125,6 +125,8 @@ def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
     global manga_ocr_model
     if not manga_ocr_model:
         logger.disable('manga_ocr')
+        from transformers import logging
+        logging.disable_progress_bar()
         from manga_ocr import ocr
         ocr.post_process = empty_post_process
         logger.info(f'Loading Manga OCR model')
@@ -2317,7 +2319,7 @@ class RapidOCR:
     def _to_generic_result(self, response, img_width, img_height):
         lines = []
 
-        if response.boxes:
+        if response.boxes is not None:
             for i in range(len(response.boxes)):
                 box = response.boxes[i]
                 text = response.txts[i]
