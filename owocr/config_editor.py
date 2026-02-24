@@ -262,8 +262,8 @@ class ConfigGUI:
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
             ],
             'OBS': [
-                ('obs_host', 'str', 'OBS WebSocket host'),
-                ('obs_port', 'int', 'OBS WebSocket port'),
+                ('obs_host', 'str', 'OBS websocket host'),
+                ('obs_port', 'int', 'OBS websocket port'),
                 ('obs_password', 'str', 'OBS password (leave blank if authentication is disabled)'),
                 ('obs_quality', 'int', 'JPEG quality for captured images (-1 for lossless PNG)'),
                 ('obs_source_override', 'str', 'Source name to capture from (leave blank for current scene, "preview" for preview scene)'),
