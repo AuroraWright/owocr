@@ -181,7 +181,7 @@ jobs:
           mkdir -p dist/dmg_contents
           mv dist/owocr.app dist/dmg_contents/
           ln -s /Applications dist/dmg_contents/Applications
-          hdiutil create -volname "owocr" -srcfolder dist/dmg_contents -ov -format UDZO dist/owocr-${{ inputs.name }}.dmg
+          hdiutil create -volname "owocr" -srcfolder dist/dmg_contents -ov -format ULMO dist/owocr-${{ inputs.name }}.dmg
           rm -rf dist/dmg_contents
       -
         id: codesign-dmg
