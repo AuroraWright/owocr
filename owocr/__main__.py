@@ -18,6 +18,8 @@ def main():
     multiprocessing.set_start_method('spawn')
     if sys.platform == 'darwin':
         os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+    elif sys.platform == 'win32':
+        os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
     from owocr.run import run
     run()
 
