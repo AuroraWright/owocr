@@ -2683,17 +2683,16 @@ class OutputResult:
             auto_pause_handler.allow_auto_pause.clear()
 
         if not result_data:
-            if skip_ocr:
+            engine_name = engine_instance.readable_name
+            if skip_ocr and engine_name == self.previous_engine_name:
                 res = True
                 result_data = self.previous_result_data
                 processing_time = self.previous_processing_time
-                engine_name = self.previous_engine_name
             else:
                 start_time = time.monotonic()
                 res, result_data = engine_instance(img_or_path)
                 end_time = time.monotonic()
                 processing_time = end_time - start_time
-                engine_name = engine_instance.readable_name
                 if filter_text and (not two_pass_processing_active) and res:
                     self.previous_image = img_or_path
                     self.previous_result_data = result_data
