@@ -2445,8 +2445,7 @@ class MeikiOCR:
             # each line becomes a paragraph.
             paragraph = Paragraph(
                 bounding_box=line_bbox,
-                lines=[line],
-                writing_direction='LEFT_TO_RIGHT' # meikiocr only supports horizontal text
+                lines=[line]
             )
             paragraphs.append(paragraph)
 

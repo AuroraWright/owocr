@@ -2545,6 +2545,7 @@ class OutputResult:
         self.wayland_use_wlclipboard = config.get_general('wayland_use_wlclipboard')
         self.filtering = TextFiltering()
         self.second_pass_thread = SecondPassThread()
+        self.previous_image = None
 
     def _post_process(self, text, strip_spaces):
         line_separator = '' if strip_spaces else self.line_separator
@@ -2629,22 +2630,39 @@ class OutputResult:
         two_pass_processing_active = False
         result_data = None
 
+        skip_ocr = False
+        if filter_text and self.previous_image:
+            if img_or_path.size == self.previous_image.size and img_or_path.mode == self.previous_image.mode and img_or_path.tobytes() == self.previous_image.tobytes():
+                skip_ocr = True
+
         if filter_text and self.screen_capture_periodic:
-            if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support:
+            if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support and not engine_instance.local:
                 two_pass_processing_active = True
                 engine_instance_2 = engine_instances[engine_index_2]
-                start_time = time.monotonic()
-                res2, result_data_2 = engine_instance_2(img_or_path)
-                end_time = time.monotonic()
+                engine_name = engine_instance_2.readable_name
+                if skip_ocr and engine_name == self.previous_engine_name:
+                    res2 = True
+                    result_data_2 = self.previous_result_data
+                    processing_time = self.previous_processing_time
+                else:
+                    start_time = time.monotonic()
+                    res2, result_data_2 = engine_instance_2(img_or_path)
+                    end_time = time.monotonic()
+                    processing_time = end_time - start_time
+                    if res2:
+                        self.previous_image = img_or_path
+                        self.previous_result_data = result_data_2
+                        self.previous_processing_time = processing_time
+                        self.previous_engine_name = engine_name
 
                 if not res2:
-                    logger.opt(colors=True).warning(f'<cyan>{engine_instance_2.readable_name}</> reported an error after {end_time - start_time:0.03f}s: {{}}', result_data_2)
+                    logger.opt(colors=True).warning(f'<cyan>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data_2)
                 else:
                     changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
-                            logger.opt(colors=True).info(f"<cyan>{engine_instance_2.readable_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {end_time - start_time:0.03f}s, re-OCRing with <cyan>{engine_instance.readable_name}</>")
+                            logger.opt(colors=True).info(f"<cyan>{engine_name}</> found {changed_lines_count + recovered_lines_count} changed line(s) in {processing_time:0.03f}s, re-OCRing with <cyan>{engine_instance.readable_name}</>")
 
                         if changed_regions_image:
                             img_or_path = changed_regions_image
@@ -2655,6 +2673,7 @@ class OutputResult:
                 second_pass_result = self.second_pass_thread.get_result()
                 if second_pass_result:
                     engine_name, res, result_data, processing_time, recovered_lines_count = second_pass_result
+                    skip_ocr = False
                 else:
                     return
             else:
@@ -2664,11 +2683,22 @@ class OutputResult:
             auto_pause_handler.allow_auto_pause.clear()
 
         if not result_data:
-            start_time = time.monotonic()
-            res, result_data = engine_instance(img_or_path)
-            end_time = time.monotonic()
-            processing_time = end_time - start_time
-            engine_name = engine_instance.readable_name
+            if skip_ocr:
+                res = True
+                result_data = self.previous_result_data
+                processing_time = self.previous_processing_time
+                engine_name = self.previous_engine_name
+            else:
+                start_time = time.monotonic()
+                res, result_data = engine_instance(img_or_path)
+                end_time = time.monotonic()
+                processing_time = end_time - start_time
+                engine_name = engine_instance.readable_name
+                if filter_text and (not two_pass_processing_active) and res:
+                    self.previous_image = img_or_path
+                    self.previous_result_data = result_data
+                    self.previous_processing_time = processing_time
+                    self.previous_engine_name = engine_name
             recovered_lines_count = 0
 
         if not res:
