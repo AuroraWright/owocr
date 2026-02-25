@@ -52,7 +52,10 @@ class HotkeyRecorder:
             except AttributeError:
                 pass
             if not key_str:
-                key_str = f'<{str(key)[4:]}>'
+                key_str = str(key)[4:]
+                if key_str.endswith('_l') or key_str.endswith('_r'):
+                    key_str = key_str[:-2]
+                key_str = f'<{key_str}>'
 
             self.current_pynput_keys.add(key_str)
             self.current_keys.add(key_str)
@@ -68,7 +71,10 @@ class HotkeyRecorder:
             except AttributeError:
                 pass
             if not key_str:
-                key_str = f'<{str(key)[4:]}>'
+                key_str = str(key)[4:]
+                if key_str.endswith('_l') or key_str.endswith('_r'):
+                    key_str = key_str[:-2]
+                key_str = f'<{key_str}>'
 
             self.current_pynput_keys.discard(key_str)
 
