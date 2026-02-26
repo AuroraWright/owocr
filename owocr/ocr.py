@@ -2628,7 +2628,7 @@ class NDLOCRLite:
         word_bounding_boxes=False,
         lines=True,
         line_bounding_boxes=True,
-        paragraphs=False,
+        paragraphs=True,
         paragraph_bounding_boxes=False
     )
 
@@ -2673,35 +2673,34 @@ class NDLOCRLite:
             logger.info('NDLOCR-Lite ready')
 
     def _convert_bbox(self, rect, img_width, img_height):
-        (x1, y1), (x4, y4), (x2, y2), (x3, y3) = [(float(x), float(y)) for x, y in rect]
+        (x1, y1), (x2, y2), (x3, y3), (x4, y4) = [(float(x), float(y)) for x, y in rect]
         return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
 
     def _to_generic_result(self, response, img_width, img_height):
-        lines = []
-        for l in response['contents'][0]:
-            text = l['text']
-            bbox = self._convert_bbox(l['boundingBox'], img_width, img_height)
+        paragraphs = []
+        for p in response['contents']:
+            lines = []
+            for l in p:
+                text = l['text']
+                bbox = self._convert_bbox(l['boundingBox'], img_width, img_height)
 
-            word = Word(
-                text=text,
-                bounding_box=bbox
-            )
-            words = [word]
+                word = Word(
+                    text=text,
+                    bounding_box=bbox
+                )
+                words = [word]
 
-            line = Line(
-                text=text,
-                bounding_box=bbox,
-                words=words
-            )
+                line = Line(
+                    text=text,
+                    bounding_box=bbox,
+                    words=words
+                )
 
-            lines.append(line)
+                lines.append(line)
 
-        if lines:
             p_bbox = merge_bounding_boxes(lines)
             paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
-            paragraphs = [paragraph]
-        else:
-            paragraphs = []
+            paragraphs.append(paragraph)
 
         return OcrResult(
             image_properties=ImageProperties(width=img_width, height=img_height),
@@ -2718,6 +2717,7 @@ class NDLOCRLite:
         ocr_result = self._to_generic_result(read_results, img.width, img.height)
 
         x = (True, ocr_result)
+        
 
         if is_path:
             img.close()
