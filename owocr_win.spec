@@ -19,6 +19,7 @@ datas = collect_data_files('rapidocr', include_py_files=False)
 datas += collect_data_files('unidic_lite', include_py_files=False)
 datas += collect_data_files('manga_ocr', include_py_files=True)
 datas += [( 'owocr/data', 'owocr/data' )]
+datas += [( 'ndlocr_lite/config', 'ndlocr_lite/config' )]
 hiddenimports = collect_submodules('pynputfix')
 hiddenimports += collect_submodules('pystrayfix')
 hiddenimports += collect_submodules('desktop_notifier')
