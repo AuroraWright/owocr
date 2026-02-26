@@ -950,7 +950,6 @@ class ChromeScreenAI:
             try:
                 subprocess.run(cmd, input=ensure_content, text=True, check=True, creationflags=creationflags)
             except:
-                raise
                 logger.warning('Unable to download screen AI files, Chrome Screen AI will not work!')
                 return False
 
