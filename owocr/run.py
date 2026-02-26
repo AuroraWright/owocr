@@ -107,15 +107,6 @@ class ClipboardThread(threading.Thread):
         self.delay_seconds = config.get_general('delay_seconds')
         self.last_update = time.monotonic()
 
-    def are_images_identical(self, img1, img2):
-        if None in (img1, img2):
-            return img1 == img2
-
-        img1 = np.array(img1)
-        img2 = np.array(img2)
-
-        return (img1.shape == img2.shape) and (img1 == img2).all()
-
     def normalize_macos_clipboard(self, img):
         ns_data = NSData.dataWithBytes_length_(img, len(img))
         ns_image = NSImage.alloc().initWithData_(ns_data)
@@ -223,7 +214,7 @@ class ClipboardThread(threading.Thread):
                             pass
                         else:
                             if (process_clipboard and isinstance(img, Image.Image) and \
-                                (not self.are_images_identical(img, old_img))):
+                                (not are_images_identical(img, old_img))):
                                 image_queue.put((img, False, None))
 
                     process_clipboard = True
@@ -2631,9 +2622,8 @@ class OutputResult:
         result_data = None
 
         skip_ocr = False
-        if filter_text and self.previous_image:
-            if img_or_path.size == self.previous_image.size and img_or_path.mode == self.previous_image.mode and img_or_path.tobytes() == self.previous_image.tobytes():
-                skip_ocr = True
+        if filter_text and are_images_identical(img_or_path, self.previous_image):
+            skip_ocr = True
 
         if filter_text and self.screen_capture_periodic:
             if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support and not engine_instance.local:
@@ -2805,6 +2795,13 @@ class StateHandlers:
             logger.info('Terminated!')
             terminated.set()
             terminate_selector_if_running()
+
+
+def are_images_identical(img1, img2):
+    if None in (img1, img2):
+        return False
+
+    return img1.size == img2.size and img1.mode == img2.mode and img1.tobytes() == img2.tobytes()
 
 
 def get_notification_urgency():
