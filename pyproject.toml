@@ -111,6 +111,14 @@ azure = [
     "azure-ai-vision-imageanalysis"
 ]
 
+ndlocrlite = [
+    "lxml",
+    "onnxruntime",
+    "pyyaml",
+    "networkx",
+    "tqdm"
+]
+
 [dependency-groups]
 binary = [
     "pyinstaller",
@@ -134,8 +142,9 @@ include-package-data = true
 version = {attr = "owocr.__version__"}
 
 [tool.setuptools.packages.find]
-include = ["owocr*", "comic_text_detector*"]
+include = ["owocr*", "comic_text_detector*", "ndlocr_lite*"]
 
 [tool.setuptools.package-data]
 owocr = ["data/*"]
 comic_text_detector = ["LICENSE"]
+ndlocr_lite = ["LICENCE", "LICENCE_DEPENDENCEIES", "config/*.yaml"]

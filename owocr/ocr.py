@@ -2610,3 +2610,115 @@ class OCRSpace:
 
     def _preprocess(self, img):
         return limit_image_size(img, self.max_byte_size)
+
+class NDLOCRLite:
+    name = 'ndlocrlite'
+    readable_name = 'NDLOCR-Lite'
+    key = 'h'
+    config_entry = None
+    available = False
+    local = True
+    manual_language = False
+    coordinate_support = True
+    threading_support = True
+    capabilities = EngineCapabilities(
+        symbols=False,
+        symbol_bounding_boxes=False,
+        words=False,
+        word_bounding_boxes=False,
+        lines=True,
+        line_bounding_boxes=True,
+        paragraphs=False,
+        paragraph_bounding_boxes=False
+    )
+
+    def _import_dependencies(self):
+        logger.info('Loading dependencies for NDLOCR-Lite')
+        with GlobalImport():
+            try:
+                from ndlocr_lite.ocr_api import OCRPipeline as NDLLite
+            except ImportError:
+                return False
+        return True
+
+    def __init__(self):
+        dependencies_available = self._import_dependencies()
+
+        if not dependencies_available:
+            logger.warning('Dependencies not available, NDLOCR-Lite will not work!')
+        else:
+            model_dir = Path.home() / '.config' / 'ndlocr_lite'
+            model_dir.mkdir(parents=True, exist_ok=True)
+
+            model_files = {
+                'deim-s-1024x1024.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/deim-s-1024x1024.onnx',
+                'parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx',
+                'parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx',
+                'parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx',
+            }
+
+            for filename, url in model_files.items():
+                file_path = model_dir / filename
+                if not file_path.exists():
+                    logger.info(f'Downloading {filename} to {file_path}')
+                    try:
+                        urllib.request.urlretrieve(url, str(file_path))
+                    except:
+                        logger.warning(f'Download failed for {filename}. NDLOCR-Lite will not work!')
+                        return
+
+            logger.info('Loading NDLOCR-Lite model')
+            self.model = NDLLite()
+            self.available = True
+            logger.info('NDLOCR-Lite ready')
+
+    def _convert_bbox(self, rect, img_width, img_height):
+        (x1, y1), (x4, y4), (x2, y2), (x3, y3) = [(float(x), float(y)) for x, y in rect]
+        return quad_to_bounding_box(x1, y1, x2, y2, x3, y3, x4, y4, img_width, img_height)
+
+    def _to_generic_result(self, response, img_width, img_height):
+        lines = []
+        for l in response['contents'][0]:
+            text = l['text']
+            bbox = self._convert_bbox(l['boundingBox'], img_width, img_height)
+
+            word = Word(
+                text=text,
+                bounding_box=bbox
+            )
+            words = [word]
+
+            line = Line(
+                text=text,
+                bounding_box=bbox,
+                words=words
+            )
+
+            lines.append(line)
+
+        if lines:
+            p_bbox = merge_bounding_boxes(lines)
+            paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+            paragraphs = [paragraph]
+        else:
+            paragraphs = []
+
+        return OcrResult(
+            image_properties=ImageProperties(width=img_width, height=img_height),
+            paragraphs=paragraphs,
+            engine_capabilities=self.capabilities
+        )
+
+    def __call__(self, img):
+        img, is_path = input_to_pil_image(img)
+        if not img:
+            return (False, 'Invalid image provided')
+
+        read_results = self.model.process_image(img)
+        ocr_result = self._to_generic_result(read_results, img.width, img.height)
+
+        x = (True, ocr_result)
+
+        if is_path:
+            img.close()
+        return x

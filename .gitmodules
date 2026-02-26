@@ -1,3 +1,6 @@
 [submodule "comic_text_detector"]
 	path = comic_text_detector
 	url = https://github.com/kha-white/comic-text-detector
+[submodule "ndlocr_lite"]
+	path = ndlocr_lite
+	url = https://github.com/AuroraWright/ndlocr-lite
