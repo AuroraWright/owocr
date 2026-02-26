@@ -144,6 +144,7 @@ jobs:
           security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
       -
         id: import-codesign
         name: "Import codesigning certificate into keychain"
@@ -181,7 +182,13 @@ jobs:
           mkdir -p dist/dmg_contents
           mv dist/owocr.app dist/dmg_contents/
           ln -s /Applications dist/dmg_contents/Applications
-          hdiutil create -volname "owocr" -srcfolder dist/dmg_contents -ov -format ULMO dist/owocr-${{ inputs.name }}.dmg
+          i=0
+          until hdiutil create -volname "owocr" -srcfolder dist/dmg_contents -ov -format ULMO dist/owocr-${{ inputs.name }}.dmg
+          do
+            if [ $i -eq 10 ]; then exit 1; fi
+            i=$((i+1))
+            sleep 1
+          done
           rm -rf dist/dmg_contents
       -
         id: codesign-dmg
