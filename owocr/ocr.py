@@ -2695,7 +2695,6 @@ class NDLOCRLite:
                     bounding_box=bbox,
                     words=words
                 )
-
                 lines.append(line)
 
             p_bbox = merge_bounding_boxes(lines)
@@ -2715,9 +2714,7 @@ class NDLOCRLite:
 
         read_results = self.model.process_image(img)
         ocr_result = self._to_generic_result(read_results, img.width, img.height)
-
         x = (True, ocr_result)
-        
 
         if is_path:
             img.close()
