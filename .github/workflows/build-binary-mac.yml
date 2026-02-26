@@ -28,7 +28,7 @@ name: "Build Mac binary"
           This is added as suffix to `pip install .`.
           If specified, make sure to include square brackets.
         type: string
-        default: "[faster-png,easyocr,rapidocr,meikiocr,mangaocr,lens,screenai,gvision,azure]"
+        default: "[faster-png,easyocr,rapidocr,meikiocr,mangaocr,ndlocrlite,lens,screenai,gvision,azure]"
     
     secrets:
       apple-certificate-base64:
