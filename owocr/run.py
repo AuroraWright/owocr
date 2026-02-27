@@ -15,7 +15,6 @@ import base64
 import urllib.request
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 from loguru import logger
 
