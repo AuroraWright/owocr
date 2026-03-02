@@ -2032,9 +2032,9 @@ class OneOCR:
         img = self._preprocess_windows(img)
         return pil_image_to_bytes(img, png_compression=1), img.width, img.height
 
-class AzureImageAnalysis:
+class AzureDocumentIntelligence:
     name = 'azure'
-    readable_name = 'Azure Image Analysis'
+    readable_name = 'Azure Document Intelligence'
     key = 'v'
     config_entry = 'azure'
     available = False
@@ -2049,16 +2049,15 @@ class AzureImageAnalysis:
         word_bounding_boxes=True,
         lines=True,
         line_bounding_boxes=True,
-        paragraphs=False,
-        paragraph_bounding_boxes=False
+        paragraphs=True,
+        paragraph_bounding_boxes=True
     )
 
     def _import_dependencies(self):
-        logger.info('Loading dependencies for Azure Image Analysis')
+        logger.info('Loading dependencies for Azure Document Intelligence')
         with GlobalImport():
             try:
-                from azure.ai.vision.imageanalysis import ImageAnalysisClient
-                from azure.ai.vision.imageanalysis.models import VisualFeatures
+                from azure.ai.documentintelligence import DocumentIntelligenceClient
                 from azure.core.credentials import AzureKeyCredential
                 from azure.core.exceptions import ServiceRequestError
             except ImportError:
@@ -2069,55 +2068,97 @@ class AzureImageAnalysis:
         dependencies_available = self._import_dependencies()
 
         if not dependencies_available:
-            logger.warning('Dependencies not available, Azure Image Analysis will not work!')
+            logger.warning('Dependencies not available, Azure Document Intelligence will not work!')
         else:
             logger.info(f'Parsing Azure credentials')
             try:
-                self.client = ImageAnalysisClient(config['endpoint'], AzureKeyCredential(config['api_key']))
+                self.client = DocumentIntelligenceClient(endpoint=config['endpoint'], credential=AzureKeyCredential(config['api_key']))
                 self.available = True
-                logger.info('Azure Image Analysis ready')
+                logger.info('Azure Document Intelligence ready')
             except:
-                logger.warning('Error parsing Azure credentials, Azure Image Analysis will not work!')
+                logger.warning(f'Error parsing Azure credentials, Azure Document Intelligence will not work!')
 
-    def _convert_bbox(self, rect, img_width, img_height):
+    def _convert_bbox(self, polygon, img_width, img_height):
         return quad_to_bounding_box(
-            rect[0]['x'], rect[0]['y'],
-            rect[1]['x'], rect[1]['y'],
-            rect[2]['x'], rect[2]['y'],
-            rect[3]['x'], rect[3]['y'],
+            polygon[0], polygon[1],
+            polygon[2], polygon[3],
+            polygon[4], polygon[5],
+            polygon[6], polygon[7],
             img_width, img_height
         )
 
-    def _to_generic_result(self, read_result, img_width, img_height):
+    def _create_line_from_azure_line(self, azure_line, all_words, word_used, img_width, img_height):
+        l_words = []
+        for idx, azure_word in enumerate(all_words):
+            if word_used[idx]:
+                continue
+
+            word_span = azure_word.span
+            word_in_line = any(
+                word_span.offset >= l_span.offset and (word_span.offset + word_span.length) <= (l_span.offset + l_span.length)
+                for l_span in azure_line.spans
+            )
+            if word_in_line:
+                word_used[idx] = True
+                w_bbox = self._convert_bbox(azure_word.polygon, img_width, img_height)
+                word = Word(text=azure_word.content, bounding_box=w_bbox)
+                l_words.append(word)
+
+        l_bbox = self._convert_bbox(azure_line.polygon, img_width, img_height)
+        return Line(
+            bounding_box=l_bbox,
+            words=l_words,
+            text=azure_line.content
+        )
+
+    def _to_generic_result(self, read_result, img_width, img_height, og_img_width, og_img_height):
+        all_lines = []
+        all_words = []
+        for page in read_result.pages:
+            if page.lines:
+                all_lines.extend(page.lines)
+            if page.words:
+                all_words.extend(page.words)
+
         paragraphs = []
-        if read_result.read:
-            for block in read_result.read.blocks:
-                lines = []
-                for azure_line in block.lines:
-                    l_bbox = self._convert_bbox(azure_line.bounding_polygon, img_width, img_height)
+        line_used = [False] * len(all_lines)
+        word_used = [False] * len(all_words)
 
-                    words = []
-                    for azure_word in azure_line.words:
-                        w_bbox = self._convert_bbox(azure_word.bounding_polygon, img_width, img_height)
-                        word = Word(
-                            text=azure_word.text,
-                            bounding_box=w_bbox
+        if read_result.paragraphs:
+            sorted_paragraphs = sorted(read_result.paragraphs, key=lambda p: p.spans[0].offset if p.spans else 0)
+            for azure_paragraph in sorted_paragraphs:
+                p_lines = []
+                for idx, azure_line in enumerate(all_lines):
+                    if line_used[idx]:
+                        continue
+
+                    line_in_paragraph = any(
+                        any(
+                            l_span.offset >= p_span.offset and (l_span.offset + l_span.length) <= (p_span.offset + p_span.length)
+                            for p_span in azure_paragraph.spans
                         )
-                        words.append(word)
-
-                    line = Line(
-                        bounding_box=l_bbox,
-                        words=words,
-                        text=azure_line.text
+                        for l_span in azure_line.spans
                     )
-                    lines.append(line)
+                    if line_in_paragraph:
+                        line_used[idx] = True
+                        p_lines.append(self._create_line_from_azure_line(azure_line, all_words, word_used, img_width, img_height))
 
-                p_bbox = merge_bounding_boxes(lines)
-                paragraph = Paragraph(bounding_box=p_bbox, lines=lines)
+                if p_lines:
+                    if azure_paragraph.bounding_regions:
+                        p_bbox = self._convert_bbox(azure_paragraph.bounding_regions[0].polygon, img_width, img_height)
+                    else:
+                        p_bbox = merge_bounding_boxes(p_lines)
+                    paragraph = Paragraph(bounding_box=p_bbox, lines=p_lines)
+                    paragraphs.append(paragraph)
+
+        for idx, azure_line in enumerate(all_lines):
+            if not line_used[idx]:
+                line = self._create_line_from_azure_line(azure_line, all_words, word_used, img_width, img_height)
+                paragraph = Paragraph(bounding_box=line.bounding_box, lines=[line])
                 paragraphs.append(paragraph)
 
         return OcrResult(
-            image_properties=ImageProperties(width=img_width, height=img_height),
+            image_properties=ImageProperties(width=og_img_width, height=og_img_height),
             paragraphs=paragraphs,
             engine_capabilities=self.capabilities
         )
@@ -2127,14 +2168,17 @@ class AzureImageAnalysis:
         if not img:
             return (False, 'Invalid image provided')
 
+        img_processed, img_width, img_height = self._preprocess(img)
+
         try:
-            read_result = self.client.analyze(image_data=self._preprocess(img), visual_features=[VisualFeatures.READ])
+            poller = self.client.begin_analyze_document('prebuilt-read', body=io.BytesIO(img_processed))
+            read_result = poller.result()
         except ServiceRequestError:
             return (False, 'Connection error!')
         except:
             return (False, 'Unknown error!')
 
-        ocr_result = self._to_generic_result(read_result, img.width, img.height)
+        ocr_result = self._to_generic_result(read_result, img_width, img_height, img.width, img.height)
         x = (True, ocr_result)
 
         if is_path:
@@ -2157,7 +2201,7 @@ class AzureImageAnalysis:
             new_h = int(img.height * resize_factor)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        return pil_image_to_bytes(img)
+        return pil_image_to_bytes(img), img.width, img.height
 
 class EasyOCR:
     name = 'easyocr'

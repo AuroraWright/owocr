@@ -207,7 +207,7 @@ class ConfigGUI:
         icon = PhotoImage(file=icon_path)
         self.root.iconphoto(True, icon)
 
-        width, height = 700, 700
+        width, height = 750, 750
         window_scale = 1.0
         if sys.platform == 'win32':
             hwnd = self.root.winfo_id()

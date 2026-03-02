@@ -448,15 +448,15 @@ class DirectoryWatcher(threading.Thread):
 
     def run(self):
         old_paths = set()
-        for path in self.path.iterdir():
-            if path.suffix.lower() in self.allowed_extensions:
-                old_paths.add(self.get_path_key(path))
-
+        first_check = True
         while not terminated.is_set():
             if paused.is_set():
                 sleep_time = 0.5
             else:
                 sleep_time = self.delay_seconds
+
+            if first_check or not paused.is_set():
+                first_check = False
                 for path in self.path.iterdir():
                     if path.suffix.lower() in self.allowed_extensions:
                         path_key = self.get_path_key(path)
