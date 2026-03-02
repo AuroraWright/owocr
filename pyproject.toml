@@ -108,7 +108,7 @@ screenai = [
 ]
 
 azure = [
-    "azure-ai-vision-imageanalysis"
+    "azure-ai-documentintelligence"
 ]
 
 ndlocrlite = [

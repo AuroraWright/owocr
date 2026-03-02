@@ -99,7 +99,7 @@ Then launch owocr with: `PYNPUT_BACKEND_KEYBOARD=uinput owocr -r screencapture` 
 - Google Lens - **Recommended** - Arguably the best OCR engine to date. → Terminal: install with `pip install "owocr[lens]"`, key: `l`
 - Bing - **Recommended** - Close second best. → Terminal key: `b`
 - Google Vision - You need a service account .json file named google_vision.json in `user directory/.config/` → Terminal: install with `pip install "owocr[gvision]"`, key: `g`
-- Azure Image Analysis - You need to specify an api key and an endpoint in the config file → Terminal: install with `pip install "owocr[azure]"`, key: `v`
+- Azure Document Intelligence - You need to specify an api key and an endpoint in the config file → Terminal: install with `pip install "owocr[azure]"`, key: `v`
 - OCRSpace - You need to specify an api key in the config file. → Terminal key: `o`
 
 ## Links
