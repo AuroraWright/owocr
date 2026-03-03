@@ -27,7 +27,7 @@ Easy to install Windows and macOS packages can be downloaded [here](https://gith
 
 ## Installation (terminal+Python, all operating systems)
 
-OwOCR has been tested on Python 3.11, 3.12 and 3.13. It can be installed with `pip install owocr` after you install Python. You also need to have one or more OCR engines, check the list below for instructions. I recommend installing at least Google Lens on any operating system, and OneOCR if you are on Windows. Bing is pre-installed, Apple Vision and Live Text come pre-installed on macOS.
+OwOCR has been tested on Python 3.11 to 3.14. It can be installed with `pip install owocr` after you install Python. You also need to have one or more OCR engines, check the list below for instructions. I recommend installing at least Google Lens on any operating system, and OneOCR if you are on Windows. Bing is pre-installed, Apple Vision and Live Text come pre-installed on macOS.
 
 ## Usage (terminal)
 

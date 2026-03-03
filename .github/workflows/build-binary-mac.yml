@@ -21,7 +21,7 @@ name: "Build Mac binary"
         description: |-
           The Python version to use for the job.
         type: string
-        default: "3.13"
+        default: "3.14"
       extras:
         description: |-
           The extras to include.
