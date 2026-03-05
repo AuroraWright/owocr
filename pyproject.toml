@@ -117,7 +117,8 @@ ndlocrlite = [
     "onnxruntime",
     "pyyaml",
     "networkx",
-    "tqdm"
+    "tqdm",
+    "opencv-python-headless"
 ]
 
 [dependency-groups]
