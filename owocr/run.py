@@ -42,6 +42,7 @@ def load_not_essential_libraries():
         import atexit
         import asyncio
         import socket
+        from datetime import datetime
         from dataclasses import asdict
 
         from PIL import ImageDraw, ImageFile
@@ -440,6 +441,7 @@ class DirectoryWatcher(threading.Thread):
         super().__init__(daemon=True)
         self.path = path
         self.delay_seconds = config.get_general('delay_seconds')
+        self.skip_existing = config.get_general('skip_existing_images')
         self.last_update = time.monotonic()
         self.allowed_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp')
 
@@ -456,15 +458,16 @@ class DirectoryWatcher(threading.Thread):
                 sleep_time = self.delay_seconds
 
             if first_check or not paused.is_set():
-                first_check = False
                 for path in self.path.iterdir():
                     if path.suffix.lower() in self.allowed_extensions:
                         path_key = self.get_path_key(path)
                         if path_key not in old_paths:
                             old_paths.add(path_key)
 
-                            if not paused.is_set():
+                            skip_add = paused.is_set() or (first_check and self.skip_existing)
+                            if not skip_add:
                                 image_queue.put((path, False, None))
+                first_check = False
 
             if not terminated.is_set():
                 time.sleep(sleep_time)
@@ -2605,14 +2608,20 @@ class OutputResult:
         else:
             pyperclip.copy(string)
 
-    def _send_output(self, string):
+    def _send_output(self, img_or_path, string):
         if self.write_to == 'websocket':
             websocket_server_thread.send_text(string)
         elif self.write_to == 'clipboard':
             self._copy_to_clipboard(string)
         else:
-            with Path(self.write_to).open('a', encoding='utf-8') as f:
-                f.write(string + '\n')
+            if isinstance(img_or_path, Path):
+                file_name = img_or_path.name
+            else:
+                file_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            extension = '.json' if self.json_output else '.txt'
+            file_path = Path(self.write_to) / (str(file_name) + extension)
+            with file_path.open('a', encoding='utf-8') as f:
+                f.write(string)
 
     def __call__(self, img_or_path, screen_capture_properties, filter_text, auto_pause, notify):
         engine_index_local = engine_index
@@ -2743,7 +2752,7 @@ class OutputResult:
         if notify and self.notifications:
             notifier.send(title='owocr', message='Text recognized: ' + output_text, urgency=get_notification_urgency())
 
-        self._send_output(output_string)
+        self._send_output(img_or_path, output_string)
 
         if auto_pause_handler and auto_pause:
             if not paused.is_set():
@@ -3100,9 +3109,16 @@ def run():
     if write_to in ('clipboard', 'websocket'):
         write_to_readable = write_to
     else:
-        if Path(write_to).suffix.lower() != '.txt':
-            exit_with_error('write_to must be either "websocket", "clipboard" or a path to a text file')
-        write_to_readable = f'file {write_to}'
+        path = Path(write_to)
+        if path.exists():
+            if path.is_file():
+                exit_with_error('write_to must be either "websocket", "clipboard" or a path to a directory')
+        else:
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except:
+                exit_with_error(f'Could not create directory {write_to}')
+        write_to_readable = f'directory {write_to}'
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
     if auto_pause != 0:

@@ -245,6 +245,7 @@ class ConfigGUI:
                 ('websocket_port', 'int', 'Websocket port'),
                 ('delay_seconds', 'float', 'Check the clipboard/directory every X seconds (ignored on Windows/Wayland)'),
                 ('delete_images', 'bool', 'Delete images from the folder after processing'),
+                ('skip_existing_images', 'bool', 'Ignore images already in the folder when owocr starts'),
                 ('pause_at_startup', 'bool', 'Pause when owocr starts'),
                 ('notifications', 'bool', 'Show OS notifications with the detected text'),
                 ('tray_icon', 'bool', 'Show an OS tray icon to change the engine, pause/unpause,\nchange the screen capture area selection, take a screenshot\nand launch this configuration'),
@@ -742,23 +743,13 @@ class ConfigGUI:
         hotkey_recorder.start_recording(self.root)
 
     def _open_picker(self, option, var):
-        if option in ['read_from', 'read_from_secondary']:
-            folder_path = filedialog.askdirectory(
-                title=f'Select directory for {option}',
-                mustexist=True
-            )
-            if folder_path:
-                var.set(folder_path)
-                self._update_general_state()
-        elif option == 'write_to':
-            file_path = filedialog.asksaveasfilename(
-                title='Select output text file',
-                defaultextension='.txt',
-                filetypes=[('Text files', '*.txt'), ('All files', '*.*')]
-            )
-            if file_path:
-                var.set(file_path)
-                self._update_general_state()
+        folder_path = filedialog.askdirectory(
+            title=f'Select directory for {option}',
+            mustexist=True
+        )
+        if folder_path:
+            var.set(folder_path)
+            self._update_general_state()
 
     def _update_ui_state(self):
         self._update_screen_capture_state()
@@ -796,10 +787,12 @@ class ConfigGUI:
         show_delay = self._should_show_delay_seconds()
         frame.grid() if show_delay else frame.grid_remove()
 
-        widget_info = self.widgets['delete_images']
-        frame = widget_info.get('frame')
-        show_delete = self._is_folder_file_selected('read_from') or self._is_folder_file_selected('read_from_secondary')
-        frame.grid() if show_delete else frame.grid_remove()
+        show_folder_options = self._is_folder_file_selected('read_from') or self._is_folder_file_selected('read_from_secondary')
+        folder_options = ['delete_images', 'skip_existing_images']
+        for option in folder_options: 
+            widget_info = self.widgets[option]
+            frame = widget_info.get('frame')
+            frame.grid() if show_folder_options else frame.grid_remove()
 
         dropdown_options = ['read_from', 'read_from_secondary', 'write_to']
         for option in dropdown_options:

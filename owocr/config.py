@@ -15,7 +15,7 @@ def str2bool(value):
 parser = argparse.ArgumentParser(prog='owocr', description=textwrap.dedent('''\
     Runs OCR in the background.
     It can read images copied to the system clipboard or placed in a directory, images sent via a websocket or a Unix domain socket, or directly capture a screen (or a portion of it) or a window.
-    Recognized text can be either saved to system clipboard, appended to a text file or sent via a websocket.
+    Recognized text can be either saved to system clipboard, written to a text/json file or sent via a websocket.
 '''))
 
 parser.add_argument('-r', '--read_from', type=str, default=argparse.SUPPRESS,
@@ -23,7 +23,7 @@ parser.add_argument('-r', '--read_from', type=str, default=argparse.SUPPRESS,
 parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.SUPPRESS,
                     help="Optional secondary source to read input images from. Same options as read_from, but they can't both be directory paths.")
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
-                    help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a text file.')
+                    help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a directory to save text/json files to.')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
                     help='OCR engine to use. Available: "mangaocr", "mangaocrs", "glens", "bing", "gvision", "screenai", "avision", "alivetext", "azure", "winrtocr", "oneocr", "ndlocrlite", "easyocr", "rapidocr", "ocrspace".')
 parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
@@ -32,6 +32,8 @@ parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=
                     help='Pause at startup.')
 parser.add_argument('-d', '--delete_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Delete image files after processing when reading from a directory.')
+parser.add_argument('-se', '--skip_existing_images', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help='Skip existing images at startup when reading from a directory.')
 parser.add_argument('-n', '--notifications', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Show an operating system notification with the detected text. Will be ignored when reading with screen capture and periodic screenshots.')
 parser.add_argument('-t', '--tray_icon', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
@@ -109,6 +111,7 @@ class Config:
         'pause_at_startup': False,
         'auto_pause' : 0,
         'delete_images': False,
+        'skip_existing_images': False,
         'engines': [],
         'delay_seconds': 0.5,
         'websocket_port': 7331,
