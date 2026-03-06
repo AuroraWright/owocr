@@ -3117,7 +3117,7 @@ def run():
             try:
                 path.mkdir(parents=True, exist_ok=True)
             except:
-                exit_with_error(f'Could not create directory {write_to}')
+                exit_with_error(f"Couldn't create directory {write_to}")
         write_to_readable = f'directory {write_to}'
 
     process_queue = (any(i in ('clipboard', 'websocket', 'unixsocket') for i in (read_from, read_from_secondary)) or read_from_path or screen_capture_on_combo)
