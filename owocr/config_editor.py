@@ -289,6 +289,7 @@ class ConfigGUI:
                 ('paragraph_separator', 'str', 'Custom paragraph separator (supports special characters like \\n for a newline)'),
                 ('reorder_text', 'bool', 'Regroup and reorder text. If disabled, text is shown as-is from the OCR engine'),
                 ('furigana_filter', 'bool', 'Filter out furigana lines for Japanese if reorder_text is enabled'),
+                ('merge_close_paragraphs', 'bool', 'If reorder_text is enabled, merge paragraphs that are close to each other in\nthe reading direction. Can be useful if there are gaps in the middle of lines,\nbut cause glitches in others')
             ],
             'Advanced': [
                 ('screen_capture_old_macos_api', 'bool', 'Use old macOS window screen capture API (faster, recommended for now)'),

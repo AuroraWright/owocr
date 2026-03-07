@@ -579,6 +579,7 @@ class TextFiltering:
         self.frame_stabilization = 0 if config.get_general('screen_capture_delay_seconds') == -1 else config.get_general('screen_capture_frame_stabilization')
         self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('furigana_filter')
+        self.merge_close_paragraphs = config.get_general('merge_close_paragraphs')
         self.debug_filtering = config.get_general('uwu')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
@@ -963,7 +964,7 @@ class TextFiltering:
         # Create new paragraphs
         new_paragraphs = self._create_paragraphs_from_lines(all_lines)
 
-        # Merge very close paragraphs
+        # Optionally merge very close paragraphs
         merged_paragraphs = self._merge_close_paragraphs(new_paragraphs)
 
         # Group paragraphs into rows
@@ -1283,7 +1284,7 @@ class TextFiltering:
         return filtered_lines
 
     def _merge_close_paragraphs(self, paragraphs):
-        if len(paragraphs) < 2:
+        if (not self.merge_close_paragraphs) or len(paragraphs) < 2:
             return [p['paragraph_obj'] for p in paragraphs]
 
         merged_paragraphs = []
@@ -1339,12 +1340,12 @@ class TextFiltering:
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
 
-            return vertical_distance <= 2 * character_size and horizontal_overlap > 0.4
+            return vertical_distance <= 2 * character_size and horizontal_overlap > 0.7
         else:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
-            return horizontal_distance <= 3 * character_size and vertical_overlap > 0.4
+            return horizontal_distance <= 3 * character_size and vertical_overlap > 0.7
 
     def _merge_multiple_paragraphs(self, paragraphs, is_vertical):
         merged_lines = []

@@ -76,6 +76,8 @@ parser.add_argument('-rt', '--reorder_text', type=str2bool, nargs='?', const=Tru
                     help='Regroup and reorder text instead of using paragraphs/order provided by the OCR engine.')
 parser.add_argument('-f', '--furigana_filter', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
                     help='Try to filter furigana lines for Japanese. Depends on reorder_text.')
+parser.add_argument('-mp', '--merge_close_paragraphs', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help='If reorder_text is enabled, merge paragraphs that are close to each other in the reading direction. Can be useful if there are gaps in the middle of lines, but cause glitches in others.')
 parser.add_argument('-of', '--output_format', type=str, default=argparse.SUPPRESS,
                     help='The output format for OCR results. Can be "text" (default) or "json" (to include coordinates).')
 parser.add_argument('-wp', '--websocket_port', type=int, default=argparse.SUPPRESS,
@@ -138,6 +140,7 @@ class Config:
         'paragraph_separator': ' ',
         'reorder_text': True,
         'furigana_filter': True,
+        'merge_close_paragraphs': False,
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',
         'screen_capture_old_macos_api': True,
