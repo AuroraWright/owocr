@@ -24,8 +24,10 @@ parser.add_argument('-rs', '--read_from_secondary', type=str, default=argparse.S
                     help="Optional secondary source to read input images from. Same options as read_from, but they can't both be directory paths.")
 parser.add_argument('-w', '--write_to', type=str, default=argparse.SUPPRESS,
                     help='Where to save recognized texts to. Can be either "clipboard", "websocket", or a path to a directory to write text/json files to.')
+parser.add_argument('-el', '--engines', type=str, default=argparse.SUPPRESS,
+                    help='OCR engines to load, separated by commas. Available: "mangaocr", "mangaocrs", "glens", "bing", "gvision", "screenai", "avision", "alivetext", "azure", "winrtocr", "oneocr", "ndlocrlite", "easyocr", "rapidocr", "ocrspace".')
 parser.add_argument('-e', '--engine', type=str, default=argparse.SUPPRESS,
-                    help='OCR engine to use. Available: "mangaocr", "mangaocrs", "glens", "bing", "gvision", "screenai", "avision", "alivetext", "azure", "winrtocr", "oneocr", "ndlocrlite", "easyocr", "rapidocr", "ocrspace".')
+                    help='OCR engine to use.')
 parser.add_argument('-es', '--engine_secondary', type=str, default=argparse.SUPPRESS,
                     help='Local OCR engine to use for two-pass screen capture processing.')
 parser.add_argument('-p', '--pause_at_startup', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
