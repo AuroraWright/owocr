@@ -2635,7 +2635,7 @@ class OutputResult:
             skip_ocr = True
 
         if filter_text and self.screen_capture_periodic:
-            if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support and not engine_instance.local:
+            if engine_index_2 != -1 and engine_index_2 != engine_index_local and engine_instance.threading_support:
                 two_pass_processing_active = True
                 engine_instance_2 = engine_instances[engine_index_2]
                 engine_name = engine_instance_2.readable_name
