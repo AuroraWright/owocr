@@ -944,14 +944,21 @@ class TextFiltering:
                 if line.text is None:
                     line.text = self.get_line_text(line)
 
-                if paragraph.writing_direction:
+                if line.writing_direction:
+                    is_vertical = line.writing_direction == 'TOP_TO_BOTTOM'
+                elif paragraph.writing_direction:
                     is_vertical = paragraph.writing_direction == 'TOP_TO_BOTTOM'
                 else:
                     is_vertical = self._is_line_vertical(line, ocr_result.image_properties)
 
+                line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
+                char_count = len(line.text)
+                character_size = 0.0 if char_count == 0 else line_dimension / char_count
+
                 all_lines.append({
                     'line_obj': line,
-                    'is_vertical': is_vertical
+                    'is_vertical': is_vertical,
+                    'character_size': character_size
                 })
 
         if not all_lines:
@@ -959,7 +966,14 @@ class TextFiltering:
 
         if self.debug_filtering:
             for p in ocr_result.paragraphs:
-                logger.opt(colors=True).debug("<red>Engine paragraph: '{}' writing_direction: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction)
+                lines_repr = []
+                for line in p.lines:
+                    line_text = self.get_line_text(line)
+                    if line.writing_direction:
+                        lines_repr.append(f'{line_text} writing_direction: {line.writing_direction}')
+                    else:
+                        lines_repr.append(line_text)
+                logger.opt(colors=True).debug("<red>Engine paragraph: '{}' writing_direction: '{}'</>", lines_repr, p.writing_direction)
 
         # Create new paragraphs
         new_paragraphs = self._create_paragraphs_from_lines(all_lines)
@@ -1064,46 +1078,42 @@ class TextFiltering:
         )
 
         if not merging_step:
-            character_size = self._calculate_character_size(lines, is_vertical)
+            if is_vertical:
+                largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.width)
+            else:
+                largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.height)
 
             return {
                 'paragraph_obj': paragraph,
-                'character_size': character_size
+                'character_size': largest_line['character_size']
             }
 
         return paragraph
 
-    def _calculate_character_size(self, lines, is_vertical):
-        if is_vertical:
-            largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.width)
-            line_dimension = largest_line['line_obj'].bounding_box.height
-        else:
-            largest_line = max(lines, key=lambda x: x['line_obj'].bounding_box.height)
-            line_dimension = largest_line['line_obj'].bounding_box.width
-
-        char_count = len(self.get_line_text(largest_line['line_obj']))
-
-        if char_count == 0:
-            return 0.0
-
-        return line_dimension / char_count
-
     def _should_group_in_same_paragraph(self, line1, line2, is_vertical):
         bbox1 = line1['line_obj'].bounding_box
         bbox2 = line2['line_obj'].bounding_box
+        
+        character_size = max(line1['character_size'], line2['character_size'])
 
         if is_vertical:
-            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
+            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
             line_width = max(bbox1.width, bbox2.width)
+            min_character_size = min(line1['character_size'], line2['character_size'])
+            character_size_ratio = min_character_size / character_size
 
-            return vertical_overlap > 0.1 and horizontal_distance < line_width * 2
+            return horizontal_distance < line_width * 2 and \
+                ((abs(bbox1.top - bbox2.top) < (2 * character_size)) or (vertical_overlap > 0.4 and character_size_ratio < 0.85))
         else:
-            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
-            line_height = max(bbox1.height, bbox2.height)
+            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+            max_line_height = max(bbox1.height, bbox2.height)
+            min_line_height = min(bbox1.height, bbox2.height)
+            line_height_ratio = min_line_height / max_line_height
 
-            return horizontal_overlap > 0.1 and vertical_distance < line_height * 2
+            return vertical_distance < max_line_height * 2 and \
+                ((abs(bbox1.left - bbox2.left) < (2 * character_size)) or (horizontal_overlap > 0.4 and line_height_ratio < 0.85))
 
     def _merge_overlapping_lines(self, lines, is_vertical):
         if len(lines) < 2:
@@ -1183,9 +1193,17 @@ class TextFiltering:
             text=text_sorted
         )
 
+        no_space_size = 0.0
+        for line in lines:
+            line_dimension = line['line_obj'].bounding_box.height if is_vertical else line['line_obj'].bounding_box.width
+            no_space_size += line_dimension
+
+        character_size = 0.0 if not text_sorted else no_space_size / len(text_sorted)
+
         return {
             'line_obj': merged_line,
-            'is_vertical': is_vertical
+            'is_vertical': is_vertical,
+            'character_size': character_size
         }
 
     def _should_merge_lines(self, line1, line2, is_vertical):
@@ -1207,11 +1225,13 @@ class TextFiltering:
     def _furigana_filter(self, lines, is_vertical):
         filtered_lines = []
 
+        normalized_text = []
         for line in lines:
             line_text = self.get_line_text(line['line_obj'])
             normalized_line_text = ''.join(self.cj_regex.findall(line_text))
-            line['normalized_text'] = normalized_line_text
-        if all(not line['normalized_text'] for line in lines):
+            normalized_text.append(normalized_line_text)
+
+        if all(not text for text in normalized_text):
             return lines
 
         for i, line in enumerate(lines):
@@ -1225,14 +1245,14 @@ class TextFiltering:
             next_line_text = self.get_line_text(next_line['line_obj'])
             next_line_bbox = next_line['line_obj'].bounding_box
 
-            if not (line['normalized_text'] and next_line['normalized_text']):
+            if not (normalized_text[i] and normalized_text[i + 1]):
                 filtered_lines.append(line)
                 continue
-            has_kanji = self.kanji_regex.search(line['normalized_text'])
+            has_kanji = self.kanji_regex.search(normalized_text[i])
             if has_kanji:
                 filtered_lines.append(line)
                 continue
-            next_has_kanji = self.kanji_regex.search(next_line['normalized_text'])
+            next_has_kanji = self.kanji_regex.search(normalized_text[i + 1])
             if not next_has_kanji:
                 filtered_lines.append(line)
                 continue
@@ -1267,13 +1287,13 @@ class TextFiltering:
                 continue
 
             if is_vertical:
-                width_threshold = next_line_bbox.width * 0.77
-                passed_size_check = current_line_bbox.width < width_threshold
-                logger.opt(colors=True).debug(f"<magenta>Vertical size (width): kanji '{next_line_bbox.width:.4f}' kana '{current_line_bbox.width:.4f}' max kana '{width_threshold:.4f}'</>")
+                height_threshold = next_line['character_size'] * 0.85
+                passed_size_check = line['character_size'] < height_threshold
+                logger.opt(colors=True).debug(f"<magenta>Vertical height: kanji '{next_line['character_size']:.4f}' kana '{line['character_size']:.4f}' max kana '{height_threshold:.4f}'</>")
             else:
                 height_threshold = next_line_bbox.height * 0.85
                 passed_size_check = current_line_bbox.height < height_threshold
-                logger.opt(colors=True).debug(f"<magenta>Horizontal size (height): kanji '{next_line_bbox.height:.4f}' kana '{current_line_bbox.height:.4f}' max kana '{height_threshold:.4f}'</>")
+                logger.opt(colors=True).debug(f"<magenta>Horizontal height: kanji '{next_line_bbox.height:.4f}' kana '{current_line_bbox.height:.4f}' max kana '{height_threshold:.4f}'</>")
 
             if not passed_size_check:
                 filtered_lines.append(line)
@@ -2920,7 +2940,7 @@ def get_current_version():
 
 def get_latest_version():
     try:
-        with urllib.request.urlopen(f'https://pypi.org/pypi/owocr/json', timeout=5) as response:
+        with urllib.request.urlopen('https://pypi.org/pypi/owocr/json', timeout=5) as response:
             data = json.load(response)
             return data['info']['version']
     except:

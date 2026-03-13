@@ -79,6 +79,7 @@ class Line:
     bounding_box: BoundingBox
     words: List[Word] = field(default_factory=list)
     text: Optional[str] = None # Optional: The entire text line, as reported by the OCR engine
+    writing_direction: Optional[str] = None # Optional: e.g., "LEFT_TO_RIGHT"
 
 @dataclass
 class Paragraph:
@@ -978,7 +979,6 @@ class ChromeScreenAI:
 
     def _to_generic_result(self, response, img_width, img_height, og_img_width, og_img_height):
         lines_by_block = {}
-        directions_by_block = {}
         for l in response.get('lines', []):
             block_id = l.get('block_id', 0)
             words = []
@@ -1001,15 +1001,18 @@ class ChromeScreenAI:
                 words.append(word)
 
             l_bbox = l.get('bounding_box', {})
+            writing_direction = l.get('direction')
+            if writing_direction:
+                writing_direction = writing_direction.replace('DIRECTION_', '')
+
             line = Line(
                 text=l.get('utf8_string', ''),
                 bounding_box=self._normalize_bbox(l_bbox, img_width, img_height),
                 words=words,
+                writing_direction=writing_direction
             )
             if block_id not in lines_by_block:
                 lines_by_block[block_id] = []
-            if block_id not in directions_by_block:
-                directions_by_block[block_id] = l.get('direction')
             lines_by_block[block_id].append(line)
 
         paragraphs = []
@@ -1017,14 +1020,10 @@ class ChromeScreenAI:
             lines = lines_by_block[block_id]
 
             p_bbox = merge_bounding_boxes(lines)
-            writing_direction = directions_by_block[block_id]
-            if writing_direction:
-                writing_direction = writing_direction.replace('DIRECTION_', '')
 
             paragraph = Paragraph(
                 bounding_box=p_bbox,
-                lines=lines,
-                writing_direction=writing_direction
+                lines=lines
             )
             paragraphs.append(paragraph)
 
