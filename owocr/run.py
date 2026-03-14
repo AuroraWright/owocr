@@ -1113,8 +1113,12 @@ class TextFiltering:
             if not (horizontal_distance < line_width * 2):
                 return False
 
-            if abs(bbox1.top - bbox2.top) < (2 * character_size):
-                return True
+            if bbox1.top <= bbox2.top:
+                if (bbox2.top - bbox1.top) < character_size:
+                    return True
+            else:
+                if (bbox1.top - bbox2.top) < (2 * character_size):
+                    return True
 
             if likely_furigana:
                 vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
@@ -1128,8 +1132,12 @@ class TextFiltering:
             if not (vertical_distance < max_line_height * 2):
                 return False
 
-            if abs(bbox1.left - bbox2.left) < (2 * character_size):
-                return True
+            if bbox1.top <= bbox2.top:
+                if (bbox2.left - bbox1.left) < character_size:
+                    return True
+            else:
+                if (bbox1.left - bbox2.left) < (2 * character_size):
+                    return True
 
             if likely_furigana:
                 horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
