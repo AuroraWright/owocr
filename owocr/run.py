@@ -983,6 +983,26 @@ class TextFiltering:
                 if not line.text:
                     continue
 
+                if self.furigana_filter:
+                    normalized_text = ''.join(self.cj_regex.findall(line.text))
+                    has_jp_text = normalized_text != ''
+                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
+                else:
+                    has_jp_text = False
+                    has_kanji = False
+
+                if filter_text:
+                    if self.language == 'ja':
+                        if not has_jp_text:
+                            continue
+                    elif self.language == 'zh':
+                        if not has_kanji:
+                            continue
+                    else:
+                        normalized_text = self.regex.search(line.text)
+                        if not normalized_text:
+                            continue
+
                 if line.writing_direction:
                     is_vertical = line.writing_direction == 'TOP_TO_BOTTOM'
                     is_rtl = line.writing_direction == 'RIGHT_TO_LEFT'
@@ -996,22 +1016,6 @@ class TextFiltering:
                 line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
                 char_count = len(line.text)
                 character_size = line_dimension / char_count
-                if self.furigana_filter:
-                    normalized_text = ''.join(self.cj_regex.findall(line.text))
-                    has_jp_text = normalized_text != ''
-                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
-                else:
-                    has_jp_text = False
-                    has_kanji = False
-
-                if filter_text:
-                    if self.language == 'ja':
-                        if not has_jp_text:
-                            continue
-                    else:
-                        normalized_text = self.regex.search(line.text)
-                        if not normalized_text:
-                            continue
 
                 lines.append({
                     'line_obj': line,
@@ -1393,11 +1397,16 @@ class TextFiltering:
                 else:
                     component_paragraphs = [paragraphs[i] for i in original_indices]
                     if self.debug_filtering:
-                        logger.opt(colors=True).debug("<green>Merged paragraphs vertical: '{}'</>", is_vertical)
+                        logger.opt(colors=True).debug("<green>Trying to merge paragraphs vertical: '{}'</>", is_vertical)
                         for p in component_paragraphs:
                             logger.opt(colors=True).debug("<green>    Paragraph: '{}'</>", [self.get_line_text(line) for line in p['paragraph_obj'].lines])
                     merged_paragraph = self._merge_multiple_paragraphs(component_paragraphs, is_vertical)
-                    merged_paragraphs.append(merged_paragraph)
+                    if merged_paragraph:
+                        if self.debug_filtering:
+                            logger.opt(colors=True).debug('<green>Merged paragraphs!</>', is_vertical)
+                        merged_paragraphs.append(merged_paragraph)
+                    else:
+                        merged_paragraphs.extend([p['paragraph_obj'] for p in component_paragraphs])
 
         _merge_paragraphs(True)
         _merge_paragraphs(False)
@@ -1436,12 +1445,14 @@ class TextFiltering:
                     'has_jp_text': False,
                     'has_kanji': False
                 })
-
-        return self._create_paragraph_from_lines(merged_lines, is_vertical, True)
+        merged_paragraph = self._create_paragraph_from_lines(merged_lines, is_vertical, True)
+        if len(merged_paragraph.lines) != len(merged_lines):
+            return merged_paragraph
+        return None
 
     def _group_paragraphs_into_rows(self, paragraphs):
         if len(paragraphs) < 2:
-            return [{'paragraphs': paragraphs, 'is_vertical': False}]
+            return [{'paragraphs': paragraphs, 'is_vertical_or_rtl': False}]
 
         components = self._find_connected_components(
             items=paragraphs,
