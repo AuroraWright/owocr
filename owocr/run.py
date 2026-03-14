@@ -936,7 +936,7 @@ class TextFiltering:
 
         return current_line
 
-    def order_paragraphs_and_lines(self, ocr_result):
+    def order_paragraphs_and_lines(self, ocr_result, filter_text):
         if self.debug_filtering:
             for p in ocr_result.paragraphs:
                 lines_repr = []
@@ -949,7 +949,7 @@ class TextFiltering:
                 logger.opt(colors=True).debug("<red>Engine paragraph: '{}' writing_direction: '{}'</>", lines_repr, p.writing_direction)
 
         # Wrap lines into dicts with extra metadata needed for reordering
-        lines = self._create_line_dicts(ocr_result)
+        lines = self._create_line_dicts(ocr_result, filter_text)
         if not lines:
             return ocr_result
 
@@ -974,7 +974,7 @@ class TextFiltering:
             paragraphs=final_paragraphs
         )
 
-    def _create_line_dicts(self, ocr_result):
+    def _create_line_dicts(self, ocr_result, filter_text):
         lines = []
         for paragraph in ocr_result.paragraphs:
             for line in paragraph.lines:
@@ -1003,6 +1003,15 @@ class TextFiltering:
                 else:
                     has_jp_text = False
                     has_kanji = False
+
+                if filter_text:
+                    if self.language == 'ja':
+                        if not has_jp_text:
+                            continue
+                    else:
+                        normalized_text = self.regex.search(line.text)
+                        if not normalized_text:
+                            continue
 
                 lines.append({
                     'line_obj': line,
@@ -1152,7 +1161,7 @@ class TextFiltering:
                 coord1 = bbox1.left
                 coord2 = bbox2.left
 
-            if bbox1.top <= bbox2.top:
+            if coord1 <= coord2:
                 if (coord2 - coord1) < character_size:
                     return True
             else:
@@ -2792,7 +2801,7 @@ class OutputResult:
                     result_data.image_properties.window_x = int(window_x)
                     result_data.image_properties.window_y = int(window_y)
             if self.reorder_text:
-                result_data = self.filtering.order_paragraphs_and_lines(result_data)
+                result_data = self.filtering.order_paragraphs_and_lines(result_data, filter_text)
             result_data_text = self._extract_lines_from_result(result_data)
         else:
             result_data_text = result_data
