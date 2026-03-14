@@ -954,11 +954,20 @@ class TextFiltering:
                 line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
                 char_count = len(line.text)
                 character_size = 0.0 if char_count == 0 else line_dimension / char_count
+                if self.furigana_filter:
+                    normalized_text = ''.join(self.cj_regex.findall(line.text))
+                    has_jp_text = normalized_text != ''
+                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
+                else:
+                    has_jp_text = False
+                    has_kanji = False
 
                 all_lines.append({
                     'line_obj': line,
                     'is_vertical': is_vertical,
-                    'character_size': character_size
+                    'character_size': character_size,
+                    'has_jp_text': has_jp_text,
+                    'has_kanji': has_kanji
                 })
 
         if not all_lines:
@@ -1093,27 +1102,41 @@ class TextFiltering:
     def _should_group_in_same_paragraph(self, line1, line2, is_vertical):
         bbox1 = line1['line_obj'].bounding_box
         bbox2 = line2['line_obj'].bounding_box
-        
+
         character_size = max(line1['character_size'], line2['character_size'])
+        likely_furigana = (line1['has_jp_text'] and not line1['has_kanji']) and line2['has_kanji']
 
         if is_vertical:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
-            vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
             line_width = max(bbox1.width, bbox2.width)
-            min_character_size = min(line1['character_size'], line2['character_size'])
-            character_size_ratio = min_character_size / character_size
 
-            return horizontal_distance < line_width * 2 and \
-                ((abs(bbox1.top - bbox2.top) < (2 * character_size)) or (vertical_overlap > 0.4 and character_size_ratio < 0.85))
+            if not (horizontal_distance < line_width * 2):
+                return False
+
+            if abs(bbox1.top - bbox2.top) < (2 * character_size):
+                return True
+
+            if likely_furigana:
+                vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
+                character_size_ratio = line1['character_size'] / line2['character_size']
+                if vertical_overlap > 0.4 and character_size_ratio < 0.85:
+                    return True
         else:
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
-            horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
             max_line_height = max(bbox1.height, bbox2.height)
-            min_line_height = min(bbox1.height, bbox2.height)
-            line_height_ratio = min_line_height / max_line_height
 
-            return vertical_distance < max_line_height * 2 and \
-                ((abs(bbox1.left - bbox2.left) < (2 * character_size)) or (horizontal_overlap > 0.4 and line_height_ratio < 0.85))
+            if not (vertical_distance < max_line_height * 2):
+                return False
+
+            if abs(bbox1.left - bbox2.left) < (2 * character_size):
+                return True
+
+            if likely_furigana:
+                horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
+                line_height_ratio = bbox1.height / bbox2.height
+                if horizontal_overlap > 0.4 and line_height_ratio < 0.85:
+                    return True
+        return False
 
     def _merge_overlapping_lines(self, lines, is_vertical):
         if len(lines) < 2:
@@ -1164,12 +1187,19 @@ class TextFiltering:
         lines = sorted(lines, key=sort_key)
 
         text_sorted = ''
+        words_sorted = []
+        no_space_size = 0.0
+        has_jp_text = False
+        has_kanji = False
         for line in lines:
             text_sorted += line['line_obj'].text
-
-        words_sorted = []
-        for line in lines:
             words_sorted.extend(line['line_obj'].words)
+            line_dimension = line['line_obj'].bounding_box.height if is_vertical else line['line_obj'].bounding_box.width
+            no_space_size += line_dimension
+            if line['has_jp_text']:
+                has_jp_text = True
+            if line['has_kanji']:
+                has_kanji = True
 
         # Calculate new bounding box that encompasses all lines
         bboxes = [line['line_obj'].bounding_box for line in lines]
@@ -1193,17 +1223,14 @@ class TextFiltering:
             text=text_sorted
         )
 
-        no_space_size = 0.0
-        for line in lines:
-            line_dimension = line['line_obj'].bounding_box.height if is_vertical else line['line_obj'].bounding_box.width
-            no_space_size += line_dimension
-
         character_size = 0.0 if not text_sorted else no_space_size / len(text_sorted)
 
         return {
             'line_obj': merged_line,
             'is_vertical': is_vertical,
-            'character_size': character_size
+            'character_size': character_size,
+            'has_jp_text': has_jp_text,
+            'has_kanji': has_kanji
         }
 
     def _should_merge_lines(self, line1, line2, is_vertical):
@@ -1223,17 +1250,10 @@ class TextFiltering:
             return vertical_overlap > 0.7 and horizontal_overlap < 0.4
 
     def _furigana_filter(self, lines, is_vertical):
-        filtered_lines = []
-
-        normalized_text = []
-        for line in lines:
-            line_text = self.get_line_text(line['line_obj'])
-            normalized_line_text = ''.join(self.cj_regex.findall(line_text))
-            normalized_text.append(normalized_line_text)
-
-        if all(not text for text in normalized_text):
+        if all(not line['has_jp_text'] for line in lines):
             return lines
 
+        filtered_lines = []
         for i, line in enumerate(lines):
             if i >= len(lines) - 1:
                 filtered_lines.append(line)
@@ -1245,15 +1265,13 @@ class TextFiltering:
             next_line_text = self.get_line_text(next_line['line_obj'])
             next_line_bbox = next_line['line_obj'].bounding_box
 
-            if not (normalized_text[i] and normalized_text[i + 1]):
+            if not (line['has_jp_text'] and next_line['has_jp_text']):
                 filtered_lines.append(line)
                 continue
-            has_kanji = self.kanji_regex.search(normalized_text[i])
-            if has_kanji:
+            if line['has_kanji']:
                 filtered_lines.append(line)
                 continue
-            next_has_kanji = self.kanji_regex.search(normalized_text[i + 1])
-            if not next_has_kanji:
+            if not next_line['has_kanji']:
                 filtered_lines.append(line)
                 continue
 
