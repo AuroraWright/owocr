@@ -937,46 +937,6 @@ class TextFiltering:
         return current_line
 
     def order_paragraphs_and_lines(self, ocr_result):
-        # Extract all lines and determine their orientation
-        all_lines = []
-        for paragraph in ocr_result.paragraphs:
-            for line in paragraph.lines:
-                if line.text is None:
-                    line.text = self.get_line_text(line)
-
-                if line.writing_direction:
-                    is_vertical = line.writing_direction == 'TOP_TO_BOTTOM'
-                    is_rtl = line.writing_direction == 'RIGHT_TO_LEFT'
-                elif paragraph.writing_direction:
-                    is_vertical = paragraph.writing_direction == 'TOP_TO_BOTTOM'
-                    is_rtl = paragraph.writing_direction == 'RIGHT_TO_LEFT'
-                else:
-                    is_vertical = self._is_line_vertical(line, ocr_result.image_properties)
-                    is_rtl = (not is_vertical) and self.language in ('ar', 'he')
-
-                line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
-                char_count = len(line.text)
-                character_size = 0.0 if char_count == 0 else line_dimension / char_count
-                if self.furigana_filter:
-                    normalized_text = ''.join(self.cj_regex.findall(line.text))
-                    has_jp_text = normalized_text != ''
-                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
-                else:
-                    has_jp_text = False
-                    has_kanji = False
-
-                all_lines.append({
-                    'line_obj': line,
-                    'is_vertical': is_vertical,
-                    'is_rtl': is_rtl,
-                    'character_size': character_size,
-                    'has_jp_text': has_jp_text,
-                    'has_kanji': has_kanji
-                })
-
-        if not all_lines:
-            return ocr_result
-
         if self.debug_filtering:
             for p in ocr_result.paragraphs:
                 lines_repr = []
@@ -988,11 +948,16 @@ class TextFiltering:
                         lines_repr.append(line_text)
                 logger.opt(colors=True).debug("<red>Engine paragraph: '{}' writing_direction: '{}'</>", lines_repr, p.writing_direction)
 
+        # Wrap lines into dicts with extra metadata needed for reordering
+        lines = self._create_line_dicts(ocr_result)
+        if not lines:
+            return ocr_result
+
         # Create new paragraphs
-        new_paragraphs = self._create_paragraphs_from_lines(all_lines)
+        paragraphs = self._create_paragraphs_from_lines(lines)
 
         # Optionally merge very close paragraphs
-        merged_paragraphs = self._merge_close_paragraphs(new_paragraphs)
+        merged_paragraphs = self._merge_close_paragraphs(paragraphs)
 
         # Group paragraphs into rows
         rows = self._group_paragraphs_into_rows(merged_paragraphs)
@@ -1008,6 +973,47 @@ class TextFiltering:
             engine_capabilities=ocr_result.engine_capabilities,
             paragraphs=final_paragraphs
         )
+
+    def _create_line_dicts(self, ocr_result):
+        lines = []
+        for paragraph in ocr_result.paragraphs:
+            for line in paragraph.lines:
+                if line.text is None:
+                    line.text = self.get_line_text(line)
+                if not line.text:
+                    continue
+
+                if line.writing_direction:
+                    is_vertical = line.writing_direction == 'TOP_TO_BOTTOM'
+                    is_rtl = line.writing_direction == 'RIGHT_TO_LEFT'
+                elif paragraph.writing_direction:
+                    is_vertical = paragraph.writing_direction == 'TOP_TO_BOTTOM'
+                    is_rtl = paragraph.writing_direction == 'RIGHT_TO_LEFT'
+                else:
+                    is_vertical = self._is_line_vertical(line, ocr_result.image_properties)
+                    is_rtl = (not is_vertical) and self.language in ('ar', 'he')
+
+                line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
+                char_count = len(line.text)
+                character_size = line_dimension / char_count
+                if self.furigana_filter:
+                    normalized_text = ''.join(self.cj_regex.findall(line.text))
+                    has_jp_text = normalized_text != ''
+                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
+                else:
+                    has_jp_text = False
+                    has_kanji = False
+
+                lines.append({
+                    'line_obj': line,
+                    'is_vertical': is_vertical,
+                    'is_rtl': is_rtl,
+                    'character_size': character_size,
+                    'has_jp_text': has_jp_text,
+                    'has_kanji': has_kanji
+                })
+
+        return lines
 
     def _create_paragraphs_from_lines(self, lines):
         grouped = set()
@@ -1210,21 +1216,21 @@ class TextFiltering:
 
         text_sorted = ''
         words_sorted = []
+        bboxes = []
         no_space_size = 0.0
         has_jp_text = False
         has_kanji = False
         for line in lines:
             text_sorted += line['line_obj'].text
             words_sorted.extend(line['line_obj'].words)
+            bboxes.append(line['line_obj'].bounding_box)
             line_dimension = line['line_obj'].bounding_box.height if is_vertical else line['line_obj'].bounding_box.width
             no_space_size += line_dimension
             if line['has_jp_text']:
                 has_jp_text = True
             if line['has_kanji']:
                 has_kanji = True
-
-        # Calculate new bounding box that encompasses all lines
-        bboxes = [line['line_obj'].bounding_box for line in lines]
+        character_size = no_space_size / len(text_sorted)
 
         left = min(bbox.left for bbox in bboxes)
         right = max(bbox.right for bbox in bboxes)
@@ -1244,8 +1250,6 @@ class TextFiltering:
             words=words_sorted,
             text=text_sorted
         )
-
-        character_size = 0.0 if not text_sorted else no_space_size / len(text_sorted)
 
         return {
             'line_obj': merged_line,
@@ -1440,12 +1444,12 @@ class TextFiltering:
         rows = []
         for component in components:
             row_paragraphs = [paragraphs[i] for i in component]
-            vertical_count = sum(1 for p in row_paragraphs if p.writing_direction == 'TOP_TO_BOTTOM')
-            is_vertical = vertical_count * 2 >= len(row_paragraphs)
+            vertical_or_rtl_count = sum(1 for p in row_paragraphs if p.writing_direction != 'LEFT_TO_RIGHT')
+            is_vertical_or_rtl = vertical_or_rtl_count * 2 >= len(row_paragraphs)
 
             rows.append({
                 'paragraphs': row_paragraphs,
-                'is_vertical': is_vertical
+                'is_vertical_or_rtl': is_vertical_or_rtl
             })
 
         return rows
@@ -1455,7 +1459,7 @@ class TextFiltering:
 
         for row in rows:
             paragraphs = row['paragraphs']
-            is_vertical = row['is_vertical']
+            is_vertical_or_rtl = row['is_vertical_or_rtl']
 
             if len(paragraphs) < 2:
                 reordered_rows.append(row)
@@ -1464,36 +1468,36 @@ class TextFiltering:
             # Sort paragraphs by x-coordinate (left edge)
             paragraphs_sorted = sorted(paragraphs, key=lambda p: p.bounding_box.left)
 
-            if is_vertical:
+            if is_vertical_or_rtl:
                 # Reverse the entire order for predominantly vertical rows
                 paragraphs_sorted.reverse()
 
             # Further reorder contiguous blocks with different orientation
-            final_order = self._reorder_mixed_orientation_blocks(paragraphs_sorted, is_vertical)
+            final_order = self._reorder_mixed_orientation_blocks(paragraphs_sorted, is_vertical_or_rtl)
 
             reordered_rows.append({
                 'paragraphs': final_order,
-                'is_vertical': is_vertical
+                'is_vertical_or_rtl': is_vertical_or_rtl
             })
 
         return reordered_rows
 
-    def _reorder_mixed_orientation_blocks(self, paragraphs, row_is_vertical):
+    def _reorder_mixed_orientation_blocks(self, paragraphs, row_is_vertical_or_rtl):
         if len(paragraphs) < 2:
             return paragraphs
 
         result = []
         current_block = [paragraphs[0]]
-        current_orientation = paragraphs[0].writing_direction == 'TOP_TO_BOTTOM'
+        current_orientation = paragraphs[0].writing_direction != 'LEFT_TO_RIGHT'
 
         for para in paragraphs[1:]:
-            para_orientation = para.writing_direction == 'TOP_TO_BOTTOM'
+            para_orientation = para.writing_direction != 'LEFT_TO_RIGHT'
 
             if para_orientation == current_orientation:
                 current_block.append(para)
             else:
                 # Process the completed block
-                if current_orientation != row_is_vertical:
+                if current_orientation != row_is_vertical_or_rtl:
                     # Reverse blocks that don't match row orientation
                     current_block.reverse()
                 result.extend(current_block)
@@ -1503,7 +1507,7 @@ class TextFiltering:
                 current_orientation = para_orientation
 
         # Process the last block
-        if current_orientation != row_is_vertical:
+        if current_orientation != row_is_vertical_or_rtl:
             current_block.reverse()
         result.extend(current_block)
 
@@ -1514,9 +1518,9 @@ class TextFiltering:
 
         if self.debug_filtering:
             for r in rows_sorted:
-                logger.opt(colors=True).debug("<green>Row vertical: '{}'</>", r['is_vertical'])
+                logger.opt(colors=True).debug("<green>Row vertical_or_rtl: '{}'</>", r['is_vertical_or_rtl'])
                 for p in r['paragraphs']:
-                    logger.opt(colors=True).debug("<green>    Paragraph: '{}' vertical: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction == 'TOP_TO_BOTTOM')
+                    logger.opt(colors=True).debug("<green>    Paragraph: '{}' writing_direction: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction)
 
         all_paragraphs = []
         for row in rows_sorted:
