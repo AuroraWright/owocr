@@ -946,10 +946,13 @@ class TextFiltering:
 
                 if line.writing_direction:
                     is_vertical = line.writing_direction == 'TOP_TO_BOTTOM'
+                    is_rtl = line.writing_direction == 'RIGHT_TO_LEFT'
                 elif paragraph.writing_direction:
                     is_vertical = paragraph.writing_direction == 'TOP_TO_BOTTOM'
+                    is_rtl = paragraph.writing_direction == 'RIGHT_TO_LEFT'
                 else:
                     is_vertical = self._is_line_vertical(line, ocr_result.image_properties)
+                    is_rtl = (not is_vertical) and self.language in ('ar', 'he')
 
                 line_dimension = line.bounding_box.height if is_vertical else line.bounding_box.width
                 char_count = len(line.text)
@@ -965,6 +968,7 @@ class TextFiltering:
                 all_lines.append({
                     'line_obj': line,
                     'is_vertical': is_vertical,
+                    'is_rtl': is_rtl,
                     'character_size': character_size,
                     'has_jp_text': has_jp_text,
                     'has_kanji': has_kanji
@@ -1074,11 +1078,11 @@ class TextFiltering:
                 height=bottom - top
             )
 
-            writing_direction = 'TOP_TO_BOTTOM' if is_vertical else 'LEFT_TO_RIGHT'
+            writing_direction = 'TOP_TO_BOTTOM' if is_vertical else ('RIGHT_TO_LEFT' if lines[0]['is_rtl'] else 'LEFT_TO_RIGHT')
         else:
             line_objs = [lines[0]['line_obj']]
             new_bbox = lines[0]['line_obj'].bounding_box
-            writing_direction = 'TOP_TO_BOTTOM' if lines[0]['is_vertical'] else 'LEFT_TO_RIGHT'
+            writing_direction = 'TOP_TO_BOTTOM' if lines[0]['is_vertical'] else ('RIGHT_TO_LEFT' if lines[0]['is_rtl'] else 'LEFT_TO_RIGHT')
 
         paragraph = Paragraph(
             bounding_box=new_bbox,
@@ -1132,11 +1136,21 @@ class TextFiltering:
             if not (vertical_distance < max_line_height * 2):
                 return False
 
+            if line1['is_rtl'] != line2['is_rtl']:
+                return False
+
+            if line1['is_rtl']:
+                coord1 = bbox1.right
+                coord2 = bbox2.right
+            else:
+                coord1 = bbox1.left
+                coord2 = bbox2.left
+
             if bbox1.top <= bbox2.top:
-                if (bbox2.left - bbox1.left) < character_size:
+                if (coord2 - coord1) < character_size:
                     return True
             else:
-                if (bbox1.left - bbox2.left) < (2 * character_size):
+                if (coord1 - coord2) < (2 * character_size):
                     return True
 
             if likely_furigana:
@@ -1236,6 +1250,7 @@ class TextFiltering:
         return {
             'line_obj': merged_line,
             'is_vertical': is_vertical,
+            'is_rtl': lines[0]['is_rtl'],
             'character_size': character_size,
             'has_jp_text': has_jp_text,
             'has_kanji': has_kanji
@@ -1388,6 +1403,9 @@ class TextFiltering:
 
             return vertical_distance <= 2 * character_size and horizontal_overlap > 0.7
         else:
+            if paragraph1['paragraph_obj'].writing_direction != paragraph2['paragraph_obj'].writing_direction:
+                return False
+
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
@@ -1399,7 +1417,11 @@ class TextFiltering:
             for line in p['paragraph_obj'].lines:
                 merged_lines.append({
                     'line_obj': line,
-                    'is_vertical': is_vertical
+                    'is_vertical': is_vertical,
+                    'is_rtl': p['paragraph_obj'].writing_direction == 'RIGHT_TO_LEFT',
+                    'character_size': 0.0,
+                    'has_jp_text': False,
+                    'has_kanji': False
                 })
 
         return self._create_paragraph_from_lines(merged_lines, is_vertical, True)
