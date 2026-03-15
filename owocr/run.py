@@ -1139,8 +1139,7 @@ class TextFiltering:
             if bbox1.top <= bbox2.top:
                 if (bbox2.top - bbox1.top) < character_size:
                     return True
-            else:
-                if (bbox1.top - bbox2.top) < (2 * character_size):
+            elif (bbox1.top - bbox2.top) < (2 * character_size):
                     return True
 
             if likely_furigana:
@@ -1149,13 +1148,13 @@ class TextFiltering:
                 if vertical_overlap > 0.4 and character_size_ratio < 0.85:
                     return True
         else:
+            if line1['is_rtl'] != line2['is_rtl']:
+                return False
+
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             max_line_height = max(bbox1.height, bbox2.height)
 
             if not (vertical_distance < max_line_height * 2):
-                return False
-
-            if line1['is_rtl'] != line2['is_rtl']:
                 return False
 
             if line1['is_rtl']:
@@ -1168,9 +1167,8 @@ class TextFiltering:
             if coord1 <= coord2:
                 if (coord2 - coord1) < character_size:
                     return True
-            else:
-                if (coord1 - coord2) < (2 * character_size):
-                    return True
+            elif (coord1 - coord2) < (2 * character_size):
+                return True
 
             if likely_furigana:
                 horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
