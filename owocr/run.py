@@ -951,22 +951,22 @@ class TextFiltering:
         # Wrap lines into dicts with extra metadata needed for reordering
         lines = self._create_line_dicts(ocr_result, filter_text)
         if not lines:
-            return ocr_result
+            final_paragraphs = []
+        else:
+            # Create new paragraphs
+            paragraphs = self._create_paragraphs_from_lines(lines)
 
-        # Create new paragraphs
-        paragraphs = self._create_paragraphs_from_lines(lines)
+            # Optionally merge very close paragraphs
+            merged_paragraphs = self._merge_close_paragraphs(paragraphs)
 
-        # Optionally merge very close paragraphs
-        merged_paragraphs = self._merge_close_paragraphs(paragraphs)
+            # Group paragraphs into rows
+            rows = self._group_paragraphs_into_rows(merged_paragraphs)
 
-        # Group paragraphs into rows
-        rows = self._group_paragraphs_into_rows(merged_paragraphs)
+            # Reorder paragraphs in each row
+            reordered_rows = self._reorder_paragraphs_in_rows(rows)
 
-        # Reorder paragraphs in each row
-        reordered_rows = self._reorder_paragraphs_in_rows(rows)
-
-        # Order rows from top to bottom and flatten
-        final_paragraphs = self._flatten_rows_to_paragraphs(reordered_rows)
+            # Order rows from top to bottom and flatten
+            final_paragraphs = self._flatten_rows_to_paragraphs(reordered_rows)
 
         return OcrResult(
             image_properties=ocr_result.image_properties,
