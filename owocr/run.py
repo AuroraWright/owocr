@@ -580,6 +580,7 @@ class TextFiltering:
         self.line_recovery = not self.json_output and config.get_general('screen_capture_line_recovery')
         self.furigana_filter = config.get_general('furigana_filter')
         self.merge_close_paragraphs = config.get_general('merge_close_paragraphs')
+        self.support_center_aligned_text = config.get_general('support_center_aligned_text')
         self.debug_filtering = config.get_general('uwu')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
@@ -992,10 +993,10 @@ class TextFiltering:
                     has_kanji = False
 
                 if filter_text:
-                    if self.language == 'ja':
+                    if self.language == 'ja' and self.furigana_filter:
                         if not has_jp_text:
                             continue
-                    elif self.language == 'zh':
+                    elif self.language == 'zh' and self.furigana_filter:
                         if not has_kanji:
                             continue
                     else:
@@ -1023,7 +1024,8 @@ class TextFiltering:
                     'is_rtl': is_rtl,
                     'character_size': character_size,
                     'has_jp_text': has_jp_text,
-                    'has_kanji': has_kanji
+                    'has_kanji': has_kanji,
+                    'is_furigana': False
                 })
 
         return lines
@@ -1032,8 +1034,13 @@ class TextFiltering:
         grouped = set()
         all_paragraphs = []
 
-        def _group_lines(is_vertical):
-            indices = [i for i, line in enumerate(lines) if (line['is_vertical'] in (is_vertical, None)) and i not in grouped]
+        def _group_lines(is_vertical, is_rtl):
+            indices = [
+                i for i, line in enumerate(lines)
+                if (line['is_vertical'] in (is_vertical, None))
+                and (line['is_rtl'] == is_rtl)
+                and i not in grouped
+            ]
 
             if len(indices) < 2:
                 return
@@ -1041,6 +1048,9 @@ class TextFiltering:
             if is_vertical:
                 get_start = lambda l: l['line_obj'].bounding_box.top
                 get_end = lambda l: l['line_obj'].bounding_box.bottom
+            elif is_rtl:
+                get_start = lambda l: l['line_obj'].bounding_box.right
+                get_end = lambda l: l['line_obj'].bounding_box.left
             else:
                 get_start = lambda l: l['line_obj'].bounding_box.left
                 get_end = lambda l: l['line_obj'].bounding_box.right
@@ -1060,8 +1070,9 @@ class TextFiltering:
                     all_paragraphs.append(new_paragraph)
                     grouped.update(original_indices)
 
-        _group_lines(True)
-        _group_lines(False)
+        _group_lines(True, False)
+        _group_lines(False, True)
+        _group_lines(False, False)
 
         # Create paragraphs out of ungrouped lines
         ungrouped_lines = [line for i, line in enumerate(lines) if i not in grouped]
@@ -1127,7 +1138,6 @@ class TextFiltering:
         bbox2 = line2['line_obj'].bounding_box
 
         character_size = max(line1['character_size'], line2['character_size'])
-        likely_furigana = (line1['has_jp_text'] and not line1['has_kanji']) and line2['has_kanji']
 
         if is_vertical:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
@@ -1136,21 +1146,9 @@ class TextFiltering:
             if not (horizontal_distance < line_width * 2):
                 return False
 
-            if bbox1.top <= bbox2.top:
-                if (bbox2.top - bbox1.top) < character_size:
-                    return True
-            elif (bbox1.top - bbox2.top) < (2 * character_size):
-                    return True
-
-            if likely_furigana:
-                vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
-                character_size_ratio = line1['character_size'] / line2['character_size']
-                if vertical_overlap > 0.4 and character_size_ratio < 0.85:
-                    return True
+            if (bbox1.top - bbox2.top) < (2 * character_size):
+                return True
         else:
-            if line1['is_rtl'] != line2['is_rtl']:
-                return False
-
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             max_line_height = max(bbox1.height, bbox2.height)
 
@@ -1158,23 +1156,24 @@ class TextFiltering:
                 return False
 
             if line1['is_rtl']:
-                coord1 = bbox1.right
-                coord2 = bbox2.right
+                coord1 = bbox2.right
+                coord2 = bbox1.right
             else:
                 coord1 = bbox1.left
                 coord2 = bbox2.left
 
-            if coord1 <= coord2:
-                if (coord2 - coord1) < character_size:
-                    return True
-            elif (coord1 - coord2) < (2 * character_size):
+            if (coord1 - coord2) < (2 * character_size):
                 return True
 
-            if likely_furigana:
+            if self.support_center_aligned_text:
                 horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
-                line_height_ratio = bbox1.height / bbox2.height
-                if horizontal_overlap > 0.4 and line_height_ratio < 0.85:
+                if horizontal_overlap > 0.9:
                     return True
+
+        if len(self._furigana_filter([line1, line2], is_vertical)) == 1:
+            line1['is_furigana'] = True
+            return True
+
         return False
 
     def _merge_overlapping_lines(self, lines, is_vertical):
@@ -1216,14 +1215,18 @@ class TextFiltering:
         return merged
 
     def _merge_multiple_lines(self, lines, is_vertical):
+        is_rtl = lines[0]['is_rtl']
+
         if is_vertical:
             # Sort lines by y-coordinate (top to bottom)
             sort_key = lambda line: line['line_obj'].bounding_box.center_y
+            reverse_sort = False
         else:
-            # Sort lines by x-coordinate (left to right)
+            # Sort lines by x-coordinate (right to left if RTL, else left to right)
             sort_key = lambda line: line['line_obj'].bounding_box.center_x
+            reverse_sort = is_rtl
 
-        lines = sorted(lines, key=sort_key)
+        lines = sorted(lines, key=sort_key, reverse=reverse_sort)
 
         text_sorted = ''
         words_sorted = []
@@ -1231,6 +1234,7 @@ class TextFiltering:
         no_space_size = 0.0
         has_jp_text = False
         has_kanji = False
+        is_furigana = False
         for line in lines:
             text_sorted += line['line_obj'].text
             words_sorted.extend(line['line_obj'].words)
@@ -1241,6 +1245,8 @@ class TextFiltering:
                 has_jp_text = True
             if line['has_kanji']:
                 has_kanji = True
+            if line['is_furigana']:
+                is_furigana = True
         character_size = no_space_size / len(text_sorted)
 
         left = min(bbox.left for bbox in bboxes)
@@ -1265,10 +1271,11 @@ class TextFiltering:
         return {
             'line_obj': merged_line,
             'is_vertical': is_vertical,
-            'is_rtl': lines[0]['is_rtl'],
+            'is_rtl': is_rtl,
             'character_size': character_size,
             'has_jp_text': has_jp_text,
-            'has_kanji': has_kanji
+            'has_kanji': has_kanji,
+            'is_furigana': is_furigana
         }
 
     def _should_merge_lines(self, line1, line2, is_vertical):
@@ -1288,20 +1295,16 @@ class TextFiltering:
             return vertical_overlap > 0.7 and horizontal_overlap < 0.4
 
     def _furigana_filter(self, lines, is_vertical):
-        if all(not line['has_jp_text'] for line in lines):
-            return lines
-
         filtered_lines = []
         for i, line in enumerate(lines):
+            if line['is_furigana']:
+                continue
+
             if i >= len(lines) - 1:
                 filtered_lines.append(line)
                 continue
 
-            current_line_text = self.get_line_text(line['line_obj'])
-            current_line_bbox = line['line_obj'].bounding_box
             next_line = lines[i + 1]
-            next_line_text = self.get_line_text(next_line['line_obj'])
-            next_line_bbox = next_line['line_obj'].bounding_box
 
             if not (line['has_jp_text'] and next_line['has_jp_text']):
                 filtered_lines.append(line)
@@ -1312,6 +1315,11 @@ class TextFiltering:
             if not next_line['has_kanji']:
                 filtered_lines.append(line)
                 continue
+
+            current_line_text = self.get_line_text(line['line_obj'])
+            current_line_bbox = line['line_obj'].bounding_box
+            next_line_text = self.get_line_text(next_line['line_obj'])
+            next_line_bbox = next_line['line_obj'].bounding_box
 
             logger.opt(colors=True).debug("<magenta>Furigana check line: '{}' against line: '{}' vertical: '{}'</>", current_line_text, next_line_text, is_vertical)
 
@@ -1441,7 +1449,8 @@ class TextFiltering:
                     'is_rtl': p['paragraph_obj'].writing_direction == 'RIGHT_TO_LEFT',
                     'character_size': 0.0,
                     'has_jp_text': False,
-                    'has_kanji': False
+                    'has_kanji': False,
+                    'is_furigana': False
                 })
         merged_paragraph = self._create_paragraph_from_lines(merged_lines, is_vertical, True)
         if len(merged_paragraph.lines) != len(merged_lines):
@@ -1612,10 +1621,15 @@ class TextFiltering:
         # Build graph using sweep-line algorithm
         graph = {i: [] for i in range(len(items))}
 
-        # Sort items by appropriate coordinate for sweep-line
+        # Sort items by appropriate coordinate
+        first_start = get_start_coord(items[0])
+        first_end = get_end_coord(items[0])
+        is_reverse_sweep = first_start > first_end
+
         sorted_items = sorted(
             [(i, items[i]) for i in range(len(items))],
-            key=lambda x: get_start_coord(x[1])
+            key=lambda x: get_start_coord(x[1]),
+            reverse=is_reverse_sweep
         )
 
         active_items = []  # (index, item, end_coordinate)
@@ -1625,11 +1639,18 @@ class TextFiltering:
             line_end = get_end_coord(item)
 
             # Remove items that are no longer overlapping
-            active_items = [
-                (active_idx, active_item, active_end)
-                for active_idx, active_item, active_end in active_items
-                if active_end > current_start  # Still overlapping
-            ]
+            if is_reverse_sweep:
+                active_items = [
+                    (active_idx, active_item, active_end)
+                    for active_idx, active_item, active_end in active_items
+                    if active_end < current_start
+                ]
+            else:
+                active_items = [
+                    (active_idx, active_item, active_end)
+                    for active_idx, active_item, active_end in active_items
+                    if active_end > current_start
+                ]
 
             # Check current item against all active items
             for active_idx, active_item, _ in active_items:
