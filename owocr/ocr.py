@@ -120,15 +120,9 @@ class OcrResult:
 
 
 def initialize_manga_ocr(pretrained_model_name_or_path, force_cpu):
-    def empty_post_process(text):
-        text = re.sub(r'\s+', '', text)
-        return text
-
     global manga_ocr_model
     if not manga_ocr_model:
         logger.disable('manga_ocr')
-        from manga_ocr import ocr
-        ocr.post_process = empty_post_process
         logger.info(f'Loading Manga OCR model')
         manga_ocr_model = MOCR(pretrained_model_name_or_path, force_cpu)
 

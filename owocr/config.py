@@ -144,7 +144,7 @@ class Config:
         'paragraph_separator': ' ',
         'reorder_text': True,
         'furigana_filter': True,
-        'merge_close_paragraphs': False,
+        'merge_close_paragraphs': True,
         'support_center_aligned_text': False,
         'screen_capture_combo': '',
         'coordinate_selector_combo': '',
