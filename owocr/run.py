@@ -1429,7 +1429,7 @@ class TextFiltering:
             vertical_distance = self._calculate_vertical_distance(bbox1, bbox2)
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
 
-            return vertical_distance <= 2 * character_size and horizontal_overlap > 0.7
+            return vertical_distance <= 2 * character_size and horizontal_overlap > 0.9
         else:
             if paragraph1['paragraph_obj'].writing_direction != paragraph2['paragraph_obj'].writing_direction:
                 return False
@@ -1437,7 +1437,7 @@ class TextFiltering:
             horizontal_distance = self._calculate_horizontal_distance(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
-            return horizontal_distance <= 3 * character_size and vertical_overlap > 0.7
+            return horizontal_distance <= 3 * character_size and vertical_overlap > 0.9
 
     def _merge_multiple_paragraphs(self, paragraphs, is_vertical):
         merged_lines = []
