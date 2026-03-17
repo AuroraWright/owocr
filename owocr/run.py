@@ -1025,7 +1025,8 @@ class TextFiltering:
                     'character_size': character_size,
                     'has_jp_text': has_jp_text,
                     'has_kanji': has_kanji,
-                    'is_furigana': False
+                    'is_furigana': False,
+                    'paragraph_id': None
                 })
 
         return lines
@@ -1131,7 +1132,10 @@ class TextFiltering:
                 'character_size': largest_line['character_size']
             }
 
-        return paragraph
+        paragraph_ids = [line['paragraph_id'] for line in lines if line['paragraph_id'] is not None]
+        if len(set(paragraph_ids)) <= 1:
+            return paragraph
+        return None
 
     def _should_group_in_same_paragraph(self, line1, line2, is_vertical):
         bbox1 = line1['line_obj'].bounding_box
@@ -1275,7 +1279,8 @@ class TextFiltering:
             'character_size': character_size,
             'has_jp_text': has_jp_text,
             'has_kanji': has_kanji,
-            'is_furigana': is_furigana
+            'is_furigana': is_furigana,
+            'paragraph_id': None
         }
 
     def _should_merge_lines(self, line1, line2, is_vertical):
@@ -1441,7 +1446,9 @@ class TextFiltering:
 
     def _merge_multiple_paragraphs(self, paragraphs, is_vertical):
         merged_lines = []
+        paragraph_id = 0
         for p in paragraphs:
+            paragraph_id += 1
             for line in p['paragraph_obj'].lines:
                 merged_lines.append({
                     'line_obj': line,
@@ -1450,12 +1457,11 @@ class TextFiltering:
                     'character_size': 0.0,
                     'has_jp_text': False,
                     'has_kanji': False,
-                    'is_furigana': False
+                    'is_furigana': False,
+                    'paragraph_id': paragraph_id
                 })
-        merged_paragraph = self._create_paragraph_from_lines(merged_lines, is_vertical, True)
-        if len(merged_paragraph.lines) != len(merged_lines):
-            return merged_paragraph
-        return None
+
+        return self._create_paragraph_from_lines(merged_lines, is_vertical, True)
 
     def _group_paragraphs_into_rows(self, paragraphs):
         if len(paragraphs) < 2:
