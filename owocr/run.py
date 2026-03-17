@@ -1286,13 +1286,13 @@ class TextFiltering:
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
 
-            return horizontal_overlap > 0.7 and vertical_overlap < 0.4
+            return horizontal_overlap > 0.8 and vertical_overlap < 0.4
 
         else:
             vertical_overlap = self._check_vertical_overlap(bbox1, bbox2)
             horizontal_overlap = self._check_horizontal_overlap(bbox1, bbox2)
 
-            return vertical_overlap > 0.7 and horizontal_overlap < 0.4
+            return vertical_overlap > 0.8 and horizontal_overlap < 0.4
 
     def _furigana_filter(self, lines, is_vertical):
         filtered_lines = []
