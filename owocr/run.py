@@ -1461,7 +1461,8 @@ class TextFiltering:
 
     def _group_paragraphs_into_rows(self, paragraphs):
         if len(paragraphs) < 2:
-            return [{'paragraphs': paragraphs, 'is_vertical_or_rtl': False}]
+            is_vertical_or_rtl = paragraphs[0].writing_direction != 'LEFT_TO_RIGHT'
+            return [{'paragraphs': paragraphs, 'is_vertical_or_rtl': is_vertical_or_rtl}]
 
         components = self._find_connected_components(
             items=paragraphs,
