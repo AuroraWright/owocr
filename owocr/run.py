@@ -984,19 +984,15 @@ class TextFiltering:
                 if not line.text:
                     continue
 
-                if self.furigana_filter:
-                    normalized_text = ''.join(self.cj_regex.findall(line.text))
-                    has_jp_text = normalized_text != ''
-                    has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
-                else:
-                    has_jp_text = False
-                    has_kanji = False
+                normalized_text = ''.join(self.cj_regex.findall(line.text))
+                has_jp_text = normalized_text != ''
+                has_kanji = has_jp_text and self.kanji_regex.search(normalized_text)
 
                 if filter_text:
-                    if self.language == 'ja' and self.furigana_filter:
+                    if self.language == 'ja':
                         if not has_jp_text:
                             continue
-                    elif self.language == 'zh' and self.furigana_filter:
+                    elif self.language == 'zh':
                         if not has_kanji:
                             continue
                     else:
@@ -1368,7 +1364,7 @@ class TextFiltering:
                 filtered_lines.append(line)
                 continue
 
-            logger.opt(colors=True).debug("<yellow>Skipping furigana line: '{}' next to line: '{}'</>", current_line_text, next_line_text)
+            logger.opt(colors=True).debug("<yellow>Detected furigana line: '{}' next to line: '{}'</>", current_line_text, next_line_text)
 
         return filtered_lines
 
@@ -2658,15 +2654,14 @@ class OutputResult:
         self.second_pass_thread = SecondPassThread()
         self.previous_image = None
 
-    def _post_process(self, text, strip_spaces):
-        line_separator = '' if strip_spaces else self.line_separator
+    def _post_process(self, text):
         paragraphs = []
 
         current_paragraph = []
         for line in text:
             if line == '\n':
                 if current_paragraph:
-                    paragraph = line_separator.join(current_paragraph)
+                    paragraph = self.line_separator.join(current_paragraph)
                     paragraphs.append(paragraph)
                     current_paragraph = []
                 continue
@@ -2679,7 +2674,7 @@ class OutputResult:
                 current_paragraph.append(re.sub(r'\s+', ' ', line).strip())
 
         if current_paragraph:
-            paragraph = line_separator.join(current_paragraph)
+            paragraph = self.line_separator.join(current_paragraph)
             paragraphs.append(paragraph)
 
         text = self.paragraph_separator.join(paragraphs)
@@ -2848,9 +2843,9 @@ class OutputResult:
                 if auto_pause_handler and auto_pause:
                     auto_pause_handler.allow_auto_pause.set()
                 return
-            output_text = self._post_process(changed_lines, True)
+            output_text = self._post_process(changed_lines)
         else:
-            output_text = self._post_process(result_data_text, False)
+            output_text = self._post_process(result_data_text)
 
         if self.json_output:
             output_string = json.dumps(asdict(result_data), ensure_ascii=False)
