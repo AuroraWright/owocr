@@ -656,12 +656,13 @@ class TextFiltering:
         if line.text is not None:
             return line.text
         text_parts = []
-        for w in line.words:
+        for i, w in enumerate(line.words):
             text_parts.append(w.text)
-            if w.separator is not None:
-                text_parts.append(w.separator)
-            else:
-                text_parts.append(' ')
+            if i < len(line.words) - 1:
+                if w.separator is not None:
+                    text_parts.append(w.separator)
+                else:
+                    text_parts.append(' ')
         return ''.join(text_parts)
 
     def _normalize_line_for_comparison(self, line_text):
