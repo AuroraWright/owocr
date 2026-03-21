@@ -662,10 +662,10 @@ class TextFiltering:
                 text_parts.append(w.separator)
             else:
                 text_parts.append(' ')
-        return ''.join(text_parts).strip()
+        return ''.join(text_parts)
 
     def _normalize_line_for_comparison(self, line_text):
-        if not line_text.replace('\n', ''):
+        if not line_text.strip().replace('\n', ''):
             return ''
         filtered_text = ''.join(self.regex.findall(line_text))
         if self.language == 'ja':
@@ -981,7 +981,7 @@ class TextFiltering:
             for line in paragraph.lines:
                 if line.text is None:
                     line.text = self.get_line_text(line)
-                if not line.text:
+                if not line.text.strip():
                     continue
 
                 normalized_text = ''.join(self.cj_regex.findall(line.text))
@@ -1208,7 +1208,7 @@ class TextFiltering:
                 merged_line = self._merge_multiple_lines(merge_group, is_vertical)
                 merged.append(merged_line)
                 if self.debug_filtering:
-                    logger.opt(colors=True).debug("<green>Merged lines: '{}' vertical: '{}'</>", [self.get_line_text(line['line_obj']) for line in merge_group], is_vertical)
+                    logger.opt(colors=True).debug("<green>Merged lines: '{}' vertical: '{}'</>", [line['line_obj'].text for line in merge_group], is_vertical)
             else:
                 merged.append(current_line)
 
@@ -1317,9 +1317,9 @@ class TextFiltering:
                 filtered_lines.append(line)
                 continue
 
-            current_line_text = self.get_line_text(line['line_obj'])
+            current_line_text = line['line_obj'].text
             current_line_bbox = line['line_obj'].bounding_box
-            next_line_text = self.get_line_text(next_line['line_obj'])
+            next_line_text = next_line['line_obj'].text
             next_line_bbox = next_line['line_obj'].bounding_box
 
             logger.opt(colors=True).debug("<magenta>Furigana check line: '{}' against line: '{}' vertical: '{}'</>", current_line_text, next_line_text, is_vertical)
@@ -1406,7 +1406,7 @@ class TextFiltering:
                     if self.debug_filtering:
                         logger.opt(colors=True).debug("<green>Trying to merge paragraphs vertical: '{}'</>", is_vertical)
                         for p in component_paragraphs:
-                            logger.opt(colors=True).debug("<green>    Paragraph: '{}'</>", [self.get_line_text(line) for line in p['paragraph_obj'].lines])
+                            logger.opt(colors=True).debug("<green>    Paragraph: '{}'</>", [line.text for line in p['paragraph_obj'].lines])
                     merged_paragraph = self._merge_multiple_paragraphs(component_paragraphs, is_vertical)
                     if merged_paragraph:
                         if self.debug_filtering:
@@ -1550,7 +1550,7 @@ class TextFiltering:
             for r in rows_sorted:
                 logger.opt(colors=True).debug("<green>Row vertical_or_rtl: '{}'</>", r['is_vertical_or_rtl'])
                 for p in r['paragraphs']:
-                    logger.opt(colors=True).debug("<green>    Paragraph: '{}' writing_direction: '{}'</>", [self.get_line_text(line) for line in p.lines], p.writing_direction)
+                    logger.opt(colors=True).debug("<green>    Paragraph: '{}' writing_direction: '{}'</>", [line.text for line in p.lines], p.writing_direction)
 
         all_paragraphs = []
         for row in rows_sorted:
@@ -1576,7 +1576,7 @@ class TextFiltering:
 
     def _is_line_vertical(self, line, image_properties):
         # For very short lines (less than 3 characters), undefined orientation
-        if len(self.get_line_text(line)) < 3:
+        if len(line.text) < 3:
             return None
 
         bbox = line.bounding_box
@@ -2685,7 +2685,7 @@ class OutputResult:
         lines = []
         for p in result_data.paragraphs:
             for l in p.lines:
-                lines.append(self.filtering.get_line_text(l))
+                lines.append(self.filtering.get_line_text(l).strip())
             lines.append('\n')
         return lines
 

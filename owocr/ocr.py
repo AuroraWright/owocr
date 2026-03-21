@@ -2451,22 +2451,23 @@ class MeikiOCR:
         # each dictionary in the response corresponds to a detected line of text.
         # treat each line as a separate Paragraph containing a single Line.
         for line_result in response:
-            line_text = line_result.get('text', '')
-            line_text = line_text.replace('\ufffd', ' ')
+            line_text = line_result.get('text', '').replace('\ufffd', ' ')
+            line_vertical = line_result.get('is_vertical', None)
             char_results = line_result.get('chars', [])
             if not line_text or not char_results:
                 continue
 
             char_in_line = []
             for char_info in char_results:
-                if char_info['char'] == '\ufffd':
-                    char_info['char'] = ' '
+                char_text = char_info['char']
+                if char_text == '\ufffd':
+                    char_text = ' '
 
                 normalized_bbox = self._to_normalized_bbox(
                     char_info['bbox'], img_width, img_height
                 )
                 word = Word(
-                    text=char_info['char'],
+                    text=char_text,
                     bounding_box=normalized_bbox
                 )
                 char_in_line.append(word)
@@ -2475,6 +2476,8 @@ class MeikiOCR:
                 continue
 
             line_bbox = merge_bounding_boxes(char_in_line)
+            if line_vertical is not None:
+                line_orientation = 'LEFT_TO_RIGHT' if not line_vertical else 'TOP_TO_BOTTOM'
 
             line = Line(
                 bounding_box=line_bbox,
@@ -2485,7 +2488,8 @@ class MeikiOCR:
             # each line becomes a paragraph.
             paragraph = Paragraph(
                 bounding_box=line_bbox,
-                lines=[line]
+                lines=[line],
+                writing_direction=line_orientation
             )
             paragraphs.append(paragraph)
 
