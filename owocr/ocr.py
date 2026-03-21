@@ -2452,7 +2452,7 @@ class MeikiOCR:
         # treat each line as a separate Paragraph containing a single Line.
         for line_result in response:
             line_text = line_result.get('text', '')
-            line_text = line_text.replace('\ufffd', '')
+            line_text = line_text.replace('\ufffd', ' ')
             char_results = line_result.get('chars', [])
             if not line_text or not char_results:
                 continue
@@ -2460,7 +2460,7 @@ class MeikiOCR:
             char_in_line = []
             for char_info in char_results:
                 if char_info['char'] == '\ufffd':
-                    continue
+                    char_info['char'] = ' '
 
                 normalized_bbox = self._to_normalized_bbox(
                     char_info['bbox'], img_width, img_height
