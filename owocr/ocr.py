@@ -2476,8 +2476,10 @@ class MeikiOCR:
                 continue
 
             line_bbox = merge_bounding_boxes(char_in_line)
-            if line_vertical is not None:
-                line_orientation = 'LEFT_TO_RIGHT' if not line_vertical else 'TOP_TO_BOTTOM'
+            if line_vertical is None:
+                writing_direction = None
+            else:
+                writing_direction = 'LEFT_TO_RIGHT' if not line_vertical else 'TOP_TO_BOTTOM'
 
             line = Line(
                 bounding_box=line_bbox,
@@ -2489,7 +2491,7 @@ class MeikiOCR:
             paragraph = Paragraph(
                 bounding_box=line_bbox,
                 lines=[line],
-                writing_direction=line_orientation
+                writing_direction=writing_direction
             )
             paragraphs.append(paragraph)
 
