@@ -60,6 +60,8 @@ parser.add_argument('-sl', '--screen_capture_line_recovery', type=str2bool, narg
                     help='When reading with screen capture or obs and frame stabilization is on, try to recover missed lines from unstable frames. Can lead to increased glitches.')
 parser.add_argument('-sr', '--screen_capture_regex_filter', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture or obs, regex to filter unwanted text from the output. Example value: ▶|♥|・ to remove either of those characters.')
+parser.add_argument('-swp', '--screen_capture_wayland_persistence', type=str2bool, nargs='?', const=True, default=argparse.SUPPRESS,
+                    help='When reading with screen capture on Wayland, persist the session when owocr is restarted. Has no effect on other platforms.')
 parser.add_argument('-sc', '--screen_capture_combo', type=str, default=argparse.SUPPRESS,
                     help='When reading with screen capture or obs, combo to wait on for taking a screenshot. If periodic screenshots are also enabled, any screenshot taken this way bypasses the filtering. Example value: <ctrl>+<shift>+s. The list of keys can be found here: https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key')
 parser.add_argument('-scc', '--coordinate_selector_combo', type=str, default=argparse.SUPPRESS,
@@ -138,6 +140,7 @@ class Config:
         'screen_capture_frame_stabilization': -1,
         'screen_capture_line_recovery': True,
         'screen_capture_regex_filter': '',
+        'screen_capture_wayland_persistence': False,
         'join_lines': False,
         'join_paragraphs': False,
         'line_separator': ' ',

@@ -124,3 +124,4 @@ This uses code from/references these people/projects:
 - nao for the awesome icon!
 - [Steffo](https://github.com/Steffo99) for all his help in automating packaging/distribution with Github Actions!
 - [kamperemu](https://github.com/kamperemu) for the OBS source implementation!
+- [KamWithK](https://github.com/KamWithK) and [Manhhao](https://github.com/Manhhao) for improving the Wayland mss shim to not require python-dbus and for session persistence

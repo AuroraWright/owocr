@@ -268,6 +268,7 @@ class ConfigGUI:
                 ('screen_capture_frame_stabilization', 'float', 'Wait X seconds until text is stable:\n-1: wait for two frames\n0: disable (faster, only works when text is shown all at once)'),
                 ('screen_capture_line_recovery', 'bool', 'Try to recover lines missed by frame stabilization (can increase glitches)'),
                 ('screen_capture_regex_filter', 'str', 'Regex filter for unwanted text'),
+                ('screen_capture_wayland_persistence', 'bool', 'On Wayland, persist the session when owocr is restarted (ignored on other platforms)'),
             ],
             'OBS': [
                 ('obs_host', 'str', 'OBS websocket host'),

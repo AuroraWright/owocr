@@ -2,18 +2,19 @@ import re
 import threading
 import queue
 import time
+import uuid
+from pathlib import Path
 
 import gi
 gi.require_version('Gst', '1.0')
-from gi.repository import GLib, Gst
-
-import dbus
-from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib, Gst, Gio
 
 import mss as real_mss
 from mss.exception import ScreenShotError
 from mss.screenshot import ScreenShot, Size
 from mss.models import Monitor
+
+from .config import config
 
 screencast = None
 screencast_lock = threading.Lock()
@@ -21,6 +22,7 @@ screencast_lock = threading.Lock()
 
 class ScreenCastManager:
     def __init__(self):
+        self.token_file_path = Path.home() / '.cache' / '.owocr_screencapture_token'
         self.screen_cast_iface = 'org.freedesktop.portal.ScreenCast'
         self.frame_lock = threading.Lock()
         self.selected_event = threading.Event()
@@ -44,21 +46,28 @@ class ScreenCastManager:
         path = f'/org/freedesktop/portal/desktop/session/{self.sender_name}/{token}'
         return path, token
 
-    def _screen_cast_call(self, method, callback, *args, options=None):
-        if options is None:
-            options = {}
-        request_path, request_token = self._new_request_path()
-
-        self.bus.add_signal_receiver(
-            callback,
-            'Response',
-            'org.freedesktop.portal.Request',
+    def _screen_cast_call(self, method, request_path, callback, variant):
+        self.bus.signal_subscribe(
             'org.freedesktop.portal.Desktop',
-            request_path
+            'org.freedesktop.portal.Request',
+            'Response',
+            request_path,
+            None,
+            Gio.DBusSignalFlags.NO_MATCH_RULE,
+            callback,
         )
 
-        options['handle_token'] = request_token
-        method(*(args + (options,)), dbus_interface=self.screen_cast_iface)
+        self.bus.call_sync(
+            'org.freedesktop.portal.Desktop',
+            '/org/freedesktop/portal/desktop',
+            self.screen_cast_iface,
+            method,
+            variant,
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
 
     def _on_session_closed(self, *args, **kwargs):
         self.stop()
@@ -101,18 +110,20 @@ class ScreenCastManager:
         return Gst.FlowReturn.OK
 
     def _play_pipewire_stream(self, node_id):
-        portal = self.bus.get_object(
+        result, out_fd_list = self.bus.call_with_unix_fd_list_sync(
             'org.freedesktop.portal.Desktop',
-            '/org/freedesktop/portal/desktop'
+            '/org/freedesktop/portal/desktop',
+            self.screen_cast_iface,
+            'OpenPipeWireRemote',
+            GLib.Variant('(oa{sv})', (self.session, {})),
+            GLib.VariantType.new('(h)'),
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+            None,
         )
-
-        empty_dict = dbus.Dictionary(signature='sv')
-        fd_object = portal.OpenPipeWireRemote(
-            self.session,
-            empty_dict,
-            dbus_interface=self.screen_cast_iface
-        )
-        fd = fd_object.take()
+        fd_index = result.unpack()[0]
+        fd = out_fd_list.get(fd_index)
 
         pipeline_str = (
             f'pipewiresrc fd={fd} path={node_id} ! '
@@ -129,13 +140,17 @@ class ScreenCastManager:
 
         self.pipeline.set_state(Gst.State.PLAYING)
 
-    def _on_start_response(self, response, results):
+    def _on_start_response(self, connection, sender, object_path, interface, signal, parameters):
+        response, results = parameters.unpack()
         if response != 0:
             self.stop()
             raise ScreenShotError(f'Failed to start screencast: {response}')
 
         self.selected_event.set()
 
+        if 'restore_token' in results:
+            with open(self.token_file_path, 'w') as f:
+                f.write(results['restore_token'])
         if results['streams']:
             node_id, stream_properties = results['streams'][0]
             self._play_pipewire_stream(node_id)
@@ -143,77 +158,103 @@ class ScreenCastManager:
             self.stop()
             raise ScreenShotError('No streams available')
 
-    def _on_select_sources_response(self, response, results):
+    def _on_select_sources_response(self, connection, sender, object_path, interface, signal, parameters):
+        response, results = parameters.unpack()
         if response != 0:
             self.stop()
             raise ScreenShotError(f'Failed to select sources: {response}')
 
-        portal = self.bus.get_object(
-            'org.freedesktop.portal.Desktop',
-            '/org/freedesktop/portal/desktop'
-        )
-
-        self._screen_cast_call(
-            portal.Start,
-            self._on_start_response,
+        request_path, request_token = self._new_request_path()
+        variant = GLib.Variant('(osa{sv})', (
             self.session,
             '',
-            options={'multiple': False, 'types': dbus.UInt32(1 | 2), 'framerate': dbus.UInt32(30)}
+            {
+                'handle_token': GLib.Variant('s', request_token),
+            },
+        ))
+        self._screen_cast_call(
+            'Start',
+            request_path,
+            self._on_start_response,
+            variant,
         )
 
-    def _on_create_session_response(self, response, results):
+    def _on_create_session_response(self, connection, sender, object_path, interface, signal, parameters):
+        response, results = parameters.unpack()
         if response != 0:
             self.stop()
             raise ScreenShotError(f'Failed to create session: {response}')
 
         self.session = results['session_handle']
 
-        self.session_closed_signal = self.bus.add_signal_receiver(
-            self._on_session_closed,
-            'Closed',
+        self.bus.signal_subscribe(
+            'org.freedesktop.portal.Desktop',
             'org.freedesktop.portal.Session',
-            'org.freedesktop.portal.Desktop',
-            self.session
-        )
-
-        portal = self.bus.get_object(
-            'org.freedesktop.portal.Desktop',
-            '/org/freedesktop/portal/desktop'
-        )
-
-        self._screen_cast_call(
-            portal.SelectSources,
-            self._on_select_sources_response,
+            'Closed',
             self.session,
-            options={'multiple': False, 'types': dbus.UInt32(1 | 2), 'framerate': dbus.UInt32(30)}
+            None,
+            Gio.DBusSignalFlags.NONE,
+            self._on_session_closed,
+        )
+
+        request_path, request_token = self._new_request_path()
+        restore_token = str(uuid.UUID(int=0))
+        if config.get_general('screen_capture_wayland_persistence'):
+            persist_mode = 2
+            if self.token_file_path.exists():
+                with open(self.token_file_path, 'r') as f:
+                    restore_token = f.read().strip()
+        else:
+            persist_mode = 0
+            if self.token_file_path.exists():
+                self.token_file_path.unlink()
+        variant = GLib.Variant('(oa{sv})', (
+            self.session,
+            {
+                'handle_token': GLib.Variant('s', request_token),
+                'multiple': GLib.Variant('b', False),
+                'types': GLib.Variant('u', 1 | 2),
+                'persist_mode': GLib.Variant('u', persist_mode),
+                'restore_token': GLib.Variant('s', restore_token)
+            },
+        ))
+        self._screen_cast_call(
+            'SelectSources',
+            request_path,
+            self._on_select_sources_response,
+            variant
         )
 
     def _initialize_screencast(self):
         Gst.init(None)
-        DBusGMainLoop(set_as_default=True)
-        self.bus = dbus.SessionBus()
-        self.sender_name = re.sub(r'\.', r'_', self.bus.get_unique_name()[1:])
+
+        context = GLib.MainContext.new()
+        context.push_thread_default()
 
         try:
-            self.loop = GLib.MainLoop()
-
-            portal = self.bus.get_object(
-                'org.freedesktop.portal.Desktop',
-                '/org/freedesktop/portal/desktop'
-            )
+            self.loop = GLib.MainLoop.new(context)
+            self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            self.sender_name = re.sub(r'\.', r'_', self.bus.get_unique_name()[1:])
 
             session_path, session_token = self._new_session_path()
-
+            request_path, request_token = self._new_request_path()
+            variant =  GLib.Variant('(a{sv})', ({
+                'handle_token': GLib.Variant('s', request_token),
+                'session_handle_token': GLib.Variant('s', session_token),
+            },))
             self._screen_cast_call(
-                portal.CreateSession,
+                'CreateSession',
+                request_path,
                 self._on_create_session_response,
-                options={'session_handle_token': session_token}
+                variant
             )
 
             self.loop.run()
         except Exception as e:
             self.stop()
             raise ScreenShotError(f'Error initializing screencast: {e}')
+        finally:
+            context.pop_thread_default()
 
     def request_frame(self):
         if self.ready_event.is_set():

@@ -54,7 +54,6 @@ dependencies = [
     "pyobjc;platform_system=='Darwin'",
     "pyperclip;platform_system=='Linux'",
     "PyGObject;platform_system=='Linux'",
-    "dbus-python;platform_system=='Linux'",
     "pywayland;platform_system=='Linux'",
 ]
 
