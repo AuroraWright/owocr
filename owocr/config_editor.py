@@ -277,6 +277,11 @@ class ConfigGUI:
                 ('obs_quality', 'int', 'JPEG quality for captured images (-1 for lossless PNG)'),
                 ('obs_source_override', 'str', 'Source name to capture from (leave blank for current scene, "preview" for preview scene)'),
             ],
+            'API': [
+                ('api_enabled', 'bool', 'Enable the built-in API server'),
+                ('api_host', 'str', 'Host for the built-in API server'),
+                ('api_port', 'int', 'Port for the built-in API server'),
+            ],
             'Hotkeys': [
                 ('combo_pause', 'str', 'Pause/resume hotkey'),
                 ('combo_engine_switch', 'str', 'OCR engine switch hotkey'),

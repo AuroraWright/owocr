@@ -13,6 +13,7 @@ import socketserver
 import logging
 import base64
 import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from PIL import Image
@@ -2548,6 +2549,152 @@ class ScreenshotThread(threading.Thread):
             self.windows_window_tracker_instance.join()
 
 
+# ─── API code ───────────────────────────────────────────────────────
+
+api_action_map = dict()
+
+def register_api_action(action_method=None, *, action_name: str):
+    if action_method is None:
+        return lambda f: register_api_action(f, action_name=action_name)
+    api_action_map[action_name] = action_method
+    return action_method
+
+
+class APIRequestHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        '''
+        silence default access logging
+        '''
+        pass
+
+    def _read_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            return None, "invalid content-length"
+
+        if length < 0:
+            return None, "negative content-length"
+        if length > 65_536:
+            return None, "body too large"
+        if length == 0:
+            return "", "body is empty"
+
+        body = self.rfile.read(length)
+        if len(body) < length:
+            return None, "truncated body"
+
+        return body, ""
+
+    @register_api_action(action_name="hello")
+    def hello(self):
+        '''
+        curl -X POST http://localhost:7332/action/hello
+        '''
+        logger.info('hello')
+        return True, "Hello, world!"
+
+    @register_api_action(action_name="change-engine")
+    def change_engine(self):
+        '''
+        body - integer represetinging the engine index to switch to
+        echo "0" | curl -X POST http://localhost:7332/action/change-engine -H "Content-Type: text/plain" -d @-
+        '''
+        logger.info('Received API request to change engine')
+        body, error = self._read_body()
+        if error:
+            return False, error
+        # Interpret engine index
+        try:
+            engine_index = int(body)
+        except ValueError:
+            return False, "invalid engine index"
+        if engine_index < 0 or engine_index >= len(engine_instances):
+            return False, "engine index out of range"
+        state_handlers.engine_change_handler(str(engine_index))
+        return True, f"Engine changed to {engine_instances[engine_index].readable_name}"
+
+    @register_api_action(action_name="pause")
+    def pause(self):
+        '''
+        curl -X POST http://localhost:7332/action/pause
+        '''
+        logger.info('Received API request to pause')
+        state_handlers.pause_handler(False, False)
+        return True, "Paused"
+
+    @register_api_action(action_name="capture")
+    def capture(self):
+        '''
+        curl -X POST http://localhost:7332/action/capture
+        '''
+        logger.info('Received API request to capture')
+        screenshot_request_queue.put(True)
+        return True, "Capture triggered"
+
+    def do_GET(self):
+        if self.path == "/":
+            content = Path("owocr/api.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        '''
+        Use path to determine what to do
+        /action/<action_name> -> trigger a method from self.action_map
+        '''
+        if self.path.startswith('/action'):
+            ACTION_RE = re.compile(r"^/action/([a-z0-9]+(?:-[a-z0-9]+)*)/?$")
+
+            match = ACTION_RE.match(self.path)
+            action_name = ""
+            if match:
+                action_name = match.group(1)
+
+            success = False
+            msg = "action name invalid"
+            if action_name in api_action_map:
+                try:
+                    success, msg = api_action_map[action_name](self)
+                except Exception as e:
+                    success = False
+                    msg = "action failed with an exception"
+                    logger.error(str(e))
+
+            code = 200 if success else 400
+            self.send_response(code)
+            self.end_headers()
+            self.wfile.write(msg.encode("utf-8"))
+
+
+class APIThread(threading.Thread):
+    host: str
+    port: int
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self._load_configuration()
+
+    def _load_configuration(self):
+        self.host = str(config.get_general('api_host'))
+        self.port = int(str(config.get_general('api_port')))
+
+    def run(self):
+        logger.info(f"Starting API server at http://{self.host}:{self.port}")
+        server = HTTPServer((self.host, self.port), APIRequestHandler)
+        server.timeout = 0.5
+        while not terminated.is_set():
+            server.handle_request()
+
+# ─── End API code ───────────────────────────────────────────────────────
+
+
 class AutopauseTimer:
     def __init__(self):
         self.timeout = config.get_general('auto_pause')
@@ -3187,6 +3334,9 @@ def run():
         read_from_readable.append('OBS screen capture')
     if 'websocket' in (read_from, read_from_secondary):
         read_from_readable.append('websocket')
+    if config.get_general('api_enabled'):
+        api_thread = APIThread()
+        api_thread.start()
     if 'unixsocket' in (read_from, read_from_secondary):
         if sys.platform == 'win32':
             exit_with_error('"unixsocket" is not currently supported on Windows')
