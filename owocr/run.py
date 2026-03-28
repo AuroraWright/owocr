@@ -1244,10 +1244,11 @@ class TextFiltering:
             no_space_size += line_dimension
             if line['has_jp_text']:
                 has_jp_text = True
-            if line['has_kanji']:
-                has_kanji = True
-            if line['is_furigana']:
+            if line['is_furigana'] and not has_kanji:
                 is_furigana = True
+            if line['has_kanji']:
+                is_furigana = False
+                has_kanji = True
         character_size = no_space_size / len(text_sorted)
 
         left = min(bbox.left for bbox in bboxes)
@@ -1299,9 +1300,6 @@ class TextFiltering:
     def _furigana_filter(self, lines, is_vertical):
         filtered_lines = []
         for i, line in enumerate(lines):
-            if line['is_furigana']:
-                continue
-
             if i >= len(lines) - 1:
                 filtered_lines.append(line)
                 continue
@@ -1316,6 +1314,11 @@ class TextFiltering:
                 continue
             if not next_line['has_kanji']:
                 filtered_lines.append(line)
+                continue
+            if next_line['is_furigana']:
+                filtered_lines.append(line)
+                continue
+            if line['is_furigana']:
                 continue
 
             current_line_text = line['line_obj'].text
