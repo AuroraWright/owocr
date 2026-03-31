@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>owocr API</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400&display=swap');
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #151515;
+    --border: #242424;
+    --border-bright: #333;
+    --text: #e8e8e8;
+    --muted: #666;
+    --accent: #c8f060;
+    --accent-dim: rgba(200, 240, 96, 0.08);
+    --red: #f06060;
+    --red-dim: rgba(240, 96, 96, 0.08);
+    --blue: #60b8f0;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 300;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 3rem;
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  header p {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .base-url {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.75rem;
+    border-radius: 3px;
+  }
+
+  .base-url span { color: var(--blue); }
+
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 3rem;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+  }
+
+  .endpoint {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .endpoint:hover { border-color: var(--border-bright); }
+
+  .endpoint-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--surface);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .method {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(200, 240, 96, 0.2);
+    flex-shrink: 0;
+  }
+
+  .path {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    color: var(--text);
+    flex: 1;
+  }
+
+  .path .param { color: var(--blue); }
+
+  .summary {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-left: auto;
+    font-family: var(--mono);
+  }
+
+  .endpoint-body {
+    padding: 1.25rem;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+
+  .endpoint.open .endpoint-body { display: block; }
+
+  .endpoint.open .endpoint-header { border-bottom: none; }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0.5rem 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.82rem;
+  }
+
+  .detail-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding-top: 0.1rem;
+  }
+
+  .detail-value { color: var(--text); }
+
+  .body-note {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: rgba(96, 184, 240, 0.08);
+    border: 1px solid rgba(96, 184, 240, 0.2);
+    color: var(--blue);
+    padding: 0.2rem 0.6rem;
+    border-radius: 3px;
+    margin-bottom: 0.75rem;
+  }
+
+  pre {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.85rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: #b0b0b0;
+    overflow-x: auto;
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .response-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .response-card {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .response-card-header {
+    padding: 0.4rem 0.75rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .response-card.ok .response-card-header {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-bottom: 1px solid rgba(200, 240, 96, 0.15);
+  }
+
+  .response-card.err .response-card-header {
+    background: var(--red-dim);
+    color: var(--red);
+    border-bottom: 1px solid rgba(240, 96, 96, 0.15);
+  }
+
+  .response-card pre {
+    border: none;
+    border-radius: 0;
+    margin-top: 0;
+    background: transparent;
+  }
+
+  .info-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2.5rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .info-block code {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text);
+    background: var(--border);
+    padding: 0.1rem 0.35rem;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>owocr / api</h1>
+  <p>HTTP control interface</p>
+  <div class="base-url">default url <span>http://localhost:7332</span></div>
+</header>
+
+<main>
+
+  <div class="info-block">
+    All endpoints accept <code>POST</code> requests. Responses are plain UTF-8 text.
+    On success the status is <code>200</code>; on failure <code>400</code> with an error message in the body.
+    Endpoints that require a body expect it as <code>text/plain</code> with a correct <code>Content-Length</code> header.
+    Maximum body size is <code>65 536</code> bytes.
+  </div>
+
+  <div class="section-label">endpoints</div>
+
+  <!-- hello -->
+  <div class="endpoint open">
+    <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="method">POST</span>
+      <span class="path">/action/<span class="param">hello</span></span>
+      <span class="summary">health check</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="detail-row">
+        <span class="detail-label">Description</span>
+        <span class="detail-value">Sanity check. Returns a greeting if the server is up.</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Request body</span>
+        <span class="detail-value" style="color:var(--muted)">none</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Example</span>
+        <div>
+          <pre>curl -X POST http://localhost:7332/action/hello</pre>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Responses</span>
+        <div class="response-grid">
+          <div class="response-card ok">
+            <div class="response-card-header">200 OK</div>
+            <pre>Hello, world!</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- capture -->
+  <div class="endpoint">
+    <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="method">POST</span>
+      <span class="path">/action/<span class="param">capture</span></span>
+      <span class="summary">trigger screenshot</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="detail-row">
+        <span class="detail-label">Description</span>
+        <span class="detail-value">Queues a screenshot capture request.</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Request body</span>
+        <span class="detail-value" style="color:var(--muted)">none</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Example</span>
+        <div>
+          <pre>curl -X POST http://localhost:7332/action/capture</pre>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Responses</span>
+        <div class="response-grid">
+          <div class="response-card ok">
+            <div class="response-card-header">200 OK</div>
+            <pre>Capture triggered</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- pause -->
+  <div class="endpoint">
+    <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="method">POST</span>
+      <span class="path">/action/<span class="param">pause</span></span>
+      <span class="summary">toggle pause</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="detail-row">
+        <span class="detail-label">Description</span>
+        <span class="detail-value">Toggles the paused state of the OCR loop.</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Request body</span>
+        <span class="detail-value" style="color:var(--muted)">none</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Example</span>
+        <div>
+          <pre>curl -X POST http://localhost:7332/action/pause</pre>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Responses</span>
+        <div class="response-grid">
+          <div class="response-card ok">
+            <div class="response-card-header">200 OK</div>
+            <pre>Paused</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- change-engine -->
+  <div class="endpoint">
+    <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="method">POST</span>
+      <span class="path">/action/<span class="param">change-engine</span></span>
+      <span class="summary">switch OCR engine</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="detail-row">
+        <span class="detail-label">Description</span>
+        <span class="detail-value">Switches the active OCR engine by index.</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Request body</span>
+        <div>
+          <span class="body-note">text/plain — integer</span>
+          <div style="font-size:0.82rem; color:var(--muted)">
+            Zero-based index of the engine to activate. Must be within the range of configured engine instances.
+          </div>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Example</span>
+        <div>
+          <pre>echo "0" | curl -X POST http://localhost:7332/action/change-engine \
+  -H "Content-Type: text/plain" -d @-</pre>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Responses</span>
+        <div class="response-grid">
+          <div class="response-card ok">
+            <div class="response-card-header">200 OK</div>
+            <pre>Engine changed to &lt;name&gt;</pre>
+          </div>
+          <div class="response-card err">
+            <div class="response-card-header">400 Bad Request</div>
+            <pre>body is empty
+invalid engine index
+engine index out of range
+invalid content-length
+body too large
+truncated body</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>
