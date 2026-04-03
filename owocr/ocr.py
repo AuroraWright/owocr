@@ -596,16 +596,7 @@ class MangaOcr:
     manual_language = False
     coordinate_support = False
     threading_support = True
-    capabilities = EngineCapabilities(
-        symbols=False,
-        symbol_bounding_boxes=False,
-        words=False,
-        word_bounding_boxes=False,
-        lines=True,
-        line_bounding_boxes=False,
-        paragraphs=False,
-        paragraph_bounding_boxes=False
-    )
+    capabilities = None
 
     def _import_dependencies(self):
         logger.info('Loading dependencies for Manga OCR')
@@ -634,7 +625,23 @@ class MangaOcr:
         if not img:
             return (False, 'Invalid image provided')
 
-        x = (True, [manga_ocr_model(img)])
+        result = manga_ocr_model(img)
+        empty_bbox = BoundingBox(0, 0, 0, 0)
+        word = Word(text=result, bounding_box=empty_bbox)
+        line = Line(
+                    text=result,
+                    bounding_box=empty_bbox,
+                    words=[word]
+                )
+        paragraph = Paragraph(lines=[line], bounding_box=empty_bbox)
+
+        ocr_result = OcrResult(
+            image_properties=ImageProperties(width=img.width, height=img.height),
+            paragraphs=[paragraph],
+            engine_capabilities=self.capabilities
+        )
+
+        x = (True, ocr_result)
 
         if is_path:
             img.close()

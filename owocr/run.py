@@ -584,10 +584,8 @@ class TextFiltering:
         self.debug_filtering = config.get_general('uwu')
         self.last_frame_data = (None, None)
         self.last_last_frame_data = (None, None)
+        self.last_frame_data_second_pass = (None, None)
         self.stable_frame_data = None
-        self.last_frame_text = []
-        self.last_last_frame_text = []
-        self.stable_frame_text = []
         self.processed_stable_frame = False
         self.frame_stabilization_timestamp = 0
         self.cj_regex = re.compile(r'[\u3041-\u3096\u30A1-\u30FA\u4E01-\u9FFF]')
@@ -673,86 +671,111 @@ class TextFiltering:
             filtered_text = self._convert_small_kana_to_big(filtered_text)
         return filtered_text
 
-    def find_changed_lines(self, pil_image, current_result):
-        if self.frame_stabilization == 0:
-            changed_lines = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
+    def find_changed_lines(self, pil_image, current_result, is_second_pass, recovered_lines_count):
+        frame_stabilization_active = self.frame_stabilization != 0
+        self.debug_color = 'blue' if is_second_pass else 'cyan'
+
+        if (not frame_stabilization_active) or is_second_pass:
+            changed_lines, changed_text_lines, changed_lines_count = self._line_matcher(current_result, self.last_frame_data_second_pass[1], None, None, 0, True)
             if changed_lines is None:
-                return 0, 0, None
-            changed_lines_count = len(changed_lines)
-            self.last_frame_data = (pil_image, current_result)
-            if changed_lines_count and not self.json_output:
+                return None, None, 0, 0, None
+            self.last_frame_data_second_pass = (pil_image, current_result)
+            if pil_image and changed_lines_count and not self.json_output:
                 changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
                 if not changed_regions_image:
                     logger.warning('Error occurred while creating the differential image')
-                    return 0, 0, None
-                return changed_lines_count, 0, changed_regions_image
+                    return None, None, 0, 0, None
+                return changed_lines, changed_text_lines, changed_lines_count, 0, changed_regions_image
             else:
-                return changed_lines_count, 0, None
+                return changed_lines, changed_text_lines, changed_lines_count, 0, None
 
-        changed_lines_stabilization = self._find_changed_lines_impl(current_result, self.last_frame_data[1])
-        if changed_lines_stabilization is None:
-            return 0, 0, None
+        frames_match = self._frame_matcher(current_result, self.last_frame_data[1])
+        if frames_match is None:
+            return None, None, 0, 0, None
 
-        frames_match = len(changed_lines_stabilization) == 0
-
-        logger.debug(f"Frames match: '{frames_match}'")
+        logger.opt(colors=True).debug(f"<{self.debug_color}>Frames match: '{frames_match}'</>")
 
         if frames_match:
             if self.processed_stable_frame:
-                return 0, 0, None
+                return None, None, 0, 0, None
             if time.monotonic() - self.frame_stabilization_timestamp < self.frame_stabilization:
-                return 0, 0, None
-            changed_lines = self._find_changed_lines_impl(current_result, self.stable_frame_data)
+                return None, None, 0, 0, None
             if self.line_recovery and self.last_last_frame_data:
                 logger.debug('Checking for missed lines')
-                recovered_lines = self._find_changed_lines_impl(self.last_last_frame_data[1], self.stable_frame_data, current_result)
-                recovered_lines_count = len(recovered_lines) if recovered_lines else 0
+                recovered_lines, _, recovered_lines_count = self._line_matcher(self.last_last_frame_data[1], self.stable_frame_data, current_result, None, 0, False)
             else:
                 recovered_lines_count = 0
                 recovered_lines = []
+            changed_lines, changed_text_lines, changed_lines_count = self._line_matcher(current_result, self.stable_frame_data, None, recovered_lines, recovered_lines_count, True)
             self.processed_stable_frame = True
             self.stable_frame_data = current_result
-            changed_lines_count = len(changed_lines)
-            if (changed_lines_count or recovered_lines_count) and not self.json_output:
-                if recovered_lines:
+            if pil_image and (changed_lines_count or recovered_lines_count) and not self.json_output:
+                if recovered_lines and self.last_last_frame_data[0]:
                     changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, self.last_last_frame_data[0], recovered_lines)
                 else:
+                    recovered_lines_count = 0
                     changed_regions_image = self._create_changed_regions_image(pil_image, changed_lines, None, None)
 
                 if not changed_regions_image:
                     logger.warning('Error occurred while creating the differential image')
-                    return 0, 0, None
-                return changed_lines_count, recovered_lines_count, changed_regions_image
+                    return None, None, 0, 0, None
+                return changed_lines, changed_text_lines, changed_lines_count, recovered_lines_count, changed_regions_image
             else:
-                return changed_lines_count, recovered_lines_count, None
+                return changed_lines, changed_text_lines, changed_lines_count, recovered_lines_count, None
         else:
             self.last_last_frame_data = self.last_frame_data
             self.last_frame_data = (pil_image, current_result)
             self.processed_stable_frame = False
             self.frame_stabilization_timestamp = time.monotonic()
-            return 0, 0, None
+            return None, None, 0, 0, None
 
-    def _find_changed_lines_impl(self, current_result, previous_result, next_result=None):
-        if not current_result:
+    def _frame_matcher(self, current_result, previous_result):
+        if not current_result.engine_capabilities:
+            changed_lines, _, changed_lines_count = self._line_matcher(current_result, self.last_frame_data[1], None, None, 0, False)
+            if changed_lines is None:
+                return None
+            else:
+                return changed_lines_count == 0
+
+        if not any(p.lines for p in current_result.paragraphs):
             return None
 
-        changed_lines = []
-        current_lines = []
+        if not previous_result:
+            return False
+
         previous_lines = []
-        current_text = []
-        previous_text = []
+        for p in previous_result.paragraphs:
+            previous_lines.extend(p.lines)
 
         for p in current_result.paragraphs:
-            current_lines.extend(p.lines)
-        if len(current_lines) == 0:
-            return None
+            for current_line in p.lines:
+                found_match = False
+                for previous_line in previous_lines:
+                    if self._calculate_iou(current_line.bounding_box, previous_line.bounding_box) >= 0.8:
+                        found_match = True
+                        break
+                if not found_match:
+                    current_text_line = self.get_line_text(current_line)
+                    logger.opt(colors=True).debug(f"<{self.debug_color}>Found not matching line: '{{}}'</>", current_text_line)
+                    return False
+        return True
 
-        for current_line in current_lines:
-            current_text_line = self.get_line_text(current_line)
-            current_text_line = self._normalize_line_for_comparison(current_text_line)
-            current_text.append(current_text_line)
-        if all(not current_text_line for current_text_line in current_lines):
-            return None
+    def _line_matcher(self, current_result, previous_result, next_result, recovered_lines, first_pass_recovered_lines, regex_filter):
+        current_result_combined = []
+
+        if recovered_lines:
+            current_result_combined += recovered_lines.paragraphs
+        if current_result:
+            current_result_combined += current_result.paragraphs
+
+        if not current_result:
+            return None, None, 0
+
+        if not any(p.lines for p in current_result_combined):
+            return None, None, 0
+
+        previous_lines = []
+        previous_text = []
 
         if previous_result:
             for p in previous_result.paragraphs:
@@ -761,148 +784,109 @@ class TextFiltering:
                 for p in next_result.paragraphs:
                     previous_lines.extend(p.lines)
 
-            for previous_line in previous_lines:
-                previous_text_line = self.get_line_text(previous_line)
-                previous_text_line = self._normalize_line_for_comparison(previous_text_line)
-                previous_text.append(previous_text_line)
+        for previous_line in previous_lines:
+            previous_text_line = self.get_line_text(previous_line)
+            previous_text_line = self._normalize_line_for_comparison(previous_text_line)
+            previous_text.append(previous_text_line)
 
         all_previous_text = ''.join(previous_text)
+        logger.opt(colors=True).debug(f"<{self.debug_color}>Previous text: '{{}}'</>", previous_text)
 
-        logger.debug("Previous text: '{}'", previous_text)
-
-        for i, current_text_line in enumerate(current_text):
-            if not current_text_line:
-                continue
-
-            if not next_result and len(current_text_line) < 3:
-                text_similar = current_text_line in previous_text
-            else:
-                text_similar = current_text_line in all_previous_text
-
-            logger.debug("Current line: '{}' Similar: '{}'", current_text_line, text_similar)
-
-            if not text_similar:
-                if next_result:
-                    logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", current_text_line)
-                changed_lines.append(current_lines[i])
-
-        return changed_lines
-
-    def find_changed_lines_text(self, current_result, two_pass_processing_active, recovered_lines_count):
-        frame_stabilization_active = self.frame_stabilization != 0
-
-        if (not frame_stabilization_active) or two_pass_processing_active:
-            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, recovered_lines_count, True)
-            if changed_lines is None:
-                return [], 0
-            self.last_frame_text = current_result
-            return changed_lines, changed_lines_count
-
-        changed_lines_stabilization, changed_lines_stabilization_count = self._find_changed_lines_text_impl(current_result, self.last_frame_text, None, None, 0, False)
-        if changed_lines_stabilization is None:
-            return [], 0
-
-        frames_match = changed_lines_stabilization_count == 0
-
-        logger.debug(f"Frames match: '{frames_match}'")
-
-        if frames_match:
-            if self.processed_stable_frame:
-                return [], 0
-            if time.monotonic() - self.frame_stabilization_timestamp < self.frame_stabilization:
-                return [], 0
-            if self.line_recovery and self.last_last_frame_text:
-                logger.debug('Checking for missed lines')
-                recovered_lines, recovered_lines_count = self._find_changed_lines_text_impl(self.last_last_frame_text, self.stable_frame_text, current_result, None, 0, False)
-            else:
-                recovered_lines_count = 0
-                recovered_lines = []
-            changed_lines, changed_lines_count = self._find_changed_lines_text_impl(current_result, self.stable_frame_text, None, recovered_lines, recovered_lines_count, True)
-            self.processed_stable_frame = True
-            self.stable_frame_text = current_result
-            return changed_lines, changed_lines_count
-        else:
-            self.last_last_frame_text = self.last_frame_text
-            self.last_frame_text = current_result
-            self.processed_stable_frame = False
-            self.frame_stabilization_timestamp = time.monotonic()
-            return [], 0
-
-    def _find_changed_lines_text_impl(self, current_result, previous_result, next_result, recovered_lines, recovered_lines_count, regex_filter):
-        if recovered_lines:
-            current_result = recovered_lines + current_result
-
-        if len(current_result) == 0:
-            return None, 0
-
-        changed_lines = []
-        current_lines = []
-        previous_text = []
-
-        for current_line in current_result:
-            current_text_line = self._normalize_line_for_comparison(current_line)
-            current_lines.append(current_text_line)
-        if all(not current_text_line for current_text_line in current_lines):
-            return None, 0
-
-        for prev_line in previous_result:
-            prev_text = self._normalize_line_for_comparison(prev_line)
-            previous_text.append(prev_text)
-        if next_result is not None:
-            for next_text in next_result:
-                previous_text.extend(next_text)
-
-        all_previous_text = ''.join(previous_text)
-
-        logger.opt(colors=True).debug("<magenta>Previous text: '{}'</>", previous_text)
+        cached_text_lines = []
+        cached_text_lines_normalized = []
+        for p in current_result_combined:
+            for current_line in p.lines:
+                raw_text = self.get_line_text(current_line)
+                normalized_text = self._normalize_line_for_comparison(raw_text)
+                cached_text_lines.append(raw_text)
+                cached_text_lines_normalized.append(normalized_text)
 
         first = True
+        global_line_index = 0
         changed_lines_count = 0
-        len_recovered_lines = 0 if not recovered_lines else len(recovered_lines)
-        for i, current_text in enumerate(current_lines):
-            changed_line = current_result[i]
+        len_recovered_lines = sum(len(p.lines) for p in recovered_lines.paragraphs) if recovered_lines else 0
+        changed_paragraphs = []
+        changed_text_lines = []
+        for p in current_result_combined:
+            changed_lines_in_paragraph = []
 
-            if changed_line == '\n':
-                changed_lines.append(changed_line)
-                continue
-            if not current_text:
-                continue
+            for current_line in p.lines:
+                current_idx = global_line_index
+                global_line_index += 1
+                current_text_line = cached_text_lines[current_idx]
+                current_text_line_normalized = cached_text_lines_normalized[current_idx]
 
-            if next_result is not None and len(current_text) < 3:
-                text_similar = current_text in previous_text
-            else:
-                text_similar = current_text in all_previous_text
-
-            logger.opt(colors=True).debug("<magenta>Current line: '{}' Similar: '{}'</>", changed_line, text_similar)
-
-            if text_similar:
-                continue
-
-            if (recovered_lines is None or i - len_recovered_lines < 0) and recovered_lines_count > 0:
-                if any(line.startswith(current_text) for j, line in enumerate(current_lines) if i != j):
-                    logger.opt(colors=True).debug("<magenta>Skipping recovered line: '{}'</>", changed_line)
-                    recovered_lines_count -= 1
+                if not current_text_line:
                     continue
 
-            if next_result is not None:
-                logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", changed_line)
+                if not next_result and len(current_text_line) < 3:
+                    text_similar = current_text_line_normalized in previous_text
+                else:
+                    text_similar = current_text_line_normalized in all_previous_text
 
-            if first and len(current_text) > 3:
-                first = False
-                # For the first line, check if it contains the end of previous text
-                if regex_filter and all_previous_text:
-                    overlap = self._find_overlap(all_previous_text, current_text)
-                    if overlap and len(current_text) > len(overlap):
-                        logger.opt(colors=True).debug("<magenta>Found overlap: '{}'</>", overlap)
-                        changed_line = self._cut_at_overlap(changed_line, overlap)
-                        logger.opt(colors=True).debug("<magenta>After cutting: '{}'</>", changed_line)
+                logger.opt(colors=True).debug(f"<{self.debug_color}>Current line: '{{}}' Similar: '{{}}'</>", current_text_line, text_similar)
 
-            if regex_filter and self.manual_regex_filter:
-                changed_line = self.manual_regex_filter.sub('', changed_line)
-            changed_lines.append(changed_line)
-            changed_lines_count += 1
+                if text_similar:
+                    continue
 
-        return changed_lines, changed_lines_count
+                if next_result:
+                    logger.opt(colors=True).debug("<red>Recovered line: '{}'</>", current_text_line)
+
+                if (recovered_lines is None or current_idx - len_recovered_lines < 0) and first_pass_recovered_lines > 0:
+                    if any(line.startswith(current_text_line_normalized) for j, line in enumerate(cached_text_lines_normalized) if current_idx != j and line):
+                        logger.opt(colors=True).debug("<magenta>Skipping recovered line: '{}'</>", current_text_line)
+                        first_pass_recovered_lines -= 1
+                        continue
+
+                if first and len(current_text_line_normalized) > 3:
+                    first = False
+                    if regex_filter and all_previous_text:
+                        overlap = self._find_overlap(all_previous_text, current_text_line_normalized)
+                        if overlap and len(current_text_line_normalized) > len(overlap):
+                            logger.opt(colors=True).debug("<magenta>Found overlap: '{}'</>", overlap)
+                            current_text_line = self._cut_at_overlap(current_text_line, overlap)
+                            logger.opt(colors=True).debug("<magenta>After cutting: '{}'</>", current_text_line)
+
+                if regex_filter and self.manual_regex_filter:
+                    current_text_line = self.manual_regex_filter.sub('', current_text_line)
+
+                changed_lines_in_paragraph.append(current_line)
+                changed_text_lines.append(current_text_line)
+                changed_lines_count += 1
+
+            if changed_lines_in_paragraph:
+                changed_paragraphs.append(
+                    Paragraph(
+                        bounding_box=p.bounding_box,
+                        lines=changed_lines_in_paragraph,
+                        writing_direction=p.writing_direction
+                    )
+                )
+                changed_text_lines.append('\n')
+
+        changed_result = OcrResult(
+            image_properties=current_result.image_properties,
+            engine_capabilities=current_result.engine_capabilities,
+            paragraphs=changed_paragraphs
+        )
+
+        return changed_result, changed_text_lines, changed_lines_count
+
+    def _calculate_iou(self, bbox1, bbox2):
+        x_left = max(bbox1.left, bbox2.left)
+        y_top = max(bbox1.top, bbox2.top)
+        x_right = min(bbox1.right, bbox2.right)
+        y_bottom = min(bbox1.bottom, bbox2.bottom)
+
+        if x_right < x_left or y_bottom < y_top:
+            return 0.0
+
+        intersection_area = (x_right - x_left) * (y_bottom - y_top)
+        bbox1_area = bbox1.width * bbox1.height
+        bbox2_area = bbox2.width * bbox2.height
+        union_area = bbox1_area + bbox2_area - intersection_area
+
+        return intersection_area / union_area if union_area > 0 else 0.0
 
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
@@ -1689,7 +1673,11 @@ class TextFiltering:
         return connected_components
 
     def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
-        def crop_image(image, lines):
+        def crop_image(image, ocr_result):
+            if not ocr_result:
+                return None
+
+            lines = [line for paragraph in ocr_result.paragraphs for line in paragraph.lines]
             img_width, img_height = image.size
 
             regions = []
@@ -1718,7 +1706,7 @@ class TextFiltering:
 
             return image.crop((overall_x1, overall_y1, overall_x2, overall_y2))
 
-        # Handle the case where changed_lines is empty and previous_result is provided
+        # Handle the case where current pil_image is empty and previous_result is provided
         if (not pil_image) and pil_image_2:
             cropped_2 = crop_image(pil_image_2, changed_lines_2)
             return cropped_2
@@ -2774,7 +2762,7 @@ class OutputResult:
                 if not res2:
                     logger.opt(colors=True).warning(f'<cyan>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data_2)
                 else:
-                    changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2)
+                    _, _, changed_lines_count, recovered_lines_count, changed_regions_image = self.filtering.find_changed_lines(img_or_path, result_data_2, False, 0)
 
                     if changed_lines_count or recovered_lines_count:
                         if self.verbosity != 0:
@@ -2822,7 +2810,7 @@ class OutputResult:
             logger.opt(colors=True).warning(f'<cyan>{engine_name}</> reported an error after {processing_time:0.03f}s: {{}}', result_data)
             return
 
-        if isinstance(result_data, OcrResult):
+        if result_data.engine_capabilities:
             if screen_capture_properties:
                 x, y, window_handle, window_x, window_y, window_scale = screen_capture_properties
                 if window_scale != 1:
@@ -2838,19 +2826,17 @@ class OutputResult:
                     result_data.image_properties.window_y = int(window_y)
             if self.reorder_text:
                 result_data = self.filtering.order_paragraphs_and_lines(result_data, filter_text)
-            result_data_text = self._extract_lines_from_result(result_data)
-        else:
-            result_data_text = result_data
 
         if filter_text:
-            changed_lines, changed_lines_count = self.filtering.find_changed_lines_text(result_data_text, two_pass_processing_active, recovered_lines_count)
+            result_data, result_data_text, changed_lines_count, _, _ = self.filtering.find_changed_lines(None, result_data, two_pass_processing_active, recovered_lines_count)
             if self.screen_capture_periodic and not changed_lines_count:
                 if auto_pause_handler and auto_pause:
                     auto_pause_handler.allow_auto_pause.set()
                 return
-            output_text = self._post_process(changed_lines)
         else:
-            output_text = self._post_process(result_data_text)
+            result_data_text = self._extract_lines_from_result(result_data)
+
+        output_text = self._post_process(result_data_text)
 
         if self.json_output:
             output_string = json.dumps(asdict(result_data), ensure_ascii=False)
