@@ -646,10 +646,6 @@ class TextFiltering:
                 logger.warning(f'Invalid screen capture regex filter: {e}')
         return None
 
-    def _convert_small_kana_to_big(self, text):
-        converted_text = ''.join(self.kana_variants.get(char, [char])[-1] for char in text)
-        return converted_text
-
     def get_line_text(self, line):
         if line.text is not None:
             return line.text
@@ -662,14 +658,6 @@ class TextFiltering:
                 else:
                     text_parts.append(' ')
         return ''.join(text_parts)
-
-    def _normalize_line_for_comparison(self, line_text):
-        if not line_text.strip().replace('\n', ''):
-            return ''
-        filtered_text = ''.join(self.regex.findall(line_text))
-        if self.language == 'ja':
-            filtered_text = self._convert_small_kana_to_big(filtered_text)
-        return filtered_text
 
     def find_changed_lines(self, pil_image, current_result, is_second_pass, recovered_lines_count):
         frame_stabilization_active = self.frame_stabilization != 0
@@ -731,7 +719,7 @@ class TextFiltering:
 
     def _frame_matcher(self, current_result, previous_result):
         if not current_result.engine_capabilities:
-            changed_lines, _, changed_lines_count = self._line_matcher(current_result, self.last_frame_data[1], None, None, 0, False)
+            changed_lines, _, changed_lines_count = self._line_matcher(current_result, previous_result, None, None, 0, False)
             if changed_lines is None:
                 return None
             else:
@@ -888,6 +876,14 @@ class TextFiltering:
 
         return intersection_area / union_area if union_area > 0 else 0.0
 
+    def _normalize_line_for_comparison(self, line_text):
+        if not line_text.strip().replace('\n', ''):
+            return ''
+        filtered_text = ''.join(self.regex.findall(line_text))
+        if self.language == 'ja':
+            filtered_text = ''.join(self.kana_variants.get(char, [char])[-1] for char in filtered_text)
+        return filtered_text
+
     def _find_overlap(self, previous_text, current_text):
         min_overlap_length = 3
         max_overlap_length = min(len(previous_text), len(current_text))
@@ -921,6 +917,78 @@ class TextFiltering:
             return current_line[cut_position:]
 
         return current_line
+
+    def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
+        def crop_image(image, ocr_result):
+            if not ocr_result:
+                return None
+
+            lines = [line for paragraph in ocr_result.paragraphs for line in paragraph.lines]
+            img_width, img_height = image.size
+
+            regions = []
+            for line in lines:
+                bbox = line.bounding_box
+                x1 = (bbox.center_x - bbox.width/2) * img_width - margin
+                y1 = (bbox.center_y - bbox.height/2) * img_height - margin
+                x2 = (bbox.center_x + bbox.width/2) * img_width + margin
+                y2 = (bbox.center_y + bbox.height/2) * img_height + margin
+
+                x1 = max(0, int(x1))
+                y1 = max(0, int(y1))
+                x2 = min(img_width, int(x2))
+                y2 = min(img_height, int(y2))
+
+                if x2 > x1 and y2 > y1:
+                    regions.append((x1, y1, x2, y2))
+
+            if not regions:
+                return None
+
+            overall_x1 = min(x1 for x1, y1, x2, y2 in regions)
+            overall_y1 = min(y1 for x1, y1, x2, y2 in regions)
+            overall_x2 = max(x2 for x1, y1, x2, y2 in regions)
+            overall_y2 = max(y2 for x1, y1, x2, y2 in regions)
+
+            return image.crop((overall_x1, overall_y1, overall_x2, overall_y2))
+
+        # Handle the case where current pil_image is empty and previous_result is provided
+        if (not pil_image) and pil_image_2:
+            cropped_2 = crop_image(pil_image_2, changed_lines_2)
+            return cropped_2
+
+        # Handle the case where both current and previous results are present
+        elif pil_image and pil_image_2:
+            # Crop both images
+            cropped_1 = crop_image(pil_image, changed_lines)
+            cropped_2 = crop_image(pil_image_2, changed_lines_2)
+
+            if cropped_1 is None and cropped_2 is None:
+                return None
+            elif cropped_1 is None:
+                return cropped_2
+            elif cropped_2 is None:
+                return cropped_1
+
+            # Stitch vertically with previous_result on top
+            total_width = max(cropped_1.width, cropped_2.width)
+            total_height = cropped_1.height + cropped_2.height
+
+            # Create a new image with white background
+            stitched_image = Image.new('RGB', (total_width, total_height), 'white')
+
+            # Paste previous (top) and current (bottom) images, centered horizontally
+            prev_x_offset = (total_width - cropped_2.width) // 2
+            stitched_image.paste(cropped_2, (prev_x_offset, 0))
+
+            curr_x_offset = (total_width - cropped_1.width) // 2
+            stitched_image.paste(cropped_1, (curr_x_offset, cropped_2.height))
+
+            return stitched_image
+        elif pil_image:
+            return crop_image(pil_image, changed_lines)
+        else:
+            return None
 
     def order_paragraphs_and_lines(self, ocr_result, filter_text):
         if self.debug_filtering:
@@ -1546,6 +1614,18 @@ class TextFiltering:
 
         return all_paragraphs
 
+    def _is_line_vertical(self, line, image_properties):
+        # For very short lines (less than 3 characters), undefined orientation
+        if len(line.text) < 3:
+            return None
+
+        bbox = line.bounding_box
+        pixel_width = bbox.width * image_properties.width
+        pixel_height = bbox.height * image_properties.height
+
+        aspect_ratio = pixel_width / pixel_height
+        return aspect_ratio < 0.8
+
     def _calculate_horizontal_distance(self, bbox1, bbox2):
         if bbox1.right < bbox2.left:
             return bbox2.left - bbox1.right
@@ -1561,18 +1641,6 @@ class TextFiltering:
             return bbox1.top - bbox2.bottom
         else:
             return 0.0
-
-    def _is_line_vertical(self, line, image_properties):
-        # For very short lines (less than 3 characters), undefined orientation
-        if len(line.text) < 3:
-            return None
-
-        bbox = line.bounding_box
-        pixel_width = bbox.width * image_properties.width
-        pixel_height = bbox.height * image_properties.height
-
-        aspect_ratio = pixel_width / pixel_height
-        return aspect_ratio < 0.8
 
     def _check_horizontal_overlap(self, bbox1, bbox2):
         left1 = bbox1.left
@@ -1671,78 +1739,6 @@ class TextFiltering:
                 connected_components.append(component)
 
         return connected_components
-
-    def _create_changed_regions_image(self, pil_image, changed_lines, pil_image_2, changed_lines_2, margin=5):
-        def crop_image(image, ocr_result):
-            if not ocr_result:
-                return None
-
-            lines = [line for paragraph in ocr_result.paragraphs for line in paragraph.lines]
-            img_width, img_height = image.size
-
-            regions = []
-            for line in lines:
-                bbox = line.bounding_box
-                x1 = (bbox.center_x - bbox.width/2) * img_width - margin
-                y1 = (bbox.center_y - bbox.height/2) * img_height - margin
-                x2 = (bbox.center_x + bbox.width/2) * img_width + margin
-                y2 = (bbox.center_y + bbox.height/2) * img_height + margin
-
-                x1 = max(0, int(x1))
-                y1 = max(0, int(y1))
-                x2 = min(img_width, int(x2))
-                y2 = min(img_height, int(y2))
-
-                if x2 > x1 and y2 > y1:
-                    regions.append((x1, y1, x2, y2))
-
-            if not regions:
-                return None
-
-            overall_x1 = min(x1 for x1, y1, x2, y2 in regions)
-            overall_y1 = min(y1 for x1, y1, x2, y2 in regions)
-            overall_x2 = max(x2 for x1, y1, x2, y2 in regions)
-            overall_y2 = max(y2 for x1, y1, x2, y2 in regions)
-
-            return image.crop((overall_x1, overall_y1, overall_x2, overall_y2))
-
-        # Handle the case where current pil_image is empty and previous_result is provided
-        if (not pil_image) and pil_image_2:
-            cropped_2 = crop_image(pil_image_2, changed_lines_2)
-            return cropped_2
-
-        # Handle the case where both current and previous results are present
-        elif pil_image and pil_image_2:
-            # Crop both images
-            cropped_1 = crop_image(pil_image, changed_lines)
-            cropped_2 = crop_image(pil_image_2, changed_lines_2)
-
-            if cropped_1 is None and cropped_2 is None:
-                return None
-            elif cropped_1 is None:
-                return cropped_2
-            elif cropped_2 is None:
-                return cropped_1
-
-            # Stitch vertically with previous_result on top
-            total_width = max(cropped_1.width, cropped_2.width)
-            total_height = cropped_1.height + cropped_2.height
-
-            # Create a new image with white background
-            stitched_image = Image.new('RGB', (total_width, total_height), 'white')
-
-            # Paste previous (top) and current (bottom) images, centered horizontally
-            prev_x_offset = (total_width - cropped_2.width) // 2
-            stitched_image.paste(cropped_2, (prev_x_offset, 0))
-
-            curr_x_offset = (total_width - cropped_1.width) // 2
-            stitched_image.paste(cropped_1, (curr_x_offset, cropped_2.height))
-
-            return stitched_image
-        elif pil_image:
-            return crop_image(pil_image, changed_lines)
-        else:
-            return None
 
 
 class OBSScreenshotThread(threading.Thread):
