@@ -2830,7 +2830,11 @@ class OutputResult:
         if filter_text:
             result_data_filtered, result_data_text_filtered, changed_lines_count, _, _ = self.filtering.find_changed_lines(None, result_data, two_pass_processing_active, recovered_lines_count)
             if not result_data_filtered:
-                result_data.paragraphs = []
+                result_data = OcrResult(
+                    image_properties=result_data.image_properties,
+                    engine_capabilities=result_data.engine_capabilities,
+                    paragraphs=[]
+                )
                 result_data_text = []
             else:
                 result_data = result_data_filtered
