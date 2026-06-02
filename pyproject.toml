@@ -73,7 +73,7 @@ rapidocr = [
 ]
 
 meikiocr = [
-    "meikiocr>=0.3.2"
+    "meikiocr>=0.3.4"
 ]
 
 mangaocr = [
