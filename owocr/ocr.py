@@ -2669,7 +2669,7 @@ class NDLOCRLite:
     name = 'ndlocrlite'
     readable_name = 'NDLOCR-Lite'
     key = 'h'
-    config_entry = None
+    config_entry = 'ndlocrlite'
     available = False
     local = True
     manual_language = False
@@ -2695,7 +2695,7 @@ class NDLOCRLite:
                 return False
         return True
 
-    def __init__(self):
+    def __init__(self, config={}):
         dependencies_available = self._import_dependencies()
 
         if not dependencies_available:
@@ -2706,9 +2706,9 @@ class NDLOCRLite:
 
             model_files = {
                 'deim-s-1024x1024.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/deim-s-1024x1024.onnx',
-                'parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x256-30-tiny-192epoch-tegaki3.onnx',
-                'parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x384-50-tiny-146epoch-tegaki2.onnx',
-                'parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-16x768-100-tiny-165epoch-tegaki2.onnx',
+                'parseq-ndl-24x256-30-tiny-189epoch-tegaki3-r8data-202604.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-24x256-30-tiny-189epoch-tegaki3-r8data-202604.onnx',
+                'parseq-ndl-24x384-50-tiny-300epoch-tegaki3-r8data-202604.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-24x384-50-tiny-300epoch-tegaki3-r8data-202604.onnx',
+                'parseq-ndl-24x768-100-tiny-153epoch-tegaki3-r8data-202604.onnx': 'https://raw.githubusercontent.com/ndl-lab/ndlocr-lite/master/src/model/parseq-ndl-24x768-100-tiny-153epoch-tegaki3-r8data-202604.onnx',
             }
 
             for filename, url in model_files.items():
@@ -2721,8 +2721,9 @@ class NDLOCRLite:
                         logger.warning(f'Download failed for {filename}. NDLOCR-Lite will not work!')
                         return
 
+            enable_tcy = config.get('enable_tcy', False)
             logger.info('Loading NDLOCR-Lite model')
-            self.model = NDLLite()
+            self.model = NDLLite(enable_tcy=enable_tcy)
             self.available = True
             logger.info('NDLOCR-Lite ready')
 

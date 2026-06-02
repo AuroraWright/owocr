@@ -689,11 +689,15 @@ class TextFiltering:
             if time.monotonic() - self.frame_stabilization_timestamp < self.frame_stabilization:
                 return None, None, 0, 0, None
             if self.line_recovery and self.last_last_frame_data:
-                logger.debug('Checking for missed lines')
+                logger.opt(colors=True).debug(f'<{self.debug_color}>Checking for missed lines</>')
                 recovered_lines, _, recovered_lines_count = self._line_matcher(self.last_last_frame_data[1], self.stable_frame_data, current_result, None, 0, False)
             else:
                 recovered_lines_count = 0
-                recovered_lines = []
+                recovered_lines = OcrResult(
+                    image_properties=current_result.image_properties,
+                    engine_capabilities=current_result.engine_capabilities,
+                    paragraphs=[]
+                )
             changed_lines, changed_text_lines, changed_lines_count = self._line_matcher(current_result, self.stable_frame_data, None, recovered_lines, recovered_lines_count, True)
             self.processed_stable_frame = True
             self.stable_frame_data = current_result
@@ -2824,7 +2828,13 @@ class OutputResult:
                 result_data = self.filtering.order_paragraphs_and_lines(result_data, filter_text)
 
         if filter_text:
-            result_data, result_data_text, changed_lines_count, _, _ = self.filtering.find_changed_lines(None, result_data, two_pass_processing_active, recovered_lines_count)
+            result_data_filtered, result_data_text_filtered, changed_lines_count, _, _ = self.filtering.find_changed_lines(None, result_data, two_pass_processing_active, recovered_lines_count)
+            if not result_data_filtered:
+                result_data.paragraphs = []
+                result_data_text = []
+            else:
+                result_data = result_data_filtered
+                result_data_text = result_data_text_filtered
             if self.screen_capture_periodic and not changed_lines_count:
                 if auto_pause_handler and auto_pause:
                     auto_pause_handler.allow_auto_pause.set()

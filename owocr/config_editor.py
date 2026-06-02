@@ -320,6 +320,9 @@ class ConfigGUI:
                 ('api_key', 'str', 'OCR.space API key', 'api_key_here'),
                 ('engine_version', 'int', 'Engine version (1 or 2)', 2),
             ],
+            'ndlocrlite': [
+                ('enable_tcy', 'bool', 'Enable tate-chuu-yoko (縦中横) detection for vertical text', False),
+            ],
             'rapidocr': [
                 ('high_accuracy_detection', 'bool', 'Use high accuracy detection', False),
                 ('high_accuracy_recognition', 'bool', 'Use high accuracy recognition', True),

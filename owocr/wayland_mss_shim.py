@@ -1,6 +1,5 @@
 import re
 import threading
-import queue
 import time
 import uuid
 from pathlib import Path
@@ -106,7 +105,7 @@ class ScreenCastManager:
             self.ready_event.set()
         except:
             self.stop()
-            return Gst.FlowReturn.Error
+            return Gst.FlowReturn.ERROR
         return Gst.FlowReturn.OK
 
     def _play_pipewire_stream(self, node_id):
